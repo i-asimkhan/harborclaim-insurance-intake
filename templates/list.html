@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>All claims -- HarborClaim</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="page">
+    <header class="app-header">
+      <div class="brand">Harbor<span>Claim</span></div>
+      <nav><a href="/">New claim</a></nav>
+    </header>
+
+    <h1>All claims</h1>
+    <p class="subtitle">In-memory only right now &mdash; resets when the server restarts. A real Claims Database is the next build step.</p>
+
+    <div class="card">
+      {% if claims %}
+      <table class="claims-table">
+        <thead>
+          <tr><th>Claim</th><th>Policy</th><th>Status</th><th>Submitted</th></tr>
+        </thead>
+        <tbody>
+          {% for record in claims %}
+          <tr>
+            <td><a href="/claims/{{ record.claim.claim_id }}">{{ record.claim.claim_id }}</a></td>
+            <td>{{ record.claim.policy_id or "—" }}</td>
+            <td>
+              {% if record.status == "READY_FOR_REVIEW" %}
+                <span class="badge ready" style="font-size:0.78rem; padding:0.3rem 0.6rem;">READY_FOR_REVIEW</span>
+              {% else %}
+                <span class="badge needs" style="font-size:0.78rem; padding:0.3rem 0.6rem;">NEEDS_INFORMATION</span>
+              {% endif %}
+            </td>
+            <td>{{ record.history[0].at }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty-state">No claims submitted yet.</div>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

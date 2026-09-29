@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ record.claim.claim_id }} -- HarborClaim</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="page">
+    <header class="app-header">
+      <div class="brand">Harbor<span>Claim</span></div>
+      <nav><a href="/claims">All claims</a><a href="/">New claim</a></nav>
+    </header>
+
+    <h1>Claim result</h1>
+    <p class="subtitle claim-id">{{ record.claim.claim_id }}</p>
+
+    <div class="card">
+      {% if record.status == READY_FOR_REVIEW %}
+        <span class="badge ready">&#10003; READY_FOR_REVIEW</span>
+        <p style="margin-top:1rem; color:var(--ink-soft);">
+          Everything required is present. In the full design this would now go to
+          AI summarization and an adjuster's queue &mdash; not built yet, so it
+          stops here.
+        </p>
+      {% else %}
+        <span class="badge needs">&#9888; NEEDS_INFORMATION</span>
+        <p style="margin-top:1rem; color:var(--ink-soft);">The claimant would be notified to provide:</p>
+        <ul class="missing-list">
+          {% for field in record.missing %}
+          <li>{{ field }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+
+      <dl class="detail-grid">
+        <dt>Policy ID</dt><dd>{{ record.claim.policy_id or "—" }}</dd>
+        <dt>Incident date</dt><dd>{{ record.claim.incident_date or "—" }}</dd>
+        <dt>Description</dt><dd>{{ record.claim.description or "—" }}</dd>
+        <dt>Documents</dt>
+        <dd>
+          {% if record.claim.documents %}
+            {{ record.claim.documents | join(", ") }}
+          {% else %}
+            none
+          {% endif %}
+        </dd>
+      </dl>
+    </div>
+
+    <a class="back-link" href="/">&larr; submit another claim</a>
+  </div>
+</body>
+</html>

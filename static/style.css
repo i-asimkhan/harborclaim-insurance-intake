@@ -1,0 +1,198 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root {
+  --ink: #16202a;
+  --ink-soft: #55636f;
+  --paper: #f4f6f8;
+  --card: #ffffff;
+  --line: #e1e6ea;
+  --accent: #0f62c9;
+  --accent-soft: #e8f0fc;
+  --good: #1c7a4b;
+  --good-soft: #e6f6ee;
+  --warn: #b5451c;
+  --warn-soft: #fbe9e2;
+  --radius: 12px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'IBM Plex Sans', -apple-system, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.5;
+}
+
+.page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 4rem;
+}
+
+header.app-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+}
+
+header.app-header .brand {
+  font-weight: 700;
+  font-size: 1.3rem;
+  letter-spacing: -0.01em;
+}
+header.app-header .brand span { color: var(--accent); }
+
+header.app-header nav a {
+  color: var(--ink-soft);
+  text-decoration: none;
+  font-size: 0.92rem;
+  margin-left: 1.2rem;
+}
+header.app-header nav a:hover { color: var(--accent); }
+
+h1 { font-size: 1.55rem; margin: 0 0 0.3rem; letter-spacing: -0.01em; }
+.subtitle { color: var(--ink-soft); margin: 0 0 2rem; font-size: 0.98rem; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.75rem;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+.field { margin-bottom: 1.3rem; }
+.field label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.88rem;
+  margin-bottom: 0.4rem;
+}
+.field .hint { color: var(--ink-soft); font-size: 0.82rem; font-weight: 400; margin-left: 0.4rem; }
+
+input[type="text"], input[type="date"], textarea {
+  width: 100%;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  background: #fff;
+  color: var(--ink);
+}
+input:focus, textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+textarea { resize: vertical; min-height: 90px; }
+
+.checkbox-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+.checkbox-grid label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 400;
+  font-size: 0.92rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.checkbox-grid label:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.checkbox-grid input { margin: 0; }
+
+button.primary {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 0.75rem 1.4rem;
+  border-radius: 8px;
+  font-size: 0.98rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+button.primary:hover { background: #0b4f9f; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  font-family: 'IBM Plex Mono', monospace;
+}
+.badge.ready { background: var(--good-soft); color: var(--good); }
+.badge.needs { background: var(--warn-soft); color: var(--warn); }
+
+.claim-id {
+  font-family: 'IBM Plex Mono', monospace;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
+ul.missing-list {
+  margin: 0.8rem 0 0;
+  padding-left: 1.2rem;
+}
+ul.missing-list li {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.9rem;
+  color: var(--warn);
+  margin-bottom: 0.3rem;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 0.6rem 1rem;
+  margin-top: 1.5rem;
+  font-size: 0.92rem;
+}
+.detail-grid dt { color: var(--ink-soft); font-weight: 500; }
+.detail-grid dd { margin: 0; }
+
+.back-link {
+  display: inline-block;
+  margin-top: 1.6rem;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.92rem;
+}
+.back-link:hover { text-decoration: underline; }
+
+table.claims-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+table.claims-table th, table.claims-table td {
+  text-align: left;
+  padding: 0.6rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+table.claims-table th { color: var(--ink-soft); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; }
+table.claims-table a { color: var(--accent); text-decoration: none; font-family: 'IBM Plex Mono', monospace; }
+
+.empty-state { color: var(--ink-soft); padding: 2rem 0; text-align: center; }
+
+.note {
+  margin-top: 1.5rem;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  border-left: 3px solid var(--line);
+  padding-left: 0.9rem;
+}

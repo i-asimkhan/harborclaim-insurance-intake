@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>HarborClaim -- New Claim</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="page">
+    <header class="app-header">
+      <div class="brand">Harbor<span>Claim</span></div>
+      <nav><a href="/claims">All claims</a></nav>
+    </header>
+
+    <h1>Submit a claim</h1>
+    <p class="subtitle">Insurance Claim Intake System &mdash; this checks completeness only. No coverage or payout decision is made here.</p>
+
+    <div class="card">
+      <form method="post" action="/claims">
+        <div class="field">
+          <label for="policy_id">Policy ID</label>
+          <input type="text" id="policy_id" name="policy_id" placeholder="POL-48213">
+        </div>
+
+        <div class="field">
+          <label for="incident_date">Incident date</label>
+          <input type="date" id="incident_date" name="incident_date">
+        </div>
+
+        <div class="field">
+          <label for="description">Description<span class="hint">what happened</span></label>
+          <textarea id="description" name="description" placeholder="Rear-end collision in parking lot, minor bumper damage."></textarea>
+        </div>
+
+        <div class="field">
+          <label>Supporting documents<span class="hint">select what's been uploaded</span></label>
+          <div class="checkbox-grid">
+            {% for doc in document_options %}
+            <label>
+              <input type="checkbox" name="documents" value="{{ doc }}">
+              {{ doc }}
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+
+        <button type="submit" class="primary">Submit claim</button>
+      </form>
+    </div>
+
+    <p class="note">
+      Fictional demo data only. The completeness check is the only real logic
+      behind this form right now &mdash; document extraction, AI summary, and
+      adjuster review are not built yet.
+    </p>
+  </div>
+</body>
+</html>

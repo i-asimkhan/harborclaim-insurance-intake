@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Adjuster sign-in -- HarborClaim</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="page">
+    <header class="app-header">
+      <div class="brand">Harbor<span>Claim</span></div>
+      <nav><a href="/">Claimant sign-in</a></nav>
+    </header>
+
+    <h1>Adjuster sign-in</h1>
+    <p class="subtitle">
+      Separate from claimant sign-in on purpose &mdash; there is no sign-up form here.
+      Credentials are issued by hand after a real license check, not created by logging in.
+    </p>
+
+    <div class="card">
+      {% if error %}
+      <p style="color:var(--warn); margin-top:0;">Incorrect username or password.</p>
+      {% endif %}
+      <form method="post" action="/adjuster/login">
+        <div class="field">
+          <label for="username">Username</label>
+          <input type="text" id="username" name="username" autocomplete="username">
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" autocomplete="current-password">
+        </div>
+        <button type="submit" class="primary">Sign in</button>
+      </form>
+    </div>
+
+    <p class="note">
+      Don't have adjuster credentials? There isn't a way to get them from this page &mdash;
+      see the README's "Accounts and privacy" section for how they're provisioned.
+    </p>
+  </div>
+</body>
+</html>

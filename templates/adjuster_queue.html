@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>My claims -- HarborClaim</title>
+  <title>Adjuster queue -- HarborClaim</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -10,31 +10,43 @@
     <header class="app-header">
       <div class="brand">Harbor<span>Claim</span></div>
       <nav>
-        <a href="/">New claim</a>
-        <span class="hint">{{ user.email }}</span>
-        <a href="/auth/logout">Sign out</a>
+        <a href="/">Claimant side</a>
+        <span class="hint">adjuster: {{ adjuster.username }}</span>
+        <a href="/adjuster/logout">Sign out</a>
       </nav>
     </header>
 
-    <h1>My claims</h1>
-    <p class="subtitle">Only claims filed by {{ user.email }} &mdash; backed by a persistent SQLite database.</p>
+    <h1>Adjuster queue</h1>
+    <p class="subtitle">
+      Every claim in the system, regardless of who filed it &mdash; visible here only
+      because {{ adjuster.username }} has a provisioned adjuster account, entirely
+      separate from any Google sign-in.
+    </p>
 
     <div class="card">
       {% if claims %}
       <table class="claims-table">
         <thead>
-          <tr><th>Claim</th><th>Policy</th><th>Status</th><th>Submitted</th></tr>
+          <tr><th>Claim</th><th>Claimant</th><th>Policy</th><th>Status</th><th>Decision</th><th>Submitted</th></tr>
         </thead>
         <tbody>
           {% for record in claims %}
           <tr>
             <td><a href="/claims/{{ record.claim.claim_id }}">{{ record.claim.claim_id }}</a></td>
+            <td>{{ record.claim.claimant_email or "—" }}</td>
             <td>{{ record.claim.policy_id or "—" }}</td>
             <td>
-              {% if record.status == "READY_FOR_REVIEW" %}
+              {% if record.status == READY_FOR_REVIEW %}
                 <span class="badge ready" style="font-size:0.78rem; padding:0.3rem 0.6rem;">READY_FOR_REVIEW</span>
               {% else %}
                 <span class="badge needs" style="font-size:0.78rem; padding:0.3rem 0.6rem;">NEEDS_INFORMATION</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if record.decisions %}
+                {{ record.decisions[-1].decision }}
+              {% else %}
+                <span class="hint">awaiting review</span>
               {% endif %}
             </td>
             <td>{{ record.history[0].at }}</td>

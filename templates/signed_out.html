@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>HarborClaim -- Sign in</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="page">
+    <header class="app-header">
+      <div class="brand">Harbor<span>Claim</span></div>
+      <nav>
+        {% if adjuster %}<a href="/adjuster">Adjuster queue</a>{% else %}<a href="/adjuster/login">Adjuster sign-in</a>{% endif %}
+      </nav>
+    </header>
+
+    <h1>Sign in to file or review a claim</h1>
+    <p class="subtitle">Insurance Claim Intake System &mdash; every claim is tied to the account that submitted it.</p>
+
+    <div class="card">
+      <p style="margin-top:0;">
+        Signing in with Google for the first time creates your account automatically
+        &mdash; there's no separate sign-up step.
+      </p>
+      <a class="primary" href="/auth/login" style="display:inline-block; text-decoration:none; text-align:center;">
+        Sign in with Google
+      </a>
+    </div>
+
+    <p class="note">
+      Adjuster access isn't something you can sign up for here &mdash; it's granted
+      separately, off an allowlist, regardless of which Google account you use.
+    </p>
+  </div>
+</body>
+</html>

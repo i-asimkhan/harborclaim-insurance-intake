@@ -9,14 +9,19 @@
   <div class="page">
     <header class="app-header">
       <div class="brand">Harbor<span>Claim</span></div>
-      <nav><a href="/claims">All claims</a></nav>
+      <nav>
+        <a href="/claims">My claims</a>
+        {% if adjuster %}<a href="/adjuster">Adjuster queue</a>{% else %}<a href="/adjuster/login">Adjuster sign-in</a>{% endif %}
+        <span class="hint">{{ user.email }}</span>
+        <a href="/auth/logout">Sign out</a>
+      </nav>
     </header>
 
     <h1>Submit a claim</h1>
     <p class="subtitle">Insurance Claim Intake System &mdash; this checks completeness only. No coverage or payout decision is made here.</p>
 
     <div class="card">
-      <form method="post" action="/claims">
+      <form method="post" action="/claims" enctype="multipart/form-data">
         <div class="field">
           <label for="policy_id">Policy ID</label>
           <input type="text" id="policy_id" name="policy_id" placeholder="POL-48213">
@@ -33,15 +38,8 @@
         </div>
 
         <div class="field">
-          <label>Supporting documents<span class="hint">select what's been uploaded</span></label>
-          <div class="checkbox-grid">
-            {% for doc in document_options %}
-            <label>
-              <input type="checkbox" name="documents" value="{{ doc }}">
-              {{ doc }}
-            </label>
-            {% endfor %}
-          </div>
+          <label for="files">Supporting documents<span class="hint">upload the actual files</span></label>
+          <input type="file" id="files" name="files" multiple>
         </div>
 
         <button type="submit" class="primary">Submit claim</button>
@@ -49,9 +47,9 @@
     </div>
 
     <p class="note">
-      Fictional demo data only. The completeness check is the only real logic
-      behind this form right now &mdash; document extraction, AI summary, and
-      adjuster review are not built yet.
+      Fictional demo data only. The completeness check, file storage, claims
+      database, sign-in, and adjuster review are real; document extraction and
+      AI summary are not built yet.
     </p>
   </div>
 </body>

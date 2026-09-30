@@ -6,3 +6,8 @@ Jinja2==3.1.6
 python-multipart==0.0.32
 pytest==9.1.1
 httpx==0.28.1
+
+# Sign-in with Google (auth.py) and its session cookie.
+Authlib==1.8.0
+itsdangerous==2.2.0
+python-dotenv==1.2.3

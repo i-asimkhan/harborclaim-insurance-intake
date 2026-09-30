@@ -9,7 +9,19 @@
   <div class="page">
     <header class="app-header">
       <div class="brand">Harbor<span>Claim</span></div>
-      <nav><a href="/claims">All claims</a><a href="/">New claim</a></nav>
+      <nav>
+        {% if user %}
+          <a href="/claims">My claims</a>
+          <a href="/">New claim</a>
+          <span class="hint">{{ user.email }}</span>
+          <a href="/auth/logout">Sign out</a>
+        {% endif %}
+        {% if adjuster %}
+          <a href="/adjuster">Adjuster queue</a>
+          <span class="hint">adjuster: {{ adjuster.username }}</span>
+          <a href="/adjuster/logout">Adjuster sign out</a>
+        {% endif %}
+      </nav>
     </header>
 
     <h1>Claim result</h1>
@@ -20,8 +32,8 @@
         <span class="badge ready">&#10003; READY_FOR_REVIEW</span>
         <p style="margin-top:1rem; color:var(--ink-soft);">
           Everything required is present. In the full design this would now go to
-          AI summarization and an adjuster's queue &mdash; not built yet, so it
-          stops here.
+          AI summarization first &mdash; not built yet, so an adjuster reviews the
+          raw submission directly.
         </p>
       {% else %}
         <span class="badge needs">&#9888; NEEDS_INFORMATION</span>
@@ -34,19 +46,63 @@
       {% endif %}
 
       <dl class="detail-grid">
+        <dt>Claimant</dt><dd>{{ record.claim.claimant_email or "—" }}</dd>
         <dt>Policy ID</dt><dd>{{ record.claim.policy_id or "—" }}</dd>
         <dt>Incident date</dt><dd>{{ record.claim.incident_date or "—" }}</dd>
         <dt>Description</dt><dd>{{ record.claim.description or "—" }}</dd>
         <dt>Documents</dt>
         <dd>
-          {% if record.claim.documents %}
-            {{ record.claim.documents | join(", ") }}
+          {% if record.documents %}
+            <ul class="document-list">
+              {% for doc in record.documents %}
+              <li>
+                <a href="/claims/{{ record.claim.claim_id }}/documents/{{ doc.filename }}">{{ doc.filename }}</a>
+                <span class="hint">{{ (doc.size_bytes / 1024) | round(1) }} KB &middot; {{ doc.content_type or "unknown type" }}</span>
+              </li>
+              {% endfor %}
+            </ul>
           {% else %}
             none
           {% endif %}
         </dd>
       </dl>
     </div>
+
+    {% if record.decisions %}
+    <div class="card" style="margin-top:1.2rem;">
+      <h2 style="font-size:1.1rem; margin-top:0;">Adjuster decisions</h2>
+      <ul class="missing-list" style="color:var(--ink);">
+        {% for d in record.decisions %}
+        <li><strong>{{ d.decision }}</strong> by {{ d.adjuster_username }} &mdash; {{ d.decided_at }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if adjuster and record.status == READY_FOR_REVIEW %}
+      {% if adjuster.linked_claimant_email and adjuster.linked_claimant_email == record.claim.claimant_email %}
+      <div class="card" style="margin-top:1.2rem;">
+        <h2 style="font-size:1.1rem; margin-top:0;">Record a decision</h2>
+        <p style="margin-top:0; color:var(--warn);">
+          Blocked: separation of duties. This adjuster account is linked to the claimant who
+          filed this claim, so it can't decide on it.
+        </p>
+      </div>
+      {% else %}
+      <div class="card" style="margin-top:1.2rem;">
+        <h2 style="font-size:1.1rem; margin-top:0;">Record a decision</h2>
+        <p class="note" style="margin-top:0;">
+          This is a human judgment call, not an automated one &mdash; the completeness
+          checker above never makes this decision itself.
+        </p>
+        <form method="post" action="/claims/{{ record.claim.claim_id }}/decision" style="display:flex; gap:0.6rem; flex-wrap:wrap;">
+          {% for choice in decisions %}
+          <button type="submit" name="decision" value="{{ choice }}" class="primary" style="background:var(--ink-soft);">{{ choice.replace("_", " ") | title }}</button>
+          {% endfor %}
+        </form>
+      </div>
+      {% endif %}
+    {% endif %}
 
     <a class="back-link" href="/">&larr; submit another claim</a>
   </div>

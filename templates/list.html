@@ -11,6 +11,7 @@
       <div class="brand">Harbor<span>Claim</span></div>
       <nav>
         <a href="/">New claim</a>
+        <a href="/notifications">Notifications{% if unread_count %} <span class="badge-count">{{ unread_count }}</span>{% endif %}</a>
         <span class="hint">{{ user.email }}</span>
         <a href="/auth/logout">Sign out</a>
       </nav>

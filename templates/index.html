@@ -11,7 +11,7 @@
       <div class="brand">Harbor<span>Claim</span></div>
       <nav>
         <a href="/claims">My claims</a>
-        {% if adjuster %}<a href="/adjuster">Adjuster queue</a>{% else %}<a href="/adjuster/login">Adjuster sign-in</a>{% endif %}
+        <a href="/notifications">Notifications{% if unread_count %} <span class="badge-count">{{ unread_count }}</span>{% endif %}</a>
         <span class="hint">{{ user.email }}</span>
         <a href="/auth/logout">Sign out</a>
       </nav>
@@ -20,25 +20,36 @@
     <h1>Submit a claim</h1>
     <p class="subtitle">Insurance Claim Intake System &mdash; this checks completeness only. No coverage or payout decision is made here.</p>
 
+    {% if errors %}
+    <div class="card error-card">
+      <h2 style="font-size:1rem; margin-top:0; color:var(--warn);">Please fix the following</h2>
+      <ul class="missing-list">
+        {% for e in errors %}
+        <li>{{ e }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
     <div class="card">
       <form method="post" action="/claims" enctype="multipart/form-data">
         <div class="field">
           <label for="policy_id">Policy ID</label>
-          <input type="text" id="policy_id" name="policy_id" placeholder="POL-48213">
+          <input type="text" id="policy_id" name="policy_id" placeholder="POL-48213" value="{{ form.policy_id if form else '' }}">
         </div>
 
         <div class="field">
           <label for="incident_date">Incident date</label>
-          <input type="date" id="incident_date" name="incident_date">
+          <input type="date" id="incident_date" name="incident_date" value="{{ form.incident_date if form else '' }}">
         </div>
 
         <div class="field">
           <label for="description">Description<span class="hint">what happened</span></label>
-          <textarea id="description" name="description" placeholder="Rear-end collision in parking lot, minor bumper damage."></textarea>
+          <textarea id="description" name="description" placeholder="Rear-end collision in parking lot, minor bumper damage.">{{ form.description if form else '' }}</textarea>
         </div>
 
         <div class="field">
-          <label for="files">Supporting documents<span class="hint">upload the actual files</span></label>
+          <label for="files">Supporting documents<span class="hint">.pdf/.txt/.jpg/.png/.zip/.doc(x), max 10MB each, up to 10 files</span></label>
           <input type="file" id="files" name="files" multiple>
         </div>
 
@@ -48,8 +59,9 @@
 
     <p class="note">
       Fictional demo data only. The completeness check, file storage, claims
-      database, sign-in, and adjuster review are real; document extraction and
-      AI summary are not built yet.
+      database, sign-in, and adjuster review are real. Fact extraction, the
+      claim summary, and notifications run on every submission too, but all
+      three are explicitly mocked &mdash; see <a href="https://github.com/i-asimkhan/harborclaim-insurance-intake/blob/main/MOCKS.md">MOCKS.md</a>.
     </p>
   </div>
 </body>

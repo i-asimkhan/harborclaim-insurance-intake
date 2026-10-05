@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ record.claim.claim_id }} -- HarborClaim</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="page">
+    <header class="app-header">
+      <div class="brand">Harbor<span>Claim</span></div>
+      <nav>
+        <a href="/claims">My claims</a>
+        <a href="/">New claim</a>
+        <a href="/notifications">Notifications{% if unread_count %} <span class="badge-count">{{ unread_count }}</span>{% endif %}</a>
+        <span class="hint">{{ user.email }}</span>
+        <a href="/auth/logout">Sign out</a>
+      </nav>
+    </header>
+
+    <h1>Claim result</h1>
+    <p class="subtitle claim-id">{{ record.claim.claim_id }}</p>
+
+    <div class="card">
+      {% if record.status == READY_FOR_REVIEW %}
+        <span class="badge ready">&#10003; READY_FOR_REVIEW</span>
+        <p style="margin-top:1rem; color:var(--ink-soft);">
+          Everything required is present. A mock summary (below) has been generated for
+          the adjuster; source documents stay authoritative over it.
+        </p>
+      {% else %}
+        <span class="badge needs">&#9888; NEEDS_INFORMATION</span>
+        <p style="margin-top:1rem; color:var(--ink-soft);">The claimant would be notified to provide:</p>
+        <ul class="missing-list">
+          {% for field in record.missing %}
+          <li>{{ field }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+
+      <dl class="detail-grid">
+        <dt>Policy ID</dt><dd>{{ record.claim.policy_id or "—" }}</dd>
+        <dt>Incident date</dt><dd>{{ record.claim.incident_date or "—" }}</dd>
+        <dt>Description</dt><dd>{{ record.claim.description or "—" }}</dd>
+        <dt>Documents</dt>
+        <dd>
+          {% if record.documents %}
+            <ul class="document-list">
+              {% for doc in record.documents %}
+              <li>
+                <a href="/claims/{{ record.claim.claim_id }}/documents/{{ doc.filename }}">{{ doc.filename }}</a>
+                <span class="hint">{{ (doc.size_bytes / 1024) | round(1) }} KB &middot; {{ doc.content_type or "unknown type" }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            none
+          {% endif %}
+        </dd>
+      </dl>
+    </div>
+
+    {% if record.summary %}
+    <div class="card mock-card" style="margin-top:1.2rem;">
+      <h2 style="font-size:1.1rem; margin-top:0;">
+        Adjuster summary <span class="mock-tag">MOCK -- not AI-generated</span>
+      </h2>
+      <p style="white-space:pre-line;">{{ record.summary.summary_text }}</p>
+      <span class="hint">Generated {{ record.summary.generated_at }}</span>
+    </div>
+    {% endif %}
+
+    {% if record.facts %}
+    <div class="card mock-card" style="margin-top:1.2rem;">
+      <h2 style="font-size:1.1rem; margin-top:0;">
+        Extracted facts <span class="mock-tag">MOCK -- plain regex, not AI</span>
+      </h2>
+      <table class="facts-table">
+        <thead><tr><th>Field</th><th>Value</th><th>Source</th></tr></thead>
+        <tbody>
+          {% for f in record.facts %}
+          <tr><td>{{ f.field }}</td><td>{{ f.value }}</td><td>{{ f.source }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if record.decisions %}
+    <div class="card" style="margin-top:1.2rem;">
+      <h2 style="font-size:1.1rem; margin-top:0;">Adjuster decisions</h2>
+      <ul class="missing-list" style="color:var(--ink);">
+        {% for d in record.decisions %}
+        <li><strong>{{ d.decision }}</strong> by {{ d.adjuster_username }} &mdash; {{ d.decided_at }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <a class="back-link" href="/">&larr; submit another claim</a>
+  </div>
+</body>
+</html>

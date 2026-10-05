@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Notifications -- HarborClaim</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="page">
+    <header class="app-header">
+      <div class="brand">Harbor<span>Claim</span></div>
+      <nav>
+        <a href="/">New claim</a>
+        <a href="/claims">My claims</a>
+        <span class="hint">{{ user.email }}</span>
+        <a href="/auth/logout">Sign out</a>
+      </nav>
+    </header>
+
+    <h1>Notifications</h1>
+    <p class="subtitle">
+      Every status change and adjuster decision, on two mock channels &mdash; neither one sends
+      anything real. See <a href="https://github.com/i-asimkhan/harborclaim-insurance-intake/blob/main/MOCKS.md">MOCKS.md</a>.
+    </p>
+
+    <div class="card">
+      {% if notifications %}
+      <ul class="notification-list">
+        {% for n in notifications %}
+        <li class="notification{% if not n.read_at %} unread{% endif %}">
+          <span class="channel-tag">{{ "📧 MOCK EMAIL" if n.channel == "email" else "🔔 IN-APP" }}</span>
+          <a href="/claims/{{ n.claim_id }}">{{ n.claim_id }}</a>
+          <p>{{ n.message }}</p>
+          <span class="hint">{{ n.created_at }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <div class="empty-state">No notifications yet.</div>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

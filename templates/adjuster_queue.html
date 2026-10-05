@@ -5,13 +5,14 @@
   <title>Adjuster queue -- HarborClaim</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
-<body>
+<body class="adjuster-theme">
   <div class="page">
     <header class="app-header">
-      <div class="brand">Harbor<span>Claim</span></div>
+      <div class="brand">Harbor<span>Claim</span> <span class="role-tag">ADJUSTER</span></div>
       <nav>
-        <a href="/">Claimant side</a>
-        <span class="hint">adjuster: {{ adjuster.username }}</span>
+        <a href="/adjuster">Queue</a>
+        <a href="/adjuster/notifications">Notifications</a>
+        <span class="hint">{{ adjuster.username }}</span>
         <a href="/adjuster/logout">Sign out</a>
       </nav>
     </header>
@@ -23,7 +24,29 @@
       separate from any Google sign-in.
     </p>
 
-    <div class="card">
+    <div class="card notification-panel">
+      <h2 style="font-size:1.05rem; margin-top:0;">
+        Needs attention
+        {% if needs_attention %}<span class="badge-count">{{ needs_attention | length }}</span>{% endif %}
+      </h2>
+      <p class="hint" style="margin-top:0;">
+        Computed fresh on every page load &mdash; not a stored, per-adjuster "seen" flag.
+      </p>
+      {% if needs_attention %}
+      <ul class="missing-list" style="color:var(--ink);">
+        {% for record in needs_attention %}
+        <li>
+          <a href="/adjuster/claims/{{ record.claim.claim_id }}">{{ record.claim.claim_id }}</a>
+          &mdash; {{ record.claim.policy_id or "—" }}, filed {{ record.history[0].at }}
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p style="margin-bottom:0;">Nothing waiting on a decision right now.</p>
+      {% endif %}
+    </div>
+
+    <div class="card" style="margin-top:1.2rem;">
       {% if claims %}
       <table class="claims-table">
         <thead>
@@ -32,7 +55,7 @@
         <tbody>
           {% for record in claims %}
           <tr>
-            <td><a href="/claims/{{ record.claim.claim_id }}">{{ record.claim.claim_id }}</a></td>
+            <td><a href="/adjuster/claims/{{ record.claim.claim_id }}">{{ record.claim.claim_id }}</a></td>
             <td>{{ record.claim.claimant_email or "—" }}</td>
             <td>{{ record.claim.policy_id or "—" }}</td>
             <td>

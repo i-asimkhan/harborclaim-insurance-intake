@@ -3,6 +3,38 @@
 USF FIN 6934 (AI in Finance), System Design Studio — Assignment 7. HarborClaim is a
 fictional insurtech startup; this is my take-home build for its claim intake system.
 
+## Quick start (run the full web app)
+
+The graded minimum (`main.py`) needs nothing but Python — see "Run it" below. This is
+for the full app: real file storage, a database, sign-in, adjuster review, the mock
+extraction/summary/notification pipeline.
+
+```bash
+# 1. Install dependencies into a venv
+python -m venv .venv
+.venv/Scripts/pip install -r requirements.txt      # Windows
+# .venv/bin/pip install -r requirements.txt        # macOS/Linux
+
+# 2. Set up login credentials
+cp .env.example .env
+# Claimant login needs a real Google OAuth app -- one-time setup, see
+# "Accounts and privacy" below. Adjuster login needs none of that:
+.venv/Scripts/python.exe -c "import storage; storage.init_db(); print(storage.create_adjuster('a.irving', 'Adjuster Name'))"
+# ^ prints a password once -- copy it, you'll use it to sign in as that adjuster.
+
+# 3. Run it
+.venv/Scripts/python.exe -m uvicorn app:app --reload --port 8123
+```
+
+Open **<http://127.0.0.1:8123/>** — claimant sign-in is on that page; adjuster sign-in is
+at **<http://127.0.0.1:8123/adjuster/login>** (the username/password from step 2). Try
+uploading a file from `sample_data/` when filing a claim to see the mock extraction
+pipeline find something real in it.
+
+The port matters — `8123` has to match the redirect URI registered in Google Cloud
+Console (see "Accounts and privacy" below) or claimant sign-in will fail with
+`redirect_uri_mismatch`.
+
 ## What this is
 
 The minimum working example from the take-home spec: a claim completeness checker.
@@ -74,7 +106,8 @@ coverage/payout word (`approve`, `deny`, `decline`, `pay`).
 
 All claim data (`CLM-1001`, `CLM-1002`, policy IDs, document names) is fictional,
 written for this demo. No real customer or policy data is used anywhere in this
-folder.
+folder. (The web UI stretch below has three more mocked stages of its own — fact
+extraction, summary generation, notifications — documented in full in `MOCKS.md`.)
 
 ---
 
@@ -259,41 +292,89 @@ required, just convenient during development.
 .venv/Scripts/python.exe -m pytest tests/test_app.py -v
 ```
 
-22 tests. No real Google login is needed to run them — claimant login is faked
+38 tests. No real Google login is needed to run them — claimant login is faked
 with FastAPI's `dependency_overrides` on `get_current_user`, the standard way
 to test routes behind auth. Adjuster login is tested for real, not faked —
 `storage.create_adjuster` generates a real account and the tests actually
 `POST /adjuster/login` with the real password, so `storage.verify_adjuster`'s
-hashing/comparison logic is genuinely exercised, not assumed. Covers: the
-signed-out landing page, an anonymous submission attempt being redirected to
-login, first-login account creation, a complete claim submission with a real
-uploaded file, an incomplete one, real file persistence to disk and back out
-through the download route, a claimant blocked from viewing or downloading
-someone else's claim, "my claims" only showing your own, adjuster passwords
-being random and single-use, a wrong password being rejected, an unknown
-username being rejected the same way a wrong password is (no username
-enumeration), a real login with the real generated password working, a
-claimant login granting zero adjuster access, an adjuster seeing every claim
-regardless of owner, only a logged-in adjuster being able to record a
-decision, separation of duties blocking a linked adjuster from deciding their
-own claim (and an unlinked adjuster being unaffected by that same check),
-login/logout being recorded in the audit trail, a claimant logout leaving an
-active adjuster session untouched, an unknown claim ID (404), and the
-empty-state claims list.
+hashing/comparison logic is genuinely exercised, not assumed. Covers
+everything from the earlier count, plus: mock extraction actually finding
+facts in a real uploaded `.txt` document, a mock summary being generated on
+submission, notifications landing on both mock channels for a complete and
+an incomplete submission, the notifications page listing and marking them
+read, an adjuster decision notifying the claimant, the "needs attention"
+panel excluding claims that already have a decision, an adjuster-only
+session being refused the claimant claim page (and vice versa) even for the
+exact same claim, no adjuster links appearing anywhere on a claimant page,
+the adjuster notifications view, and malformed input (an oversized policy
+ID, a future incident date, a disallowed file type, an oversized file) being
+rejected with the form re-shown rather than silently stored.
 
-### What's real vs. stubbed
+### UI tests (real browser, run on demand)
 
-Five of the seven Design Deliverable stages are real now: the completeness
-check, document/evidence storage (`storage.py` writes uploaded files to
-`data/uploads/<claim_id>/` and never touches their contents), a persistent
-claims database (SQLite, `data/harborclaim.db` — survives a server restart,
-verified by stopping and restarting `uvicorn` mid-session and re-loading a
-claim), accounts (Google sign-in for claimants, provisioned username/password
-for adjusters), and adjuster review (a human decision — `APPROVED` /
-`DECLINED` / `NEEDS_MORE_REVIEW` — never made automatically). Two stages
-remain stubbed or missing: an AI fact extractor and an AI summary generator.
-A notification service and wiring everything into one pipeline are also
-still open.
+`tests/test_app.py` checks HTTP responses in-process and never touches a real
+browser — fast, but it can't catch a CSS rule that makes text unreadable or a
+form that doesn't actually submit the way a user experiences it.
+`tests/test_ui.py` does, using Playwright against a real, live `uvicorn`
+process it starts and stops itself (port 8199, separate from your own dev
+server on 8123). Not part of the regular test command — it needs a browser
+binary installed and takes longer to run:
+
+```bash
+.venv/Scripts/python.exe -m playwright install chromium   # once
+.venv/Scripts/python.exe -m pytest tests/test_ui.py -v
+```
+
+7 tests: the signed-out page, a full claimant submission with a real file
+upload (checking the extraction/summary pipeline actually ran, not just that
+the mock labels are present), the validation error state (visible, with
+typed values preserved), a real adjuster login, strict page separation (an
+adjuster-only session can never reach claimant content, verified by checking
+the claim's own data never appears on whatever page results — not by
+asserting an exact URL, since that redirect chain legitimately continues on
+to a real Google OAuth hop, which the test blocks rather than depends on), a
+full decision round-trip visible in the browser, and one regression test
+worth calling out specifically: it measures the actual rendered WCAG
+contrast ratio of the mock-card text against its background, rather than
+relying on a human looking at a screenshot. That test is there because a
+real bug slipped through exactly that way once already — the mock card's
+fixed cream background combined with the adjuster dark theme's near-white
+text color measured 1.13:1 contrast (confirmed by temporarily reverting the
+fix and watching this exact test catch it) before being fixed to 4.5:1+.
+
+Only claimant-related UI tests need `SESSION_SECRET_KEY` in `.env` (the same
+signed-cookie technique the documentation screenshots use) — not real Google
+OAuth credentials, so this suite runs even without ever completing the
+Google Cloud Console setup.
+
+### Screenshots
+
+Captured from the actual running app (Playwright driving a real browser
+against a live `uvicorn` process — claimant screens use an injected,
+properly-signed session cookie rather than an interactive Google consent
+screen, which can't be automated headlessly; adjuster screens use a real
+form login). Full set in `docs/screenshots/`.
+
+| | |
+|---|---|
+| ![New claim form, filled in with two sample PDFs attached](docs/screenshots/02-new-claim-filled.png) New claim form, two sample PDFs attached | ![Claim result: READY_FOR_REVIEW, with the mock summary and extracted-facts table](docs/screenshots/03-claim-result-ready.png) Result page — mock summary + extracted facts, clearly tagged |
+| ![Adjuster queue with the Needs Attention panel](docs/screenshots/08-adjuster-queue.png) Adjuster queue — "Needs attention" panel | ![Notifications inbox showing both mock channels](docs/screenshots/06-notifications.png) Notifications inbox — both mock channels |
+
+### What's real vs. mocked
+
+All seven Design Deliverable stages are wired into one pipeline now — see
+`MOCKS.md` for exactly which three are deliberately fake and why:
+
+| Stage | Status |
+|---|---|
+| Completeness check | ✅ Real (the graded minimum) |
+| Document/evidence storage | ✅ Real — `storage.py` writes uploaded files to `data/uploads/<claim_id>/`, never touches their contents |
+| Persistent claims database | ✅ Real — SQLite, survives a server restart (verified by actually restarting `uvicorn` mid-session) |
+| Accounts | ✅ Real — Google sign-in for claimants, provisioned username/password for adjusters |
+| Fact extraction | 🟡 **Mock** — real text read (via `pypdf`), fake intelligence (plain regex) — see `MOCKS.md` |
+| Summary generation | 🟡 **Mock** — template-assembled from stored fields, no model call — see `MOCKS.md` |
+| Adjuster review | ✅ Real — a human decision, gated by separation of duties |
+| Notifications | 🟡 **Mock** — logged on two channels, nothing actually sent — see `MOCKS.md` |
 
 One honest limitation worth naming: nothing in this app verifies that a
 provisioned adjuster actually holds a real state adjuster license.
@@ -302,6 +383,42 @@ regulatory one (who is legally allowed to hold the role) — it assumes
 whoever runs that command already checked. A real system would integrate
 with a state licensing lookup before provisioning; that's out of scope here.
 
-Uploaded files are stored as-is and served back byte-for-byte on request
-(`GET /claims/{claim_id}/documents/{filename}`) — nothing reads or interprets their
-contents yet. That's the AI fact extractor's job, still to come.
+Try the pipeline yourself with `sample_data/` — four fictional claim
+documents written so the mock extractor finds something real in them.
+
+### Input validation and error handling
+
+`validation.py` rejects malformed input before a claim is ever created —
+separately from `main.py`'s completeness check, which only cares whether a
+*complete* field is present, not whether a present one is well-formed. A
+blank policy ID is `main.py`'s problem (`NEEDS_INFORMATION`); a 10,000-character
+one, an incident date in the year 3026, or a `.exe` upload are
+`validation.py`'s problem (`400`, form re-shown with the error and whatever
+was typed still in place). Limits: policy ID ≤ 40 characters, description ≤
+5,000 characters, incident date can't be in the future or before 2000, files
+must be one of `.pdf .txt .jpg .jpeg .png .zip .doc .docx`, ≤ 10MB each, ≤
+10 files per claim.
+
+Separately, a global exception handler (`app.py`'s `unhandled_error`) catches
+anything that isn't already a handled response and returns a generic `500`
+page — the real error goes to the server console, never into the response
+body, the same "no stack traces to the user" rule a classmate's submission
+used for the same reason.
+
+### Claimant and adjuster pages are fully separate routes
+
+Not just hidden behind role checks — there is no template and no URL that
+renders differently depending on who's looking at it. Every claimant route
+lives under `/`, `/claims`, `/notifications`; every adjuster route lives
+under `/adjuster/...` (`/adjuster`, `/adjuster/claims/{id}`,
+`/adjuster/notifications`). A claimant session grants zero access to any
+`/adjuster/...` route, and an adjuster session grants zero access to
+`/claims/{id}` — even for the exact same claim, even though both of those
+used to be one shared page (`result.html`) with role-conditional sections.
+The adjuster side also gets its own visual theme (dark navy, redefining the
+same CSS custom properties the claimant side uses, so every existing
+component re-skins itself with no duplicated rules) specifically so the two
+never look alike even at a glance. The one exception is the signed-out
+landing page (`/`) and `/adjuster/login` — both are pre-login screens with no
+account data on them at all, so offering both sign-in paths from each isn't
+sharing anything.

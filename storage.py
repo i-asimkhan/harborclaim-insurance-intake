@@ -98,6 +98,32 @@ CREATE TABLE IF NOT EXISTS login_events (
     event TEXT NOT NULL,
     at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS claim_facts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    claim_id TEXT NOT NULL REFERENCES claims(claim_id),
+    field TEXT NOT NULL,
+    value TEXT NOT NULL,
+    source TEXT NOT NULL,
+    extracted_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS claim_summaries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    claim_id TEXT NOT NULL REFERENCES claims(claim_id),
+    summary_text TEXT NOT NULL,
+    generated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    claim_id TEXT NOT NULL REFERENCES claims(claim_id),
+    claimant_email TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    message TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    read_at TEXT
+);
 """
 
 # A fresh checkout (or a DB created before accounts existed) may already have
@@ -149,11 +175,19 @@ def init_db() -> None:
 
 
 def reset() -> None:
-    """Wipe all rows (tests only) -- schema stays, data doesn't."""
+    """Wipe all rows (tests only) -- schema stays, data doesn't.
+
+    Children before parents: every table referencing claims(claim_id) has to
+    be cleared before claims itself, or the foreign-key constraint rejects
+    the DELETE.
+    """
     with _connect() as conn:
         conn.execute("DELETE FROM adjuster_decisions")
         conn.execute("DELETE FROM status_history")
         conn.execute("DELETE FROM documents")
+        conn.execute("DELETE FROM claim_facts")
+        conn.execute("DELETE FROM claim_summaries")
+        conn.execute("DELETE FROM notifications")
         conn.execute("DELETE FROM claims")
         conn.execute("DELETE FROM users")
         conn.execute("DELETE FROM adjusters")
@@ -341,6 +375,16 @@ def _row_to_record(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         "WHERE claim_id = ? ORDER BY id",
         (row["claim_id"],),
     ).fetchall()
+    facts = conn.execute(
+        "SELECT field, value, source, extracted_at FROM claim_facts "
+        "WHERE claim_id = ? ORDER BY id",
+        (row["claim_id"],),
+    ).fetchall()
+    summaries = conn.execute(
+        "SELECT summary_text, generated_at FROM claim_summaries "
+        "WHERE claim_id = ? ORDER BY id DESC LIMIT 1",
+        (row["claim_id"],),
+    ).fetchall()
 
     return {
         "claim": {
@@ -356,6 +400,8 @@ def _row_to_record(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         "history": [dict(h) for h in history],
         "documents": [dict(d) for d in documents],
         "decisions": [dict(d) for d in decisions],
+        "facts": [dict(f) for f in facts],
+        "summary": dict(summaries[0]) if summaries else None,
     }
 
 
@@ -423,3 +469,86 @@ def list_login_events(identifier: str | None = None) -> list[dict]:
                 "SELECT * FROM login_events WHERE identifier = ? ORDER BY id DESC", (identifier,)
             ).fetchall()
         return [dict(row) for row in rows]
+
+
+def add_facts(claim_id: str, facts: list[dict]) -> None:
+    """Store extracted facts. Each item is {"field", "value", "source"}.
+
+    Append-only like everything else here -- re-running extraction adds a new
+    batch rather than overwriting the last one, so there's a history of what
+    extraction produced and when, not just the current answer.
+    """
+    now = _now()
+    with _connect() as conn:
+        conn.executemany(
+            "INSERT INTO claim_facts (claim_id, field, value, source, extracted_at) VALUES (?, ?, ?, ?, ?)",
+            [(claim_id, f["field"], f["value"], f["source"], now) for f in facts],
+        )
+
+
+def add_summary(claim_id: str, summary_text: str) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO claim_summaries (claim_id, summary_text, generated_at) VALUES (?, ?, ?)",
+            (claim_id, summary_text, _now()),
+        )
+
+
+def add_notification(claim_id: str, claimant_email: str, channel: str, message: str) -> None:
+    """Record a notification. `channel` is "in_app" or "email".
+
+    Neither channel actually delivers anything -- there's no SMTP call, no
+    push service. This is the same mock-outbox pattern used elsewhere in the
+    class (an append-only log standing in for a real delivery system), kept
+    honest by never claiming to have sent anything.
+    """
+    with _connect() as conn:
+        conn.execute(
+            """INSERT INTO notifications (claim_id, claimant_email, channel, message, created_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (claim_id, claimant_email, channel, message, _now()),
+        )
+
+
+def list_notifications_for(claimant_email: str) -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM notifications WHERE claimant_email = ? ORDER BY id DESC",
+            (claimant_email,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+
+def unread_notification_count_for(claimant_email: str) -> int:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM notifications WHERE claimant_email = ? AND read_at IS NULL",
+            (claimant_email,),
+        ).fetchone()
+        return row["n"]
+
+
+def mark_notifications_read(claimant_email: str) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE notifications SET read_at = ? WHERE claimant_email = ? AND read_at IS NULL",
+            (_now(), claimant_email),
+        )
+
+
+def claims_needing_adjuster_attention() -> list[dict]:
+    """READY_FOR_REVIEW claims with no decision yet -- the adjuster-side
+    "in-app notifications" view. Deliberately not a stored, per-adjuster
+    notification feed (that would need tracking what each adjuster has
+    already seen, which this app has no concept of yet) -- it's a live,
+    derived count computed fresh each time, which is simpler and can't go
+    stale the way a stored "unread" flag could.
+    """
+    with _connect() as conn:
+        rows = conn.execute(
+            """SELECT c.* FROM claims c
+               WHERE c.status = 'READY_FOR_REVIEW'
+               AND NOT EXISTS (SELECT 1 FROM adjuster_decisions d WHERE d.claim_id = c.claim_id)
+               ORDER BY c.created_at ASC"""
+        ).fetchall()
+        return [_row_to_record(conn, row) for row in rows]

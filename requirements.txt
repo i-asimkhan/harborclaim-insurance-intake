@@ -11,3 +11,8 @@ httpx==0.28.1
 Authlib==1.8.0
 itsdangerous==2.2.0
 python-dotenv==1.2.3
+
+# Reading uploaded PDF documents' text layer for the mock fact extractor
+# (extraction.py). Real text extraction; the "mock" part is the regex
+# matching on top of it, not this -- see MOCKS.md.
+pypdf==6.19.0

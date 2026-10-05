@@ -2,42 +2,30 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>{{ record.claim.claim_id }} -- HarborClaim</title>
+  <title>{{ record.claim.claim_id }} -- Adjuster -- HarborClaim</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
-<body>
+<body class="adjuster-theme">
   <div class="page">
     <header class="app-header">
-      <div class="brand">Harbor<span>Claim</span></div>
+      <div class="brand">Harbor<span>Claim</span> <span class="role-tag">ADJUSTER</span></div>
       <nav>
-        {% if user %}
-          <a href="/claims">My claims</a>
-          <a href="/">New claim</a>
-          <span class="hint">{{ user.email }}</span>
-          <a href="/auth/logout">Sign out</a>
-        {% endif %}
-        {% if adjuster %}
-          <a href="/adjuster">Adjuster queue</a>
-          <span class="hint">adjuster: {{ adjuster.username }}</span>
-          <a href="/adjuster/logout">Adjuster sign out</a>
-        {% endif %}
+        <a href="/adjuster">Queue</a>
+        <a href="/adjuster/notifications">Notifications</a>
+        <span class="hint">{{ adjuster.username }}</span>
+        <a href="/adjuster/logout">Sign out</a>
       </nav>
     </header>
 
-    <h1>Claim result</h1>
+    <h1>Claim review</h1>
     <p class="subtitle claim-id">{{ record.claim.claim_id }}</p>
 
     <div class="card">
       {% if record.status == READY_FOR_REVIEW %}
         <span class="badge ready">&#10003; READY_FOR_REVIEW</span>
-        <p style="margin-top:1rem; color:var(--ink-soft);">
-          Everything required is present. In the full design this would now go to
-          AI summarization first &mdash; not built yet, so an adjuster reviews the
-          raw submission directly.
-        </p>
       {% else %}
         <span class="badge needs">&#9888; NEEDS_INFORMATION</span>
-        <p style="margin-top:1rem; color:var(--ink-soft);">The claimant would be notified to provide:</p>
+        <p style="margin-top:1rem; color:var(--ink-soft);">Missing from the claimant:</p>
         <ul class="missing-list">
           {% for field in record.missing %}
           <li>{{ field }}</li>
@@ -56,7 +44,7 @@
             <ul class="document-list">
               {% for doc in record.documents %}
               <li>
-                <a href="/claims/{{ record.claim.claim_id }}/documents/{{ doc.filename }}">{{ doc.filename }}</a>
+                <a href="/adjuster/claims/{{ record.claim.claim_id }}/documents/{{ doc.filename }}">{{ doc.filename }}</a>
                 <span class="hint">{{ (doc.size_bytes / 1024) | round(1) }} KB &middot; {{ doc.content_type or "unknown type" }}</span>
               </li>
               {% endfor %}
@@ -68,9 +56,35 @@
       </dl>
     </div>
 
+    {% if record.summary %}
+    <div class="card mock-card" style="margin-top:1.2rem;">
+      <h2 style="font-size:1.1rem; margin-top:0;">
+        Adjuster summary <span class="mock-tag">MOCK -- not AI-generated</span>
+      </h2>
+      <p style="white-space:pre-line;">{{ record.summary.summary_text }}</p>
+      <span class="hint">Generated {{ record.summary.generated_at }}</span>
+    </div>
+    {% endif %}
+
+    {% if record.facts %}
+    <div class="card mock-card" style="margin-top:1.2rem;">
+      <h2 style="font-size:1.1rem; margin-top:0;">
+        Extracted facts <span class="mock-tag">MOCK -- plain regex, not AI</span>
+      </h2>
+      <table class="facts-table">
+        <thead><tr><th>Field</th><th>Value</th><th>Source</th></tr></thead>
+        <tbody>
+          {% for f in record.facts %}
+          <tr><td>{{ f.field }}</td><td>{{ f.value }}</td><td>{{ f.source }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
     {% if record.decisions %}
     <div class="card" style="margin-top:1.2rem;">
-      <h2 style="font-size:1.1rem; margin-top:0;">Adjuster decisions</h2>
+      <h2 style="font-size:1.1rem; margin-top:0;">Decisions recorded</h2>
       <ul class="missing-list" style="color:var(--ink);">
         {% for d in record.decisions %}
         <li><strong>{{ d.decision }}</strong> by {{ d.adjuster_username }} &mdash; {{ d.decided_at }}</li>
@@ -79,7 +93,7 @@
     </div>
     {% endif %}
 
-    {% if adjuster and record.status == READY_FOR_REVIEW %}
+    {% if record.status == READY_FOR_REVIEW %}
       {% if adjuster.linked_claimant_email and adjuster.linked_claimant_email == record.claim.claimant_email %}
       <div class="card" style="margin-top:1.2rem;">
         <h2 style="font-size:1.1rem; margin-top:0;">Record a decision</h2>
@@ -93,18 +107,18 @@
         <h2 style="font-size:1.1rem; margin-top:0;">Record a decision</h2>
         <p class="note" style="margin-top:0;">
           This is a human judgment call, not an automated one &mdash; the completeness
-          checker above never makes this decision itself.
+          checker never makes this decision itself.
         </p>
-        <form method="post" action="/claims/{{ record.claim.claim_id }}/decision" style="display:flex; gap:0.6rem; flex-wrap:wrap;">
+        <form method="post" action="/adjuster/claims/{{ record.claim.claim_id }}/decision" style="display:flex; gap:0.6rem; flex-wrap:wrap;">
           {% for choice in decisions %}
-          <button type="submit" name="decision" value="{{ choice }}" class="primary" style="background:var(--ink-soft);">{{ choice.replace("_", " ") | title }}</button>
+          <button type="submit" name="decision" value="{{ choice }}" class="primary adjuster-btn">{{ choice.replace("_", " ") | title }}</button>
           {% endfor %}
         </form>
       </div>
       {% endif %}
     {% endif %}
 
-    <a class="back-link" href="/">&larr; submit another claim</a>
+    <a class="back-link" href="/adjuster">&larr; back to queue</a>
   </div>
 </body>
 </html>

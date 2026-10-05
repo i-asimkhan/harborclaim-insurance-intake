@@ -1,0 +1,109 @@
+{
+  "_comment": "Fictional demo data for HarborClaim. Each entry in `scenarios` is seeded into a real running instance by seed_demo_data.py via real HTTP requests -- it is not a fixture loaded directly into the database. `validation_failures` are documented separately because, by design, they can never become a stored claim at all; seed_demo_data.py submits them too, expecting the request to be rejected, and fails loudly if one is ever accepted.",
+
+  "scenarios": [
+    {
+      "id": "collision-ready-approved",
+      "label": "Straightforward collision, complete on first submission, later approved",
+      "claimant_email": "jordan.alvarez@example.com",
+      "claimant_name": "Jordan Alvarez",
+      "policy_id": "POL-10234",
+      "incident_date": "2026-09-10",
+      "description": "Rear-end collision in a parking lot near the office. Minor bumper and taillight damage.",
+      "documents": ["police_report_sample.pdf", "repair_estimate_sample.pdf"],
+      "expected_status": "READY_FOR_REVIEW",
+      "adjuster_decision": "APPROVED",
+      "covers": "the baseline success path end to end: complete claim -> extraction finds real facts in two documents -> adjuster approves -> claimant is notified"
+    },
+    {
+      "id": "theft-ready-declined",
+      "label": "Theft claim, complete, later declined",
+      "claimant_email": "morgan.reyes@example.com",
+      "claimant_name": "Morgan Reyes",
+      "policy_id": "POL-55891",
+      "incident_date": "2026-09-02",
+      "description": "Power tools reported stolen from a locked garage over the weekend.",
+      "documents": ["theft_report_sample.pdf"],
+      "expected_status": "READY_FOR_REVIEW",
+      "adjuster_decision": "DECLINED",
+      "covers": "a complete claim that still ends in a non-approval decision -- proves the adjuster decision is a genuine, independent human judgment call, not something the completeness check predetermines"
+    },
+    {
+      "id": "vandalism-ready-needs-more-review",
+      "label": "Vandalism claim, complete, routed for further review",
+      "claimant_email": "casey.kim@example.com",
+      "claimant_name": "Casey Kim",
+      "policy_id": "POL-70045",
+      "incident_date": "2026-09-14",
+      "description": "Storefront window shattered and exterior wall vandalized with graffiti overnight.",
+      "documents": ["vandalism_report_sample.pdf"],
+      "expected_status": "READY_FOR_REVIEW",
+      "adjuster_decision": "NEEDS_MORE_REVIEW",
+      "covers": "the third decision outcome (neither approved nor declined) -- an adjuster can route a complete claim back for more review rather than being forced into a binary choice"
+    },
+    {
+      "id": "water-damage-missing-incident-date",
+      "label": "Water damage claim, submitted without an incident date",
+      "claimant_email": "jordan.alvarez@example.com",
+      "claimant_name": "Jordan Alvarez",
+      "policy_id": "POL-10567",
+      "incident_date": "",
+      "description": "Pipe failure caused water damage to kitchen flooring and lower cabinets.",
+      "documents": ["water_damage_notes_sample.pdf"],
+      "expected_status": "NEEDS_INFORMATION",
+      "expected_missing": ["incident_date"],
+      "adjuster_decision": null,
+      "covers": "the completeness checker's NEEDS_INFORMATION path -- same claimant as scenario 1, a second claim, so \"My Claims\" has more than one entry to show"
+    },
+    {
+      "id": "injury-no-documents",
+      "label": "Injury claim, no supporting documents attached",
+      "claimant_email": "casey.kim@example.com",
+      "claimant_name": "Casey Kim",
+      "policy_id": "POL-70099",
+      "incident_date": "2026-09-17",
+      "description": "Slip-and-fall on the insured premises, minor wrist sprain, outpatient treatment sought same day.",
+      "documents": [],
+      "expected_status": "NEEDS_INFORMATION",
+      "expected_missing": ["documents"],
+      "adjuster_decision": null,
+      "covers": "the other way a claim can be incomplete -- all three text fields present and well-formed, zero documents attached. (injury_claim_notes_sample.pdf exists in this folder and matches this scenario's story, but is deliberately NOT attached here -- that's the whole point of this case.)"
+    }
+  ],
+
+  "validation_failures": [
+    {
+      "id": "policy-id-too-long",
+      "label": "Policy ID over the 40-character limit",
+      "claimant_email": "jordan.alvarez@example.com",
+      "policy_id": "POL-THIS-ID-IS-DELIBERATELY-WAY-TOO-LONG-FOR-THE-FIELD",
+      "incident_date": "2026-09-10",
+      "description": "This submission should never be stored.",
+      "documents": [],
+      "expect_http_status": 400,
+      "expect_error_contains": "too long"
+    },
+    {
+      "id": "future-incident-date",
+      "label": "Incident date in the future",
+      "claimant_email": "morgan.reyes@example.com",
+      "policy_id": "POL-99999",
+      "incident_date": "2099-01-01",
+      "description": "An incident that, per the date given, has not happened yet.",
+      "documents": [],
+      "expect_http_status": 400,
+      "expect_error_contains": "future"
+    },
+    {
+      "id": "disallowed-file-type",
+      "label": "Uploaded file type not on the allowlist",
+      "claimant_email": "casey.kim@example.com",
+      "policy_id": "POL-11111",
+      "incident_date": "2026-09-10",
+      "description": "A claim that tries to attach an executable instead of a document.",
+      "documents": ["not_a_real_document.exe"],
+      "expect_http_status": 400,
+      "expect_error_contains": "file type not allowed"
+    }
+  ]
+}

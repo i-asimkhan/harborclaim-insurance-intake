@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Notifications -- Adjuster -- HarborClaim</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="adjuster-theme">
+  <div class="page">
+    <header class="app-header">
+      <div class="brand">Harbor<span>Claim</span> <span class="role-tag">ADJUSTER</span></div>
+      <nav>
+        <a href="/adjuster">Queue</a>
+        <span class="hint">{{ adjuster.username }}</span>
+        <a href="/adjuster/logout">Sign out</a>
+      </nav>
+    </header>
+
+    <h1>Notifications</h1>
+    <p class="subtitle">
+      No per-adjuster inbox here on purpose &mdash; there's no concept yet of what one
+      adjuster has already "seen" versus another. This is two live, derived views instead:
+      claims waiting on a decision, and the system-wide login activity log.
+    </p>
+
+    <div class="card notification-panel">
+      <h2 style="font-size:1.05rem; margin-top:0;">
+        Needs attention
+        {% if needs_attention %}<span class="badge-count">{{ needs_attention | length }}</span>{% endif %}
+      </h2>
+      {% if needs_attention %}
+      <ul class="missing-list" style="color:var(--ink);">
+        {% for record in needs_attention %}
+        <li>
+          <a href="/adjuster/claims/{{ record.claim.claim_id }}">{{ record.claim.claim_id }}</a>
+          &mdash; {{ record.claim.policy_id or "—" }}, filed {{ record.history[0].at }}
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p style="margin-bottom:0;">Nothing waiting on a decision right now.</p>
+      {% endif %}
+    </div>
+
+    <div class="card" style="margin-top:1.2rem;">
+      <h2 style="font-size:1.05rem; margin-top:0;">Recent login activity</h2>
+      <p class="hint" style="margin-top:0;">Both roles, most recent first &mdash; the same audit trail used for governance review.</p>
+      {% if recent_logins %}
+      <ul class="notification-list">
+        {% for e in recent_logins %}
+        <li class="notification">
+          <span class="channel-tag">{{ e.role | upper }} / {{ e.event | upper }}</span>
+          <span>{{ e.identifier }}</span>
+          <span class="hint" style="display:block;">{{ e.at }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <div class="empty-state">No login activity yet.</div>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

@@ -257,18 +257,27 @@ def test_only_a_logged_in_adjuster_can_record_a_decision():
     )
     claim_id = response.headers["location"].rsplit("/", 1)[-1]
 
-    blocked = client.post(f"/claims/{claim_id}/decision", data={"decision": "APPROVED"}, follow_redirects=False)
+    blocked = client.post(
+        f"/adjuster/claims/{claim_id}/decision", data={"decision": "APPROVED"}, follow_redirects=False
+    )
     assert blocked.status_code == 303
     assert blocked.headers["location"] == "/adjuster/login"
 
     password = storage.create_adjuster("decider")
     login_as_adjuster("decider", password)
-    allowed = client.post(f"/claims/{claim_id}/decision", data={"decision": "APPROVED"}, follow_redirects=False)
+    allowed = client.post(
+        f"/adjuster/claims/{claim_id}/decision", data={"decision": "APPROVED"}, follow_redirects=False
+    )
     assert allowed.status_code == 303
 
-    result = client.get(f"/claims/{claim_id}")
-    assert "APPROVED" in result.text
-    assert "decider" in result.text
+    # Shows up on both the claimant's own view and the adjuster's separate one.
+    claimant_view = client.get(f"/claims/{claim_id}")
+    assert "APPROVED" in claimant_view.text
+    assert "decider" in claimant_view.text
+
+    adjuster_view = client.get(f"/adjuster/claims/{claim_id}")
+    assert "APPROVED" in adjuster_view.text
+    assert "decider" in adjuster_view.text
 
 
 def test_separation_of_duties_blocks_an_adjuster_deciding_their_own_claim():
@@ -287,7 +296,7 @@ def test_separation_of_duties_blocks_an_adjuster_deciding_their_own_claim():
     password = storage.create_adjuster("conflicted", linked_claimant_email=CLAIMANT["email"])
     login_as_adjuster("conflicted", password)
 
-    blocked = client.post(f"/claims/{claim_id}/decision", data={"decision": "APPROVED"})
+    blocked = client.post(f"/adjuster/claims/{claim_id}/decision", data={"decision": "APPROVED"})
     assert blocked.status_code == 403
 
     assert storage.get_claim(claim_id)["decisions"] == []
@@ -308,7 +317,9 @@ def test_an_unlinked_adjuster_is_unaffected_by_the_conflict_check():
     password = storage.create_adjuster("unrelated", linked_claimant_email="someone-else@example.com")
     login_as_adjuster("unrelated", password)
 
-    allowed = client.post(f"/claims/{claim_id}/decision", data={"decision": "APPROVED"}, follow_redirects=False)
+    allowed = client.post(
+        f"/adjuster/claims/{claim_id}/decision", data={"decision": "APPROVED"}, follow_redirects=False
+    )
     assert allowed.status_code == 303
 
 
@@ -345,3 +356,237 @@ def test_claims_list_is_empty_state_when_nothing_submitted():
     login_as_claimant(CLAIMANT)
     response = client.get("/claims")
     assert "No claims submitted yet." in response.text
+
+
+def test_mock_extraction_finds_facts_in_an_uploaded_text_document():
+    login_as_claimant(CLAIMANT)
+    response = submit(
+        policy_id="POL-FACTS",
+        incident_date="2026-07-07",
+        description="Kitchen fire, minor damage.",
+        files=[("notes.txt", b"Repair estimate $4,200.00 dated 2026-07-08. Possible water damage too.")],
+    )
+    claim_id = response.headers["location"].rsplit("/", 1)[-1]
+
+    result = client.get(f"/claims/{claim_id}")
+    assert "$4,200.00" in result.text
+    assert "2026-07-08" in result.text
+    assert "Fire" in result.text
+    assert "Water damage" in result.text
+    assert "MOCK" in result.text  # never presented as if it were real AI
+
+
+def test_mock_summary_is_generated_on_submission():
+    login_as_claimant(CLAIMANT)
+    response = submit(
+        policy_id="POL-SUMMARY",
+        incident_date="2026-08-01",
+        description="Garage theft, tools missing.",
+        files=[("report.txt", b"Police report filed.")],
+    )
+    claim_id = response.headers["location"].rsplit("/", 1)[-1]
+
+    record = storage.get_claim(claim_id)
+    assert record["summary"] is not None
+    assert "POL-SUMMARY" in record["summary"]["summary_text"]
+    assert "Garage theft" in record["summary"]["summary_text"]
+
+
+def test_submission_creates_notifications_on_both_mock_channels():
+    login_as_claimant(CLAIMANT)
+    response = submit(
+        policy_id="POL-NOTIFY",
+        incident_date="2026-08-02",
+        description="Minor claim.",
+        files=[("a.pdf", b"x")],
+    )
+    claim_id = response.headers["location"].rsplit("/", 1)[-1]
+
+    events = storage.list_notifications_for(CLAIMANT["email"])
+    channels = {e["channel"] for e in events if e["claim_id"] == claim_id}
+    assert channels == {"in_app", "email"}
+
+
+def test_incomplete_submission_notification_names_the_missing_field():
+    login_as_claimant(CLAIMANT)
+    submit(
+        policy_id="POL-MISSING",
+        description="No incident date given.",
+        files=[("a.pdf", b"x")],
+    )
+    events = storage.list_notifications_for(CLAIMANT["email"])
+    assert any("incident_date" in e["message"] for e in events)
+
+
+def test_notifications_page_lists_and_marks_them_read():
+    login_as_claimant(CLAIMANT)
+    response = submit(
+        policy_id="POL-READ", incident_date="2026-08-03", description="x", files=[("a.pdf", b"x")]
+    )
+    claim_id = response.headers["location"].rsplit("/", 1)[-1]
+
+    assert storage.unread_notification_count_for(CLAIMANT["email"]) > 0
+    page = client.get("/notifications")
+    assert page.status_code == 200
+    assert claim_id in page.text
+    assert "routed to an adjuster" in page.text
+    assert storage.unread_notification_count_for(CLAIMANT["email"]) == 0
+
+
+def test_adjuster_decision_notifies_the_claimant():
+    login_as_claimant(CLAIMANT)
+    response = submit(
+        policy_id="POL-DECIDE-NOTIFY",
+        incident_date="2026-08-04",
+        description="Needs a decision.",
+        files=[("a.pdf", b"x")],
+    )
+    claim_id = response.headers["location"].rsplit("/", 1)[-1]
+
+    password = storage.create_adjuster("notify.decider")
+    login_as_adjuster("notify.decider", password)
+    client.post(f"/adjuster/claims/{claim_id}/decision", data={"decision": "APPROVED"})
+
+    events = storage.list_notifications_for(CLAIMANT["email"])
+    assert any("Approved" in e["message"] and e["claim_id"] == claim_id for e in events)
+
+
+def test_adjuster_needs_attention_panel_excludes_decided_claims():
+    login_as_claimant(CLAIMANT)
+    response = submit(
+        policy_id="POL-ATTN",
+        incident_date="2026-08-05",
+        description="Needs review.",
+        files=[("a.pdf", b"x")],
+    )
+    claim_id = response.headers["location"].rsplit("/", 1)[-1]
+
+    password = storage.create_adjuster("attn.adjuster")
+    login_as_adjuster("attn.adjuster", password)
+
+    before = client.get("/adjuster")
+    assert claim_id in before.text
+    assert "Needs attention" in before.text
+
+    client.post(f"/adjuster/claims/{claim_id}/decision", data={"decision": "DECLINED"})
+
+    needing_attention = storage.claims_needing_adjuster_attention()
+    assert claim_id not in [r["claim"]["claim_id"] for r in needing_attention]
+
+
+# --- Strict page separation: the two roles never share a route, even for
+# the exact same claim. ----------------------------------------------------
+
+def test_adjuster_session_alone_cannot_open_the_claimant_claim_page():
+    login_as_claimant(CLAIMANT)
+    response = submit(
+        policy_id="POL-SEP-1", incident_date="2026-09-01", description="x", files=[("a.pdf", b"x")]
+    )
+    claim_id = response.headers["location"].rsplit("/", 1)[-1]
+
+    # Drop the claimant override entirely -- only an adjuster session remains.
+    app_module.app.dependency_overrides.pop(get_current_user, None)
+    password = storage.create_adjuster("sep.adjuster")
+    login_as_adjuster("sep.adjuster", password)
+
+    blocked = client.get(f"/claims/{claim_id}", follow_redirects=False)
+    assert blocked.status_code == 303
+    assert blocked.headers["location"] == "/auth/login"
+
+
+def test_claimant_session_alone_cannot_open_the_adjuster_claim_page():
+    login_as_claimant(CLAIMANT)
+    response = submit(
+        policy_id="POL-SEP-2", incident_date="2026-09-02", description="x", files=[("a.pdf", b"x")]
+    )
+    claim_id = response.headers["location"].rsplit("/", 1)[-1]
+
+    blocked = client.get(f"/adjuster/claims/{claim_id}", follow_redirects=False)
+    assert blocked.status_code == 303
+    assert blocked.headers["location"] == "/adjuster/login"
+
+
+def test_claimant_pages_never_link_to_an_adjuster_route():
+    # The word "adjuster" legitimately appears in claimant-facing copy (e.g.
+    # "routed to an adjuster for review") -- what actually must never appear
+    # is a navigable link into adjuster-only territory.
+    login_as_claimant(CLAIMANT)
+    for path in ("/", "/claims", "/notifications"):
+        response = client.get(path)
+        assert 'href="/adjuster' not in response.text
+
+
+def test_adjuster_notifications_page_shows_needs_attention_and_login_history():
+    password = storage.create_adjuster("notif.view.adjuster")
+    login_as_adjuster("notif.view.adjuster", password)
+
+    response = client.get("/adjuster/notifications")
+    assert response.status_code == 200
+    assert "notif.view.adjuster" in response.text
+    assert "ADJUSTER / LOGIN" in response.text
+
+
+# --- Input validation: malformed input is rejected with the form re-shown,
+# not silently stored or crashed on. ---------------------------------------
+
+def test_policy_id_too_long_is_rejected():
+    login_as_claimant(CLAIMANT)
+    response = submit(
+        policy_id="P" * 41,
+        incident_date="2026-09-01",
+        description="x",
+        files=[("a.pdf", b"x")],
+    )
+    assert response.status_code == 400
+    assert "too long" in response.text
+    assert len(storage.list_claims_for(CLAIMANT["email"])) == 0
+
+
+def test_future_incident_date_is_rejected():
+    login_as_claimant(CLAIMANT)
+    response = submit(
+        policy_id="POL-FUTURE",
+        incident_date="2099-01-01",
+        description="x",
+        files=[("a.pdf", b"x")],
+    )
+    assert response.status_code == 400
+    assert "future" in response.text
+    assert len(storage.list_claims_for(CLAIMANT["email"])) == 0
+
+
+def test_disallowed_file_type_is_rejected():
+    login_as_claimant(CLAIMANT)
+    response = submit(
+        policy_id="POL-BADFILE",
+        incident_date="2026-09-01",
+        description="x",
+        files=[("malware.exe", b"not really malware, just a bad extension")],
+    )
+    assert response.status_code == 400
+    assert "file type not allowed" in response.text
+    assert len(storage.list_claims_for(CLAIMANT["email"])) == 0
+
+
+def test_oversized_file_is_rejected():
+    login_as_claimant(CLAIMANT)
+    big_content = b"x" * (11 * 1024 * 1024)  # 11 MB, over the 10 MB cap
+    response = submit(
+        policy_id="POL-BIGFILE",
+        incident_date="2026-09-01",
+        description="x",
+        files=[("huge.pdf", big_content)],
+    )
+    assert response.status_code == 400
+    assert "too large" in response.text
+
+
+def test_valid_submission_preserves_form_values_are_not_shown_as_errors():
+    login_as_claimant(CLAIMANT)
+    response = submit(
+        policy_id="POL-VALID",
+        incident_date="2026-09-01",
+        description="A perfectly normal claim.",
+        files=[("a.pdf", b"x")],
+    )
+    assert response.status_code == 303  # no validation errors -- straight to the result

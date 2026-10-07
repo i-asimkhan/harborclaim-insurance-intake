@@ -252,8 +252,13 @@ def _hash_password(password: str, salt_hex: str) -> str:
     ).hex()
 
 
-def create_adjuster(username: str, name: str | None = None, linked_claimant_email: str | None = None) -> str:
-    """Provision an adjuster account with a random password.
+def create_adjuster(
+    username: str,
+    name: str | None = None,
+    linked_claimant_email: str | None = None,
+    password: str | None = None,
+) -> str:
+    """Provision an adjuster account. Generates a random password unless one is given.
 
     There is no sign-up route for this -- it's meant to be run by hand (see
     README), the same way an insurer would provision credentials for someone
@@ -268,7 +273,7 @@ def create_adjuster(username: str, name: str | None = None, linked_claimant_emai
     they filed themselves. Leave it unset for an adjuster with no claimant
     account at all -- there's nothing to conflict with.
     """
-    password = secrets.token_urlsafe(12)
+    password = password or secrets.token_urlsafe(12)
     salt = secrets.token_hex(16)
     password_hash = _hash_password(password, salt)
     with _connect() as conn:

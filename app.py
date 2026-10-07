@@ -67,6 +67,10 @@ def _notify(claim_id: str, claimant_email: str, message: str) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     storage.init_db()
+    demo_username = os.environ.get("DEMO_ADJUSTER_USERNAME")
+    demo_password = os.environ.get("DEMO_ADJUSTER_PASSWORD")
+    if demo_username and demo_password and storage.get_adjuster(demo_username) is None:
+        storage.create_adjuster(demo_username, "Demo Adjuster", password=demo_password)
     yield
 
 

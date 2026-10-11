@@ -31,19 +31,23 @@ These sit outside the Phase 0-5 structure below -- housekeeping/sequencing, not 
        rename (49 files, 0 content changes) from
        `student-projects/harborclaim-insurance-intake-b41f7e2c/` to
        `student-projects/asim-khan/`, matching the other students' naming convention. Originally
-       opened as its own PR (#10); consolidated into #11 below (same commit, `ad617f7`) and #10
-       closed, so there's one PR to review instead of two with overlapping diffs.
+       opened as its own PR (#10), then consolidated into #11, then #11 got accidentally
+       auto-closed by GitHub (see item 3's note) -- final home is **PR #12**.
 3. [x] **Start Phase 0.** Done 2026-10-11, consolidated with item 2 into a single PR --
-       [**PR #11**](https://github.com/adnanmasood/fintech-samples/pull/11), two clean commits
+       [**PR #12**](https://github.com/adnanmasood/fintech-samples/pull/12), two clean commits
        (`ad617f7` rename, `13a1715` Phase 0 addition), one descriptive PR body covering both.
-       Adds `claim-intake-streamlit/`: `logic.py`, `app.py`, `tests/test_logic.py` (11/11
-       passing, the 8 build-guide-page-8 cases plus boundary/modification tests), real
-       `screenshots/normal.png` + `failure.png` captured from the actual running app via a
-       headless-Chromium session, `README.md`, `AI_USAGE.md`, `requirements.txt`
-       (`streamlit==1.65.0`), `.gitignore`, `data/sample_claims.py`. Top-level README.md got a
-       pointer to the subfolder; the "why FastAPI over the brief's Streamlit ask" reasoning
-       itself is still a placeholder there -- see the open question below, that one needs your
-       voice.
+       (History: opened separately as #10 + #11, consolidated into #11 alone, then renaming
+       #11's source branch via GitHub's branch-rename API deleted the old ref, which GitHub
+       read as "head branch deleted" and auto-closed #11 -- not recoverable via reopen. #12 is
+       the same two commits, opened fresh from the renamed branch; #10 and #11 both carry
+       comments pointing to it.) Adds `claim-intake-streamlit/`: `logic.py`, `app.py`,
+       `tests/test_logic.py` (11/11 passing, the 8 build-guide-page-8 cases plus
+       boundary/modification tests), real `screenshots/normal.png` + `failure.png` captured
+       from the actual running app via a headless-Chromium session, `README.md`,
+       `AI_USAGE.md`, `requirements.txt` (`streamlit==1.65.0`), `.gitignore`,
+       `data/sample_claims.py`. Top-level README.md got a pointer to the subfolder; the "why
+       FastAPI over the brief's Streamlit ask" reasoning itself is still a placeholder there --
+       see the open question below, that one needs your voice.
 4. [x] **Reset the stale `usf-fintech/` local clone.** Done 2026-10-11 -- confirmed the diff
        matched the known-stale state exactly (same 12 modified files, same untracked clutter),
        then `git checkout .` + `git clean -fd .`. Clean now.

@@ -16,6 +16,10 @@ Status key: `[ ]` not started · `[~]` in progress · `[x]` done
 Execution order for next session onward: **Phase 0 -> 1 -> 2 -> 3 -> 4 -> 5**. Phase 5 (AI) is
 last on purpose, not by default.
 
+- [x] **2026-10-11** -- README.md live-demo/Azure-deployment docs and this ROADMAP.md itself
+      committed and pushed to `main` (`3f6d3bc`). Pre-Phase-0 housekeeping, not a roadmap item
+      itself, but recorded here so a future session doesn't re-check it.
+
 ---
 
 ## Phase 0 -- Close the spec-compliance gap (start here next session)

@@ -20,6 +20,33 @@ last on purpose, not by default.
       committed and pushed to `main` (`3f6d3bc`). Pre-Phase-0 housekeeping, not a roadmap item
       itself, but recorded here so a future session doesn't re-check it.
 
+## Immediate priorities, in order (as of 2026-10-11)
+
+These sit outside the Phase 0-5 structure below -- housekeeping/sequencing, not roadmap phases
+-- but need to happen in this order before Phase 0's own PR goes out.
+
+1. [x] Commit and push the README.md fixes and ROADMAP.md to the live repo. Done 2026-10-11,
+       see the status line above (`3f6d3bc`, plus a follow-up `91f2e1a` for this file).
+2. [x] **Rename the teacher-repo submission folder to `asim-khan`.** Done 2026-10-11 --
+       [PR #10](https://github.com/adnanmasood/fintech-samples/pull/10), pure rename (49 files,
+       0 content changes) from `student-projects/harborclaim-insurance-intake-b41f7e2c/` to
+       `student-projects/asim-khan/`, matching the other students' naming convention. Open,
+       not yet merged.
+3. [x] **Start Phase 0.** Done 2026-10-11 --
+       [PR #11](https://github.com/adnanmasood/fintech-samples/pull/11), branched from PR #10's
+       branch so it stacks cleanly (diff narrows to just the addition once #10 merges). Adds
+       `claim-intake-streamlit/`: `logic.py`, `app.py`, `tests/test_logic.py` (11/11 passing,
+       the 8 build-guide-page-8 cases plus boundary/modification tests), real
+       `screenshots/normal.png` + `failure.png` captured from the actual running app via a
+       headless-Chromium session, `README.md`, `AI_USAGE.md`, `requirements.txt`
+       (`streamlit==1.65.0`), `.gitignore`, `data/sample_claims.py`. Top-level README.md got a
+       pointer to the subfolder; the "why FastAPI over the brief's Streamlit ask" reasoning
+       itself is still a placeholder there -- see the open question below, that one needs your
+       voice.
+4. [x] **Reset the stale `usf-fintech/` local clone.** Done 2026-10-11 -- confirmed the diff
+       matched the known-stale state exactly (same 12 modified files, same untracked clutter),
+       then `git checkout .` + `git clean -fd .`. Clean now.
+
 ---
 
 ## Phase 0 -- Close the spec-compliance gap (start here next session)
@@ -231,3 +258,9 @@ living only in `MOCKS.md`'s "what a real version would need" section.
 3. Phase 2's exact claim-type list -- auto/property/health/theft/liability/other is a starting
    guess, not final.
 4. Phase 3's email provider choice -- affects what account/API key you'd need to set up.
+5. **Verify how the Azure demo actually auto-deploys.** No `.github/workflows/*.yml` exists in
+   this repo, so it's presumably Azure App Service's own Deployment Center / Kudu continuous
+   deployment (a webhook Azure holds on the GitHub repo, pulling + building on every push to
+   `main`) rather than a GitHub Actions pipeline. Not yet confirmed in the Azure portal --
+   check Deployment Center next time you're in there, since it could instead be a one-time
+   manual "Local Git" push or a GitHub Actions workflow whose file is gitignored.

@@ -27,16 +27,17 @@ These sit outside the Phase 0-5 structure below -- housekeeping/sequencing, not 
 
 1. [x] Commit and push the README.md fixes and ROADMAP.md to the live repo. Done 2026-10-11,
        see the status line above (`3f6d3bc`, plus a follow-up `91f2e1a` for this file).
-2. [x] **Rename the teacher-repo submission folder to `asim-khan`.** Done 2026-10-11 --
-       [PR #10](https://github.com/adnanmasood/fintech-samples/pull/10), pure rename (49 files,
-       0 content changes) from `student-projects/harborclaim-insurance-intake-b41f7e2c/` to
-       `student-projects/asim-khan/`, matching the other students' naming convention. Open,
-       not yet merged.
-3. [x] **Start Phase 0.** Done 2026-10-11 --
-       [PR #11](https://github.com/adnanmasood/fintech-samples/pull/11), branched from PR #10's
-       branch so it stacks cleanly (diff narrows to just the addition once #10 merges). Adds
-       `claim-intake-streamlit/`: `logic.py`, `app.py`, `tests/test_logic.py` (11/11 passing,
-       the 8 build-guide-page-8 cases plus boundary/modification tests), real
+2. [x] **Rename the teacher-repo submission folder to `asim-khan`.** Done 2026-10-11 as a pure
+       rename (49 files, 0 content changes) from
+       `student-projects/harborclaim-insurance-intake-b41f7e2c/` to
+       `student-projects/asim-khan/`, matching the other students' naming convention. Originally
+       opened as its own PR (#10); consolidated into #11 below (same commit, `ad617f7`) and #10
+       closed, so there's one PR to review instead of two with overlapping diffs.
+3. [x] **Start Phase 0.** Done 2026-10-11, consolidated with item 2 into a single PR --
+       [**PR #11**](https://github.com/adnanmasood/fintech-samples/pull/11), two clean commits
+       (`ad617f7` rename, `13a1715` Phase 0 addition), one descriptive PR body covering both.
+       Adds `claim-intake-streamlit/`: `logic.py`, `app.py`, `tests/test_logic.py` (11/11
+       passing, the 8 build-guide-page-8 cases plus boundary/modification tests), real
        `screenshots/normal.png` + `failure.png` captured from the actual running app via a
        headless-Chromium session, `README.md`, `AI_USAGE.md`, `requirements.txt`
        (`streamlit==1.65.0`), `.gitignore`, `data/sample_claims.py`. Top-level README.md got a

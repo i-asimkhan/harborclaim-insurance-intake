@@ -28,7 +28,7 @@
       <ul class="notification-list">
         {% for n in notifications %}
         <li class="notification{% if not n.read_at %} unread{% endif %}">
-          <span class="channel-tag">{{ "📧 MOCK EMAIL" if n.channel == "email" else "🔔 IN-APP" }}</span>
+          <span class="channel-tag">{{ "📧 Email (simulated)" if n.channel == "email" else "🔔 IN-APP" }}</span>
           <a href="/claims/{{ n.claim_id }}">{{ n.claim_id }}</a>
           <p>{{ n.message }}</p>
           <span class="hint">{{ n.created_at }}</span>

@@ -138,8 +138,8 @@ def test_full_claimant_flow_with_a_real_file_upload(page):
     page.wait_for_url(f"{BASE}/claims/*")
 
     assert page.get_by_text("READY_FOR_REVIEW").is_visible()
-    assert page.get_by_text("MOCK -- not AI-generated").is_visible()
-    assert page.get_by_text("MOCK -- plain regex, not AI").is_visible()
+    assert page.get_by_text("Automated draft -- not AI-generated").is_visible()
+    assert page.get_by_text("Automated extraction -- not AI").is_visible()
     # The extraction actually ran, not just the mock label -- a real value
     # pulled from the real sample PDF's text should be in the facts table.
     # "Collision" appears twice on the page (summary prose + facts table),

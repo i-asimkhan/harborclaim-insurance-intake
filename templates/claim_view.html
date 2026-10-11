@@ -63,7 +63,7 @@
     {% if record.summary %}
     <div class="card mock-card" style="margin-top:1.2rem;">
       <h2 style="font-size:1.1rem; margin-top:0;">
-        Adjuster summary <span class="mock-tag">MOCK -- not AI-generated</span>
+        Adjuster summary <span class="mock-tag">Automated draft -- not AI-generated</span>
       </h2>
       <p style="white-space:pre-line;">{{ record.summary.summary_text }}</p>
       <span class="hint">Generated {{ record.summary.generated_at }}</span>
@@ -73,7 +73,7 @@
     {% if record.facts %}
     <div class="card mock-card" style="margin-top:1.2rem;">
       <h2 style="font-size:1.1rem; margin-top:0;">
-        Extracted facts <span class="mock-tag">MOCK -- plain regex, not AI</span>
+        Extracted facts <span class="mock-tag">Automated extraction -- not AI</span>
       </h2>
       <table class="facts-table">
         <thead><tr><th>Field</th><th>Value</th><th>Source</th></tr></thead>

@@ -144,8 +144,11 @@ Goal: stop looking like a built-for-tests demo and start looking like a real ins
 
 Goal: let a claimant say what kind of claim this is, and let that shape what's asked for.
 
-- [ ] Add a `claim_type` field to the submission form: auto, property, health, theft, liability,
-      other (open to revising this list).
+- [x] **Claim-type list decided, 2026-10-11:** `auto`, `property`, `health`, `theft`,
+      `liability`, `other` -- confirmed, no longer a guess. Maps cleanly to the existing
+      `sample_data/` document types (police report -> auto, repair estimate -> property,
+      injury notes -> health, theft report -> theft).
+- [ ] Add a `claim_type` field to the submission form using the list above.
 - [ ] Per-type document hints in the UI (e.g. auto -> "attach a police report if you have one";
       property -> "attach a repair estimate"). Hints only at first -- not a hard requirement,
       since `main.py`'s completeness rule (any non-empty `documents` list) can't change.
@@ -164,13 +167,21 @@ Goal: let a claimant say what kind of claim this is, and let that shape what's a
 
 - [ ] Notifications page polish: group by claim, relative timestamps ("2 hours ago"), clearer
       read/unread state than the current left-accent-bar treatment.
+- [x] **Email provider decided, 2026-10-11: Azure Communication Services Email.** You asked for
+      "any free provider" -- picked ACS over SendGrid/SES because it's the same Azure portal and
+      subscription (Azure for Students) you're already using for the Web App, no new third-party
+      account, and pay-as-you-go pricing is fractions of a cent per email at demo volume
+      (effectively free for this project's scale). Setup, when this phase starts: provision an
+      Email Communication Service + a verified sender domain (or use Azure's free
+      `*.azurecomm.net` managed domain to skip DNS verification entirely for a demo), get a
+      connection string, wire the send call behind a feature flag / env var so the mock `in_app`
+      path still works without it configured.
 - [ ] **Real email delivery** for the `email` channel, behind a feature flag / env var so the mock
-      path still exists for anyone running this without an email provider configured. Candidates:
-      SendGrid, Azure Communication Services (fits the Azure direction already in progress),
-      Amazon SES. Needs: provider account, API key as another Azure app setting (same
-      Credential-Materialization caution as the Google secrets -- I can wire the code, but moving
-      a real provider key into Azure settings will hit the same sandbox block the Google secrets
-      did, so that step will need to be yours).
+      path still exists for anyone running this without the provider configured. Needs: the ACS
+      connection string as another Azure app setting (same Credential-Materialization caution as
+      the Google secrets -- I can wire the code, but moving the real connection string into Azure
+      settings will hit the same sandbox block the Google secrets did, so that step will need to
+      be yours).
 - [ ] In-app channel: still just a logged row for now, unless we decide this phase also needs
       live updates (websocket/poll) instead of only-on-page-load.
 
@@ -238,34 +249,35 @@ living only in `MOCKS.md`'s "what a real version would need" section.
       (needs a new key if we go that route). Azure OpenAI is the other natural fit given the
       deployment target. Worth deciding this alongside Phase 4's Azure work rather than in
       isolation.
-- [ ] **Open question -- needs your decision, not mine to pick silently:** right now the UI labels
-      these stages plainly: `"MOCK -- plain regex, not AI"` and `"MOCK -- not AI-generated"`. You
-      flagged that this reads badly for a live site. Two different things are true at once here:
-      - For the **class submission**, that labeling is arguably a strength, not a flaw -- it's the
-        same "honest boundary" MOCKS.md documents, and the assignment's own pressure test rewards
-        being explicit about what's real versus mocked rather than hiding it.
-      - For a **live, public-facing demo link**, blunt "MOCK" badges do look unfinished next to
-        real insurer sites.
-      Options to pick from (or propose your own): (a) leave the wording as-is until Phase 5 ships
-      real AI, since changing the label without changing the substance is the thing MOCKS.md
-      argues against; (b) soften the *visual* treatment (less alarming styling) while keeping the
-      same honest text; (c) reword to something still truthful but less "unfinished-sounding," e.g.
-      `"Automated draft -- rule-based, not yet AI"`. I'd lean toward (b) or (c) over quietly
-      dropping the disclosure, but this is your call to make, not mine to make for you.
+- [x] **Labeling decided and shipped, 2026-10-11 -- option (c).** You called it: the badges
+      shouldn't say the blunt word "MOCK" in the results UI. Reworded in place, same honest
+      meaning, just not alarming-sounding: `"MOCK -- not AI-generated"` ->
+      `"Automated draft -- not AI-generated"`, `"MOCK -- plain regex, not AI"` ->
+      `"Automated extraction -- not AI"`, and the notification channel tag `"MOCK EMAIL"` ->
+      `"Email (simulated)"`. Badge styling (muted amber, `.mock-tag`) left as-is -- it already
+      wasn't alarming, just the word choice was. `MOCKS.md`'s fuller documentation of what's
+      mocked and why is untouched -- this only changed the short in-UI badge text, not the
+      honest-disclosure substance. Updated `tests/test_app.py` and `tests/test_ui.py` to match;
+      38/38 + 5/5 passing.
 
 ---
 
-## Open questions for us to resolve together
+## Open questions -- all resolved 2026-10-11
 
-1. Phase 0's exact wording for "why we kept FastAPI" -- I drafted talking points above; needs
-   your voice and final reasoning before it goes in the README.
-2. Phase 5's labeling question (MOCK wording/styling) -- yours to decide.
-3. Phase 2's exact claim-type list -- auto/property/health/theft/liability/other is a starting
-   guess, not final.
-4. Phase 3's email provider choice -- affects what account/API key you'd need to set up.
-5. **Verify how the Azure demo actually auto-deploys.** No `.github/workflows/*.yml` exists in
-   this repo, so it's presumably Azure App Service's own Deployment Center / Kudu continuous
-   deployment (a webhook Azure holds on the GitHub repo, pulling + building on every push to
-   `main`) rather than a GitHub Actions pipeline. Not yet confirmed in the Azure portal --
-   check Deployment Center next time you're in there, since it could instead be a one-time
-   manual "Local Git" push or a GitHub Actions workflow whose file is gitignored.
+All five were live at once in the same session; none remain open as of this writing.
+
+1. ~~Phase 0's exact wording for "why we kept FastAPI"~~ **Resolved:** the decision itself was
+   never in question -- see the "Tech stack, and why" section's new "assignment brief's own
+   stack choice" note in the teacher-repo submission's README (added via PR #12).
+2. ~~Phase 5's labeling question (MOCK wording/styling)~~ **Resolved:** option (c), shipped --
+   see Phase 5 above.
+3. ~~Phase 2's exact claim-type list~~ **Resolved:** `auto`/`property`/`health`/`theft`/
+   `liability`/`other`, confirmed -- see Phase 2 above.
+4. ~~Phase 3's email provider choice~~ **Resolved:** Azure Communication Services Email --
+   see Phase 3 above.
+5. ~~Verify how the Azure demo actually auto-deploys~~ **Resolved** via
+   `az webapp deployment source show` (not the portal): `isGitHubAction: false`,
+   `isManualIntegration: true`, watching `i-asimkhan/harborclaim-insurance-intake` branch
+   `main`. Confirmed: it's Azure App Service's own Kudu/SCM webhook-based continuous
+   deployment, not GitHub Actions -- every push to `main` triggers a redeploy automatically,
+   nothing to configure on the GitHub side.

@@ -373,7 +373,7 @@ def test_mock_extraction_finds_facts_in_an_uploaded_text_document():
     assert "2026-07-08" in result.text
     assert "Fire" in result.text
     assert "Water damage" in result.text
-    assert "MOCK" in result.text  # never presented as if it were real AI
+    assert "not AI-generated" in result.text  # never presented as if it were real AI
 
 
 def test_mock_summary_is_generated_on_submission():

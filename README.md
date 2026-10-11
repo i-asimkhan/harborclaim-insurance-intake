@@ -3,6 +3,30 @@
 USF FIN 6934 (AI in Finance), System Design Studio — Assignment 7. HarborClaim is a
 fictional insurtech startup; this is my take-home build for its claim intake system.
 
+## Live demo
+
+**<https://harborclaim-demo-2630.azurewebsites.net>** — Azure App Service, Free F1 plan. The
+free plan sleeps when idle, so the first load after a while can take a few seconds.
+
+- **Claimant sign-in** uses Google OAuth in Testing mode, so only accounts added as a Test
+  user in the Google Cloud project can complete sign-in. If you need access, ask me to add
+  your Google account.
+- **Adjuster sign-in** at `/adjuster/login`: username `demo.adjuster`. The password is not in
+  this repo on purpose — see "A note on demo credentials" below. Ask me for it directly.
+
+### A note on demo credentials
+
+The assignment's own instructions say: "Review the staged files before committing. Never
+include real customer data, tokens, or passwords." A working password to a live, public site
+falls under that rule even though the data behind it is fictional — once it's committed to a
+public GitHub repo, it's in the history permanently and reachable by anyone, including
+scrapers. So the demo adjuster's username is public here; its password is shared only through
+a private channel (for example, the PR description to the instructor), never committed.
+
+If you're running your own copy, you set your own adjuster password from the start — see
+"Deploying to Azure App Service" below, or just run `storage.create_adjuster` as shown in
+Quick start, which generates one for you.
+
 ## Quick start (run the full web app)
 
 The graded minimum (`main.py`) needs nothing but Python — see "Run it" below. This is
@@ -226,7 +250,7 @@ ever fires on an exact match between `adjusters.linked_claimant_email` and
 storage.create_adjuster("a.irving", "Adjuster Name")
 
 # An adjuster who is also a claimant, so the conflict check applies:
-storage.create_adjuster("a.irving", "Adjuster Name", linked_claimant_email="airving@gmail.com")
+storage.create_adjuster("a.irving", "Adjuster Name", linked_claimant_email="a.irving@example.com")
 ```
 
 ### Login audit trail
@@ -285,6 +309,35 @@ than trying to recover the old password.
 Then open `http://127.0.0.1:8123/`. The port matters here — it has to match
 the redirect URI registered in Google Cloud Console above. `--reload` isn't
 required, just convenient during development.
+
+### Deploying to Azure App Service
+
+The live demo above runs on the Free F1 plan, Python 3.12 on Linux, deployed straight from
+this repo's `main` branch. To reproduce it:
+
+1. Create a Web App: Python 3.12, Linux, any plan, deployment source set to this repo's
+   `main` branch.
+2. **Startup command**, under Settings → Configuration (sometimes shown as "Environment
+   variables"):
+   ```
+   uvicorn app:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips=*
+   ```
+   The `--proxy-headers --forwarded-allow-ips=*` part matters more than it looks: Azure
+   terminates HTTPS at its front door and forwards requests to the app as plain HTTP. Without
+   this flag, `auth.py`'s `request.url_for("auth_callback")` builds an `http://` redirect URI
+   instead of `https://`, which won't match what's registered in Google Cloud Console and
+   breaks claimant sign-in with `redirect_uri_mismatch` — even though everything else is
+   configured correctly. Found and fixed live on this deployment.
+3. **App settings** to add (names only here — values are secrets, keep them out of the repo):
+   `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_SECRET_KEY` (same as local `.env`),
+   plus `SCM_DO_BUILD_DURING_DEPLOYMENT=true` so Azure installs `requirements.txt` on deploy.
+4. **Adjuster login on a host with no shell:** free tiers don't give you a console to run
+   `storage.create_adjuster` by hand. Set `DEMO_ADJUSTER_USERNAME` and
+   `DEMO_ADJUSTER_PASSWORD` as two more app settings — `app.py`'s startup step creates that
+   adjuster automatically if it doesn't already exist. See `.env.example` for both variables.
+5. Add the live callback URL to the same Google OAuth client's Authorized redirect URIs:
+   `https://<your-app-name>.azurewebsites.net/auth/google/callback` — alongside the local one,
+   not replacing it.
 
 ### Test the web UI
 
@@ -383,8 +436,10 @@ regulatory one (who is legally allowed to hold the role) — it assumes
 whoever runs that command already checked. A real system would integrate
 with a state licensing lookup before provisioning; that's out of scope here.
 
-Try the pipeline yourself with `sample_data/` — four fictional claim
-documents written so the mock extractor finds something real in them.
+Try the pipeline yourself with `sample_data/` — six fictional claim documents written so
+the mock extractor finds something real in them, plus `claims.json` and
+`seed_demo_data.py` to populate a running instance with five full scenarios in one command.
+See `sample_data/README.md`.
 
 ### Input validation and error handling
 

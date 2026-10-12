@@ -15,17 +15,16 @@ in this project is made up for the class. Nothing here is a real claims system.
 |---|---|---|---|
 | Fact extraction | `extraction.py` | Reads real text (the claim description, plus the real text layer of uploaded `.txt`/`.pdf` files via `pypdf`), then finds dollar amounts, dates, and a fixed list of incident keywords with plain regular expressions. | No model call. No NLP library. No inference beyond a literal regex match. Can't read images, zips, or any format besides `.txt`/`.pdf`. |
 | Summary generation | `summary.py` | Assembles a paragraph from fields already on the claim plus whatever extraction found, using a fixed string template. | No model call. Generates nothing that isn't a direct restatement of data already stored and visible on the same page -- it cannot "hallucinate" a fact, because it has no way to introduce one that isn't already in the database. |
-| Notifications | `storage.add_notification` / `app._notify` | Writes a row to the `notifications` table on two "channels" (`in_app`, `email`) every time a claim's status changes or an adjuster decides on it. | No SMTP call, no email provider, no push service. The `email` channel is a label on a database row, not a sent message -- see the "📧 MOCK EMAIL" tag on the notifications page. |
+| Notifications | `storage.add_notification` / `app._notify` | Writes a row to the `notifications` table on two "channels" (`in_app`, `email`) every time a claim's status changes or an adjuster decides on it. | No SMTP call, no email provider, no push service. The `email` channel is a label on a database row, not a sent message -- see the "Email (simulated)" tag on the notifications page. |
 
 ## Why mocks instead of nothing
 
 Early in this project these three stages simply didn't exist -- the pipeline stopped at
-the completeness checker. Comparing against classmates' submissions to the same
-assignment showed a better pattern: build the stage as an honest, clearly-labeled mock
-so the *pipeline* is real even though the *intelligence* isn't. A classmate's loan-review
-submission uses the identical approach for the same two slots (regex-based "mock document
-AI," a hand-written risk formula instead of a model, and a mock notification outbox) --
-this project's version follows that same shape, adapted to SQLite instead of a JSON file.
+the completeness checker. The better pattern is to build each stage as an honest,
+clearly-labeled mock so the *pipeline* is real even though the *intelligence* isn't --
+regex-based extraction standing in for a model call, a fixed-template summary instead of
+a generated one, a logged notification row instead of a sent message. This project
+follows that shape throughout, adapted to SQLite for storage instead of a flat file.
 
 ## Why mocks instead of a real LLM call
 

@@ -215,10 +215,10 @@ def test_claimant_route_is_unreachable_with_only_an_adjuster_session(page):
 
 
 def test_mock_card_text_is_actually_readable_on_the_adjuster_dark_theme(page):
-    """Regression test for a real bug found this session: .mock-card has a
-    fixed cream background, and the adjuster theme redefines --ink to a
-    near-white meant for a navy background -- combined, the mock card's text
-    was nearly invisible. This measures actual rendered contrast instead of
+    """Regression test for a real bug: .mock-card has a fixed cream
+    background, and the adjuster theme redefines --ink to a near-white
+    meant for a navy background -- combined, the mock card's text was
+    nearly invisible. This measures actual rendered contrast instead of
     relying on a human looking at a screenshot.
     """
     claimant_ctx = page.context

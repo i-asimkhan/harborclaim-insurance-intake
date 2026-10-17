@@ -69,8 +69,14 @@ async def lifespan(app: FastAPI):
     storage.init_db()
     demo_username = os.environ.get("DEMO_ADJUSTER_USERNAME")
     demo_password = os.environ.get("DEMO_ADJUSTER_PASSWORD")
-    if demo_username and demo_password and storage.get_adjuster(demo_username) is None:
-        storage.create_adjuster(demo_username, "Demo Adjuster", password=demo_password)
+    if demo_username and demo_password:
+        if storage.get_adjuster(demo_username) is None:
+            storage.create_adjuster(demo_username, "Demo Adjuster", password=demo_password)
+        else:
+            # Re-sync on every restart rather than only creating once -- lets
+            # the demo password be rotated just by changing the App Service
+            # setting and restarting, no shell or manual DB edit needed.
+            storage.reset_adjuster_password(demo_username, demo_password)
     yield
 
 

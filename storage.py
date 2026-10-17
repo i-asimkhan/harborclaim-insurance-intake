@@ -286,6 +286,30 @@ def create_adjuster(
     return password
 
 
+def reset_adjuster_password(username: str, password: str | None = None) -> str | None:
+    """Rotate an existing adjuster's password to a new one (random unless given).
+
+    Returns the new plaintext password, or None if no adjuster with that
+    username exists. Unlike create_adjuster, this updates an existing row
+    (new salt, new hash) rather than inserting -- the account's identity,
+    decision history, and linked_claimant_email are untouched, only the
+    credential changes. Used to rotate a password that may have been shared
+    somewhere it shouldn't live long-term (e.g. a demo credential sent by
+    email) without having to delete and recreate the account.
+    """
+    password = password or secrets.token_urlsafe(12)
+    salt = secrets.token_hex(16)
+    password_hash = _hash_password(password, salt)
+    with _connect() as conn:
+        cursor = conn.execute(
+            "UPDATE adjusters SET password_hash = ?, salt = ? WHERE username = ?",
+            (password_hash, salt, username),
+        )
+        if cursor.rowcount == 0:
+            return None
+    return password
+
+
 def verify_adjuster(username: str, password: str) -> dict | None:
     """Check a login attempt. Returns the adjuster record on success, else None.
 

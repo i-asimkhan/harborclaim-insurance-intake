@@ -193,6 +193,27 @@ def test_created_adjuster_password_is_random_and_only_returned_once():
     assert len(password_a) >= 12
 
 
+def test_reset_adjuster_password_changes_which_password_works():
+    old_password = storage.create_adjuster("rotate.test", "Rotate Test")
+    new_password = storage.reset_adjuster_password("rotate.test")
+
+    assert new_password is not None
+    assert new_password != old_password
+    assert storage.verify_adjuster("rotate.test", old_password) is None
+    assert storage.verify_adjuster("rotate.test", new_password) is not None
+
+
+def test_reset_adjuster_password_accepts_an_explicit_password():
+    storage.create_adjuster("rotate.explicit")
+    result = storage.reset_adjuster_password("rotate.explicit", password="chosen-value-123")
+    assert result == "chosen-value-123"
+    assert storage.verify_adjuster("rotate.explicit", "chosen-value-123") is not None
+
+
+def test_reset_adjuster_password_on_unknown_username_returns_none():
+    assert storage.reset_adjuster_password("does-not-exist") is None
+
+
 def test_wrong_adjuster_password_is_rejected():
     storage.create_adjuster("wrongpw.test")
     response = client.post(

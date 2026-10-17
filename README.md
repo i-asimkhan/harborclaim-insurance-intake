@@ -316,7 +316,10 @@ The live demo above runs on the Free F1 plan, Python 3.12 on Linux, deployed str
 this repo's `main` branch. To reproduce it:
 
 1. Create a Web App: Python 3.12, Linux, any plan, deployment source set to this repo's
-   `main` branch.
+   `main` branch. With a public repo connected this way (manual integration, no webhook),
+   pushing does **not** redeploy on its own — after each push, run
+   `az webapp deployment source sync --name <app> --resource-group <rg>` or click **Sync**
+   in the portal's Deployment Center.
 2. **Startup command**, under Settings → Configuration (sometimes shown as "Environment
    variables"):
    ```

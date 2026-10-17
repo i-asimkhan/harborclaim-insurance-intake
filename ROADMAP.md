@@ -22,8 +22,10 @@ What's built, what's next, and why. Status key: `[ ]` not started · `[~]` in pr
   extraction/summary pipeline, and a notification log are all built and tested (38 tests in
   `tests/test_app.py`, 5 in `test_main.py`, a Playwright suite in `tests/test_ui.py`).
 - Deployed live at **[harborclaim-demo-2630.azurewebsites.net](https://harborclaim-demo-2630.azurewebsites.net)**
-  (Azure App Service, Free F1 plan), auto-deploying from this repo's `main` branch via
-  Azure's own Kudu/SCM continuous deployment.
+  (Azure App Service, Free F1 plan), deployed from this repo's `main` branch. Deployment is
+  a **manual sync**, not automatic on push (`isManualIntegration: true`, no webhook): after
+  pushing, run `az webapp deployment source sync --name harborclaim-demo-2630
+  --resource-group harborclaim-rg` or click **Sync** in the portal's Deployment Center.
 - Assignment 7's literal Streamlit minimum is built and submitted separately via
   [PR #12](https://github.com/adnanmasood/fintech-samples/pull/12) to the course's shared
   repo, standalone from this build (see `claim-intake-streamlit/` in that PR).

@@ -413,6 +413,41 @@ def test_mock_summary_is_generated_on_submission():
     assert "Garage theft" in record["summary"]["summary_text"]
 
 
+def test_summary_names_a_missing_incident_date_instead_of_leaving_a_blank():
+    login_as_claimant(CLAIMANT)
+    response = submit(
+        policy_id="POL-NODATE",
+        incident_date="",
+        description="Kitchen fire.",
+        files=[("notes.txt", b"Fire in kitchen.")],
+    )
+    claim_id = response.headers["location"].rsplit("/", 1)[-1]
+
+    text = storage.get_claim(claim_id)["summary"]["summary_text"]
+    assert "[incident date not provided]" in text
+    assert "incident reported ." not in text
+
+
+def test_summary_states_when_no_documents_were_provided():
+    from summary import generate_summary
+
+    text = generate_summary(
+        {"policy_id": "POL-1", "incident_date": "2026-08-01", "description": "x", "documents": []},
+        facts=[],
+    )
+    assert "Documents on file: none provided." in text
+
+
+def test_summary_states_a_blank_description_as_not_provided():
+    from summary import generate_summary
+
+    text = generate_summary(
+        {"policy_id": "POL-1", "incident_date": "2026-08-01", "description": "   ", "documents": ["a.pdf"]},
+        facts=[],
+    )
+    assert "Claimant's description: not provided." in text
+
+
 def test_submission_creates_notifications_on_both_mock_channels():
     login_as_claimant(CLAIMANT)
     response = submit(

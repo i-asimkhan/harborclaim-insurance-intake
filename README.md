@@ -348,7 +348,7 @@ this repo's `main` branch. To reproduce it:
 .venv/Scripts/python.exe -m pytest tests/test_app.py -v
 ```
 
-38 tests. No real Google login is needed to run them — claimant login is faked
+44 tests. No real Google login is needed to run them — claimant login is faked
 with FastAPI's `dependency_overrides` on `get_current_user`, the standard way
 to test routes behind auth. Adjuster login is tested for real, not faked —
 `storage.create_adjuster` generates a real account and the tests actually
@@ -402,6 +402,12 @@ Only claimant-related UI tests need `SESSION_SECRET_KEY` in `.env` (the same
 signed-cookie technique the documentation screenshots use) — not real Google
 OAuth credentials, so this suite runs even without ever completing the
 Google Cloud Console setup.
+
+### System design
+
+[`docs/design/DESIGN.md`](docs/design/DESIGN.md) has the high-level architecture (8
+components, with diagrams) and the answer to the design exercise's pressure test: what
+happens when an AI summary disagrees with the source evidence or omits a fact.
 
 ### Screenshots
 

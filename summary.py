@@ -15,15 +15,28 @@ five seconds against the claim detail and document list right above it.
 """
 
 
+def _or_not_provided(value, label: str) -> str:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return f"[{label} not provided]"
+
+
 def generate_summary(claim: dict, facts: list[dict]) -> str:
     amounts = sorted({f["value"] for f in facts if f["field"] == "mentioned_amount"})
     dates = sorted({f["value"] for f in facts if f["field"] == "mentioned_date"})
     incident_types = sorted({f["value"] for f in facts if f["field"] == "incident_type"})
     unread_docs = [f for f in facts if f["field"] == "document_not_processed"]
 
+    # A missing field is named as missing, never left as a silent blank --
+    # an omission in the summary must be visible, not just absent.
+    policy_id = _or_not_provided(claim.get("policy_id"), "policy ID")
+    incident_date = _or_not_provided(claim.get("incident_date"), "incident date")
+    description = claim.get("description")
     lines = [
-        f"Policy {claim['policy_id']} -- incident reported {claim['incident_date']}.",
-        f"Claimant's description: \"{claim['description']}\"",
+        f"Policy {policy_id} -- incident reported {incident_date}.",
+        f"Claimant's description: \"{description.strip()}\""
+        if isinstance(description, str) and description.strip()
+        else "Claimant's description: not provided.",
     ]
 
     if incident_types:
@@ -34,6 +47,8 @@ def generate_summary(claim: dict, facts: list[dict]) -> str:
         lines.append(f"Dates mentioned in text: {', '.join(dates)}.")
     if claim["documents"]:
         lines.append(f"Documents on file: {', '.join(claim['documents'])}.")
+    else:
+        lines.append("Documents on file: none provided.")
     if unread_docs:
         lines.append(
             f"Not text-processed by this mock extractor: "

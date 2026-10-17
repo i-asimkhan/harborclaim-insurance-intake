@@ -20,7 +20,7 @@ runs but stands in for the real thing (see `MOCKS.md`).
 | 1 | Claimant | Submits claim details and supporting documents | Built — Google sign-in, sees only their own claims |
 | 2 | Claim intake | Validates input, stores the claim and its files | Built — `app.py`, `validation.py`, `storage.py` |
 | 3 | AI extractor | Pulls structured facts (dates, amounts, incident type) from documents. Never authoritative. | Mocked — `extraction.py`, regex only |
-| 4 | Completeness check | Returns `READY_FOR_REVIEW` or `NEEDS_INFORMATION` with the missing fields named. Deterministic. | Built — `main.py`; also `claim-intake-streamlit/logic.py` |
+| 4 | Completeness check | Returns `READY_FOR_REVIEW` or `NEEDS_INFORMATION` with the missing fields named. Deterministic. | Built — `main.py`; the standalone Assignment 7 version is `claim-intake-streamlit/logic.py` in the course submission |
 | 5 | AI summary | Drafts a summary for the adjuster. A draft only. | Mocked — `summary.py`, fixed template |
 | 6 | Adjuster review | A human reads the summary *and* the source documents, then decides | Built — separate adjuster login, separation-of-duties check |
 | 7 | Claims store | Claims, documents, status history, decisions, login audit trail | Built — SQLite (`storage.py`) |

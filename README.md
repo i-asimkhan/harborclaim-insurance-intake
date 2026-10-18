@@ -8,11 +8,12 @@ fictional insurtech startup; this is my take-home build for its claim intake sys
 **<https://harborclaim-demo-2630.azurewebsites.net>** — Azure App Service, Free F1 plan. The
 free plan sleeps when idle, so the first load after a while can take a few seconds.
 
-- **Claimant sign-in** uses Google OAuth in Testing mode, so only accounts added as a Test
-  user in the Google Cloud project can complete sign-in. If you need access, ask me to add
-  your Google account.
-- **Adjuster sign-in** at `/adjuster/login`: username `demo.adjuster`. The password is not in
-  this repo on purpose — see "A note on demo credentials" below. Ask me for it directly.
+- **Claimant view:** <https://harborclaim-demo-2630.azurewebsites.net> — Google sign-in, in
+  OAuth Testing mode, so only accounts added as a Test user in the Google Cloud project can
+  complete sign-in. If you need access, ask me to add your Google account.
+- **Adjuster view:** <https://harborclaim-demo-2630.azurewebsites.net/adjuster/login> —
+  username `demo.adjuster`. The password is not in this repo on purpose — see "A note on demo
+  credentials" below. Ask me for it directly.
 
 ### A note on demo credentials
 
@@ -20,8 +21,10 @@ The assignment's own instructions say: "Review the staged files before committin
 include real customer data, tokens, or passwords." A working password to a live, public site
 falls under that rule even though the data behind it is fictional — once it's committed to a
 public GitHub repo, it's in the history permanently and reachable by anyone, including
-scrapers. So the demo adjuster's username is public here; its password is shared only through
-a private channel (for example, the PR description to the instructor), never committed.
+scrapers. So the demo adjuster's username is public here; its password is never committed,
+only shared privately and on request — and if it's ever sent somewhere it can't be taken
+back from (like an email), it gets rotated afterward. Rotating it is just changing one Azure
+setting; see step 4 of "Deploying to Azure App Service" below.
 
 If you're running your own copy, you set your own adjuster password from the start — see
 "Deploying to Azure App Service" below, or just run `storage.create_adjuster` as shown in
@@ -336,8 +339,13 @@ this repo's `main` branch. To reproduce it:
    plus `SCM_DO_BUILD_DURING_DEPLOYMENT=true` so Azure installs `requirements.txt` on deploy.
 4. **Adjuster login on a host with no shell:** free tiers don't give you a console to run
    `storage.create_adjuster` by hand. Set `DEMO_ADJUSTER_USERNAME` and
-   `DEMO_ADJUSTER_PASSWORD` as two more app settings — `app.py`'s startup step creates that
-   adjuster automatically if it doesn't already exist. See `.env.example` for both variables.
+   `DEMO_ADJUSTER_PASSWORD` as two more app settings. On every startup, `app.py` creates that
+   adjuster if it doesn't exist yet, and otherwise re-applies the current password to it. See
+   `.env.example` for both variables.
+   - **To rotate the password:** change `DEMO_ADJUSTER_PASSWORD` and save. Saving restarts
+     the app, and the new password replaces the old one.
+   - **Don't rotate by changing the username.** A new username creates a second adjuster
+     account, and the old one keeps working with its old password.
 5. Add the live callback URL to the same Google OAuth client's Authorized redirect URIs:
    `https://<your-app-name>.azurewebsites.net/auth/google/callback` — alongside the local one,
    not replacing it.

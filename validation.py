@@ -19,6 +19,29 @@ MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 MAX_FILES = 10
 ALLOWED_EXTENSIONS = {".pdf", ".txt", ".jpg", ".jpeg", ".png", ".zip", ".doc", ".docx"}
 
+# Hints only: main.py's completeness rule (any non-empty document list) decides
+# readiness, so a missing police report on an auto claim never blocks submission.
+CLAIM_TYPES = {
+    "auto": ("Auto", "Attach a police report if you have one, plus photos of the damage."),
+    "property": ("Property", "Attach a repair estimate and photos of the damage."),
+    "health": ("Health / injury", "Attach treatment notes or a medical bill."),
+    "theft": ("Theft", "Attach the police report number and any proof of ownership."),
+    "liability": ("Liability", "Attach anything showing what happened and who was involved."),
+    "other": ("Other", "Attach whatever documents support the claim."),
+}
+DEFAULT_CLAIM_TYPE = "other"
+
+
+def normalize_claim_type(claim_type: str) -> str:
+    """Blank means "other", so older clients and scripts that never send the field still work."""
+    return claim_type.strip().lower() or DEFAULT_CLAIM_TYPE
+
+
+def validate_claim_type(claim_type: str) -> list[str]:
+    if claim_type not in CLAIM_TYPES:
+        return [f"Claim type isn't recognized (choose one of: {', '.join(CLAIM_TYPES)})."]
+    return []
+
 
 def validate_claim_fields(policy_id: str, incident_date: str, description: str) -> list[str]:
     """Checks the three text fields for malformed (not just missing) input.

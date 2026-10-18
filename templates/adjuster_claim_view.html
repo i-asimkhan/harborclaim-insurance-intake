@@ -35,6 +35,7 @@
 
       <dl class="detail-grid">
         <dt>Claimant</dt><dd>{{ record.claim.claimant_email or "—" }}</dd>
+        <dt>Claim type</dt><dd>{{ CLAIM_TYPES[record.claim.claim_type][0] if record.claim.claim_type in CLAIM_TYPES else record.claim.claim_type }}</dd>
         <dt>Policy ID</dt><dd>{{ record.claim.policy_id or "—" }}</dd>
         <dt>Incident date</dt><dd>{{ record.claim.incident_date or "—" }}</dd>
         <dt>Description</dt><dd>{{ record.claim.description or "—" }}</dd>

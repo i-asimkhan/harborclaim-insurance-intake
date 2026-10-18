@@ -49,7 +49,13 @@ from auth import get_current_adjuster, get_current_user, router as auth_router
 from extraction import extract_facts
 from main import check_claim, READY_FOR_REVIEW, NEEDS_INFORMATION
 from summary import generate_summary
-from validation import validate_claim_fields, validate_files
+from validation import (
+    CLAIM_TYPES,
+    normalize_claim_type,
+    validate_claim_fields,
+    validate_claim_type,
+    validate_files,
+)
 
 DECISIONS = ["APPROVED", "DECLINED", "NEEDS_MORE_REVIEW"]
 
@@ -88,6 +94,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
+templates.env.globals["CLAIM_TYPES"] = CLAIM_TYPES
 
 
 @app.exception_handler(Exception)
@@ -142,6 +149,7 @@ async def submit_claim(
     policy_id: str = Form(""),
     incident_date: str = Form(""),
     description: str = Form(""),
+    claim_type: str = Form(""),
     files: list[UploadFile] = File([]),
     user: dict | None = Depends(get_current_user),
 ):
@@ -152,7 +160,9 @@ async def submit_claim(
     # filename == "" -- drop those before they count as a real document.
     uploads = [f for f in files if f.filename]
 
-    errors = validate_claim_fields(policy_id, incident_date, description)
+    claim_type = normalize_claim_type(claim_type)
+    errors = validate_claim_type(claim_type)
+    errors += validate_claim_fields(policy_id, incident_date, description)
     for upload in uploads:
         upload.file.seek(0, 2)  # seek to end to get size without reading content twice
         size = upload.file.tell()
@@ -167,7 +177,12 @@ async def submit_claim(
                 "adjuster": None,
                 "unread_count": storage.unread_notification_count_for(user["email"]),
                 "errors": errors,
-                "form": {"policy_id": policy_id, "incident_date": incident_date, "description": description},
+                "form": {
+                    "policy_id": policy_id,
+                    "incident_date": incident_date,
+                    "description": description,
+                    "claim_type": claim_type,
+                },
             },
             status_code=400,
         )
@@ -192,6 +207,7 @@ async def submit_claim(
         description=description,
         status=result["status"],
         missing=result["missing"],
+        claim_type=claim_type,
     )
 
     stored_documents = []
@@ -218,7 +234,7 @@ async def submit_claim(
         storage.add_facts(claim_id, facts)
     summary_text = generate_summary(
         {"policy_id": policy_id, "incident_date": incident_date, "description": description,
-         "documents": document_names},
+         "documents": document_names, "claim_type": claim_type},
         facts,
     )
     storage.add_summary(claim_id, summary_text)

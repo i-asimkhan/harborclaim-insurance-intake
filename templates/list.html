@@ -23,14 +23,18 @@
     <div class="card">
       {% if claims %}
       <table class="claims-table">
+        <colgroup>
+          <col style="width:21%"><col style="width:16%"><col style="width:18%"><col style="width:29%"><col style="width:16%">
+        </colgroup>
         <thead>
-          <tr><th>Claim</th><th>Policy</th><th>Status</th><th>Submitted</th></tr>
+          <tr><th>Claim</th><th>Type</th><th>Policy</th><th>Status</th><th>Submitted</th></tr>
         </thead>
         <tbody>
           {% for record in claims %}
           <tr>
             <td><a href="/claims/{{ record.claim.claim_id }}">{{ record.claim.claim_id }}</a></td>
-            <td>{{ record.claim.policy_id or "—" }}</td>
+            <td>{{ CLAIM_TYPES[record.claim.claim_type][0] if record.claim.claim_type in CLAIM_TYPES else record.claim.claim_type }}</td>
+            <td><span class="truncate" title="{{ record.claim.policy_id or '' }}">{{ record.claim.policy_id or "—" }}</span></td>
             <td>
               {% if record.status == "READY_FOR_REVIEW" %}
                 <span class="badge ready" style="font-size:0.78rem; padding:0.3rem 0.6rem;">READY_FOR_REVIEW</span>
@@ -38,7 +42,7 @@
                 <span class="badge needs" style="font-size:0.78rem; padding:0.3rem 0.6rem;">NEEDS_INFORMATION</span>
               {% endif %}
             </td>
-            <td>{{ record.history[0].at }}</td>
+            <td title="{{ record.history[0].at }}">{{ record.history[0].at[:10] }}</td>
           </tr>
           {% endfor %}
         </tbody>

@@ -19,7 +19,8 @@ What's built, what's next, and why. Status key: `[ ]` not started · `[~]` in pr
 
 - Core completeness checker, FastAPI web app, two-role auth (claimant Google sign-in,
   adjuster provisioned credentials), persistent SQLite storage, document upload, a mocked
-  extraction/summary pipeline, and a notification log are all built and tested (44 tests in
+  extraction/summary pipeline, a notification log, and claim type at intake are all built and
+  tested (50 tests in
   `tests/test_app.py`, 5 in `test_main.py`, a Playwright suite in `tests/test_ui.py`).
 - Deployed live at **[harborclaim-demo-2630.azurewebsites.net](https://harborclaim-demo-2630.azurewebsites.net)**
   (Azure App Service, Free F1 plan), deployed from this repo's `main` branch. Deployment is
@@ -29,10 +30,9 @@ What's built, what's next, and why. Status key: `[ ]` not started · `[~]` in pr
 - Assignment 7's literal Streamlit minimum is built and submitted separately via
   [PR #12](https://github.com/adnanmasood/fintech-samples/pull/12) to the course's shared
   repo, standalone from this build (see `claim-intake-streamlit/` in that PR).
-- Claim-type list for Phase 2 and email provider for Phase 3 are decided (see those phases
-  below); not yet implemented.
+- Phase 2 (claim type) is built. The Phase 3 email provider is decided but not implemented.
 
-Execution order: **Phase 0 (done) -> 1 -> 2 -> 3 -> 4 -> 5**.
+Execution order: **Phase 0 (done) -> 1 (partly done) -> 2 (done) -> 3 -> 4 -> 5**.
 
 ---
 
@@ -73,10 +73,12 @@ product.
       both the claimant sign-in and the adjuster login -- they should stay deliberately
       different from each other (see README.md's "Claimant and adjuster pages are fully
       separate routes"), just each one good on its own terms.
-- [ ] **Fix the table overflow bug.** Long values (claimant email, description, filenames)
-      break out of `table.claims-table` / `table.facts-table` cells. Needs `table-layout:
-      fixed`, explicit column widths, `overflow-wrap`/`word-break` on text cells, and probably
-      truncation with a title-attribute tooltip for the longest fields.
+- [x] **Fix the table overflow bug.** The adjuster queue now uses a wider page
+      (`.page.wide`, 1080px), both claim tables use `table-layout: fixed` with per-table
+      `<colgroup>` widths, cells wrap with `overflow-wrap: anywhere`, long emails and policy IDs
+      truncate with the full value in a `title` tooltip, and dates show as `YYYY-MM-DD` with the
+      full timestamp on hover. Checked in a real browser: the queue table now ends inside its
+      card instead of running past it.
 - [ ] **Typography and spacing overhaul.** Current look (`static/style.css`) uses IBM Plex
       Sans/Mono on a fairly bare grid. Decide: keep IBM Plex but fix scale/weight/spacing, or
       swap to something more SaaS-standard (Inter, Geist). Either way: consistent heading
@@ -89,22 +91,27 @@ product.
 
 ---
 
-## Phase 2 -- Claim type at intake
+## Phase 2 -- Claim type at intake [x] done
 
 Goal: let a claimant say what kind of claim this is, and let that shape what's asked for.
 
 - [x] **Claim-type list:** `auto`, `property`, `health`, `theft`, `liability`, `other`. Maps
       cleanly to the existing `sample_data/` document types (police report -> auto, repair
       estimate -> property, injury notes -> health, theft report -> theft).
-- [ ] Add a `claim_type` field to the submission form using the list above.
-- [ ] Per-type document hints in the UI (e.g. auto -> "attach a police report if you have
-      one"; property -> "attach a repair estimate"). Hints only -- not a hard requirement,
-      since `main.py`'s completeness rule (any non-empty `documents` list) can't change.
-- [ ] Schema: add a `claim_type` column to the `claims` table (`storage.py`), migrate like the
-      existing `claimant_email` migration pattern.
-- [ ] **Constraint:** `main.py` / `test_main.py` stays untouched. Claim-type logic belongs in
-      `app.py` / `validation.py` / the web layer, as an addition on top of `check_claim()`,
-      never inside it.
+- [x] `claim_type` select on the submission form. A blank value becomes `other`, so scripts
+      and older clients that never send the field still work; an unknown value is a `400`
+      with the form re-shown, like the other validation errors.
+- [x] Per-type document hints under the select, server-rendered and swapped on change. Hints
+      only -- an auto claim with no police report is still `READY_FOR_REVIEW` (tested).
+- [x] Schema: `claim_type TEXT NOT NULL DEFAULT 'other'`, with an in-place migration for
+      existing databases (tested against a pre-claim-type database file). Shown on both claim
+      pages, the claimant's list, and the adjuster queue.
+- [x] The mock summary states the selected type on its own line, next to the incident types
+      the extractor found in the text, so a mismatch (claimant picked Health, documents
+      describe a collision) is visible side by side.
+- [x] **Constraint held:** `main.py` / `test_main.py` untouched. The list and hints live in
+      `validation.py`; `check_claim()` never sees the claim type.
+- [x] Seed scenarios in `sample_data/claims.json` carry a claim type.
 - [ ] Decide whether claim type later feeds the mock extractor's keyword list
       (`extraction.py`'s `INCIDENT_KEYWORDS`) -- e.g. skip "theft" matching on a health claim.
       Nice-to-have, not required for this phase.

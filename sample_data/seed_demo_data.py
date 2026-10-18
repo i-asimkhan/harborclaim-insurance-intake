@@ -91,6 +91,7 @@ def main() -> None:
                     "policy_id": s["policy_id"],
                     "incident_date": s["incident_date"],
                     "description": s["description"],
+                    "claim_type": s.get("claim_type", ""),
                 },
                 files=files or None,
                 follow_redirects=False,

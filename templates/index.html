@@ -33,6 +33,17 @@
 
     <div class="card">
       <form method="post" action="/claims" enctype="multipart/form-data">
+        {% set selected_type = (form.claim_type if form and form.claim_type in CLAIM_TYPES else "other") %}
+        <div class="field">
+          <label for="claim_type">Claim type</label>
+          <select id="claim_type" name="claim_type">
+            {% for key, (label, hint) in CLAIM_TYPES.items() %}
+            <option value="{{ key }}" data-hint="{{ hint }}"{% if key == selected_type %} selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <p class="field-hint" id="claim_type_hint">{{ CLAIM_TYPES[selected_type][1] }}</p>
+        </div>
+
         <div class="field">
           <label for="policy_id">Policy ID</label>
           <input type="text" id="policy_id" name="policy_id" placeholder="POL-48213" value="{{ form.policy_id if form else '' }}">
@@ -56,6 +67,13 @@
         <button type="submit" class="primary">Submit claim</button>
       </form>
     </div>
+    <script>
+      // The hint is server-rendered for the initial selection; this only keeps it in step after a change.
+      document.getElementById("claim_type").addEventListener("change", function () {
+        document.getElementById("claim_type_hint").textContent =
+          this.options[this.selectedIndex].dataset.hint;
+      });
+    </script>
 
     <p class="note">
       Fictional demo data only. The completeness check, file storage, claims

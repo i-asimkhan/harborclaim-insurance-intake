@@ -646,3 +646,103 @@ def test_valid_submission_preserves_form_values_are_not_shown_as_errors():
         files=[("a.pdf", b"x")],
     )
     assert response.status_code == 303  # no validation errors -- straight to the result
+
+
+# --- Claim type at intake (ROADMAP Phase 2). Hints only: the completeness
+# check in main.py never sees the claim type. ---------------------------------
+
+def test_claim_type_is_stored_and_shown_to_both_roles():
+    login_as_claimant(CLAIMANT)
+    response = submit(
+        policy_id="POL-AUTO",
+        incident_date="2026-09-01",
+        description="Rear-end collision.",
+        claim_type="auto",
+        files=[("a.pdf", b"x")],
+    )
+    claim_id = response.headers["location"].rsplit("/", 1)[-1]
+    assert storage.get_claim(claim_id)["claim"]["claim_type"] == "auto"
+
+    assert "Auto" in client.get(f"/claims/{claim_id}").text
+    assert "Auto" in client.get("/claims").text
+
+    password = storage.create_adjuster("type.adjuster")
+    login_as_adjuster("type.adjuster", password)
+    assert "Auto" in client.get(f"/adjuster/claims/{claim_id}").text
+    assert "Auto" in client.get("/adjuster").text
+
+
+def test_blank_claim_type_defaults_to_other():
+    login_as_claimant(CLAIMANT)
+    response = submit(
+        policy_id="POL-NOTYPE", incident_date="2026-09-01", description="x", files=[("a.pdf", b"x")]
+    )
+    claim_id = response.headers["location"].rsplit("/", 1)[-1]
+    assert storage.get_claim(claim_id)["claim"]["claim_type"] == "other"
+
+
+def test_unknown_claim_type_is_rejected_and_nothing_is_stored():
+    login_as_claimant(CLAIMANT)
+    response = submit(
+        policy_id="POL-BADTYPE",
+        incident_date="2026-09-01",
+        description="x",
+        claim_type="spaceship",
+        files=[("a.pdf", b"x")],
+    )
+    assert response.status_code == 400
+    assert "Claim type isn" in response.text
+    assert storage.list_claims_for(CLAIMANT["email"]) == []
+
+
+def test_claim_type_does_not_change_completeness():
+    # An auto claim with no police report is still READY_FOR_REVIEW: the
+    # per-type document guidance is a hint, not a rule main.py enforces.
+    login_as_claimant(CLAIMANT)
+    response = submit(
+        policy_id="POL-AUTO-PHOTO",
+        incident_date="2026-09-01",
+        description="Dented door.",
+        claim_type="auto",
+        files=[("photo.jpg", b"x")],
+    )
+    claim_id = response.headers["location"].rsplit("/", 1)[-1]
+    assert storage.get_claim(claim_id)["status"] == "READY_FOR_REVIEW"
+
+
+def test_summary_states_the_selected_claim_type():
+    login_as_claimant(CLAIMANT)
+    response = submit(
+        policy_id="POL-SUMTYPE",
+        incident_date="2026-09-01",
+        description="Pipe burst in the kitchen.",
+        claim_type="property",
+        files=[("a.pdf", b"x")],
+    )
+    claim_id = response.headers["location"].rsplit("/", 1)[-1]
+    summary = storage.get_claim(claim_id)["summary"]["summary_text"]
+    assert "Claim type selected by the claimant: property." in summary
+
+
+def test_existing_database_gains_claim_type_column(tmp_path, monkeypatch):
+    # A database created before claim types existed must upgrade in place,
+    # with existing claims treated as "other" rather than failing to load.
+    import sqlite3
+
+    old_db = tmp_path / "old.db"
+    conn = sqlite3.connect(old_db)
+    conn.execute(
+        """CREATE TABLE claims (claim_id TEXT PRIMARY KEY, claimant_email TEXT NOT NULL,
+           policy_id TEXT NOT NULL, incident_date TEXT NOT NULL, description TEXT NOT NULL,
+           status TEXT NOT NULL, missing TEXT NOT NULL, created_at TEXT NOT NULL)"""
+    )
+    conn.execute(
+        "INSERT INTO claims VALUES ('CLM-OLD', 'a@example.com', 'P1', '2026-01-01', 'd', "
+        "'READY_FOR_REVIEW', '[]', '2026-01-01T00:00:00+00:00')"
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr(storage, "DB_PATH", old_db)
+    storage.init_db()
+    assert storage.get_claim("CLM-OLD")["claim"]["claim_type"] == "other"

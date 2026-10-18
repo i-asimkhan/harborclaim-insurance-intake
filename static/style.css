@@ -176,18 +176,46 @@ ul.missing-list li {
 }
 .back-link:hover { text-decoration: underline; }
 
+/* Admin tables need more room than the 720px reading column. */
+.page.wide { max-width: 1080px; }
+
+/* Fixed layout + per-table <colgroup> widths keep every cell inside the card;
+   long values wrap or truncate instead of pushing the table past its border. */
 table.claims-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.9rem;
+  table-layout: fixed;
 }
 table.claims-table th, table.claims-table td {
   text-align: left;
   padding: 0.6rem 0.5rem;
   border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+  vertical-align: middle;
 }
 table.claims-table th { color: var(--ink-soft); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; }
-table.claims-table a { color: var(--accent); text-decoration: none; font-family: 'IBM Plex Mono', monospace; }
+table.claims-table a { color: var(--accent); text-decoration: none; font-family: 'IBM Plex Mono', monospace; white-space: nowrap; }
+table.claims-table .badge { white-space: nowrap; }
+
+.truncate {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+select {
+  width: 100%;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  background: #fff;
+  color: var(--ink);
+}
+.field-hint { margin: 0.4rem 0 0; color: var(--ink-soft); font-size: 0.85rem; }
 
 .empty-state { color: var(--ink-soft); padding: 2rem 0; text-align: center; }
 
@@ -244,6 +272,7 @@ table.facts-table th, table.facts-table td {
   text-align: left;
   padding: 0.45rem 0.5rem;
   border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
 }
 table.facts-table th { color: var(--ink-soft); font-weight: 600; font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.03em; }
 

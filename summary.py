@@ -39,6 +39,10 @@ def generate_summary(claim: dict, facts: list[dict]) -> str:
         else "Claimant's description: not provided.",
     ]
 
+    # Stated separately from the extracted incident types below, so a mismatch
+    # (claimant picked Health, the documents describe a collision) is visible side by side.
+    if claim.get("claim_type"):
+        lines.append(f"Claim type selected by the claimant: {claim['claim_type']}.")
     if incident_types:
         lines.append(f"Incident type(s) mentioned in text: {', '.join(incident_types)}.")
     if amounts:

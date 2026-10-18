@@ -63,7 +63,8 @@ CREATE TABLE IF NOT EXISTS claims (
     description TEXT NOT NULL,
     status TEXT NOT NULL,
     missing TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    claim_type TEXT NOT NULL DEFAULT 'other'
 );
 
 CREATE TABLE IF NOT EXISTS documents (
@@ -132,7 +133,9 @@ CREATE TABLE IF NOT EXISTS notifications (
 # as nullable if missing -- old rows just show no owner, which is fine for a
 # dev database that's gitignored and never held real data.
 _MIGRATIONS = [
-    "ALTER TABLE claims ADD COLUMN claimant_email TEXT",
+    ("claimant_email", "ALTER TABLE claims ADD COLUMN claimant_email TEXT"),
+    # Claims filed before claim types existed become "other" rather than blocking startup.
+    ("claim_type", "ALTER TABLE claims ADD COLUMN claim_type TEXT NOT NULL DEFAULT 'other'"),
 ]
 
 # The `adjusters` and `adjuster_decisions` tables changed shape (Google-email
@@ -168,10 +171,9 @@ def init_db() -> None:
 
         conn.executescript(SCHEMA)
         existing_columns = {row["name"] for row in conn.execute("PRAGMA table_info(claims)")}
-        for statement in _MIGRATIONS:
-            if "claimant_email" in statement and "claimant_email" in existing_columns:
-                continue
-            conn.execute(statement)
+        for column, statement in _MIGRATIONS:
+            if column not in existing_columns:
+                conn.execute(statement)
 
 
 def reset() -> None:
@@ -349,14 +351,17 @@ def create_claim(
     description: str,
     status: str,
     missing: list[str],
+    claim_type: str = "other",
 ) -> None:
     now = _now()
     with _connect() as conn:
         conn.execute(
             """INSERT INTO claims
-               (claim_id, claimant_email, policy_id, incident_date, description, status, missing, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (claim_id, claimant_email, policy_id, incident_date, description, status, json.dumps(missing), now),
+               (claim_id, claimant_email, policy_id, incident_date, description, status, missing,
+                created_at, claim_type)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (claim_id, claimant_email, policy_id, incident_date, description, status,
+             json.dumps(missing), now, claim_type),
         )
         conn.execute(
             "INSERT INTO status_history (claim_id, status, at) VALUES (?, ?, ?)",
@@ -423,6 +428,7 @@ def _row_to_record(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
             "incident_date": row["incident_date"],
             "description": row["description"],
             "documents": [d["filename"] for d in documents],
+            "claim_type": row["claim_type"],
         },
         "status": row["status"],
         "missing": json.loads(row["missing"]),

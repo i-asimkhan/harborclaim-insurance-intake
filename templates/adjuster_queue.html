@@ -6,7 +6,7 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body class="adjuster-theme">
-  <div class="page">
+  <div class="page wide">
     <header class="app-header">
       <div class="brand">Harbor<span>Claim</span> <span class="role-tag">ADJUSTER</span></div>
       <nav>
@@ -49,15 +49,20 @@
     <div class="card" style="margin-top:1.2rem;">
       {% if claims %}
       <table class="claims-table">
+        <colgroup>
+          <col style="width:14%"><col style="width:11%"><col style="width:22%"><col style="width:12%">
+          <col style="width:18%"><col style="width:12%"><col style="width:11%">
+        </colgroup>
         <thead>
-          <tr><th>Claim</th><th>Claimant</th><th>Policy</th><th>Status</th><th>Decision</th><th>Submitted</th></tr>
+          <tr><th>Claim</th><th>Type</th><th>Claimant</th><th>Policy</th><th>Status</th><th>Decision</th><th>Submitted</th></tr>
         </thead>
         <tbody>
           {% for record in claims %}
           <tr>
             <td><a href="/adjuster/claims/{{ record.claim.claim_id }}">{{ record.claim.claim_id }}</a></td>
-            <td>{{ record.claim.claimant_email or "—" }}</td>
-            <td>{{ record.claim.policy_id or "—" }}</td>
+            <td>{{ CLAIM_TYPES[record.claim.claim_type][0] if record.claim.claim_type in CLAIM_TYPES else record.claim.claim_type }}</td>
+            <td><span class="truncate" title="{{ record.claim.claimant_email or '' }}">{{ record.claim.claimant_email or "—" }}</span></td>
+            <td><span class="truncate" title="{{ record.claim.policy_id or '' }}">{{ record.claim.policy_id or "—" }}</span></td>
             <td>
               {% if record.status == READY_FOR_REVIEW %}
                 <span class="badge ready" style="font-size:0.78rem; padding:0.3rem 0.6rem;">READY_FOR_REVIEW</span>
@@ -67,12 +72,12 @@
             </td>
             <td>
               {% if record.decisions %}
-                {{ record.decisions[-1].decision }}
+                {{ record.decisions[-1].decision.replace("_", " ") }}
               {% else %}
                 <span class="hint">awaiting review</span>
               {% endif %}
             </td>
-            <td>{{ record.history[0].at }}</td>
+            <td title="{{ record.history[0].at }}">{{ record.history[0].at[:10] }}</td>
           </tr>
           {% endfor %}
         </tbody>

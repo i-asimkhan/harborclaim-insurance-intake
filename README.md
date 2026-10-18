@@ -356,7 +356,7 @@ this repo's `main` branch. To reproduce it:
 .venv/Scripts/python.exe -m pytest tests/test_app.py -v
 ```
 
-44 tests. No real Google login is needed to run them — claimant login is faked
+50 tests. No real Google login is needed to run them — claimant login is faked
 with FastAPI's `dependency_overrides` on `get_current_user`, the standard way
 to test routes behind auth. Adjuster login is tested for real, not faked —
 `storage.create_adjuster` generates a real account and the tests actually

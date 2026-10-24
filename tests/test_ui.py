@@ -81,11 +81,9 @@ def live_server():
 
 @pytest.fixture(autouse=True)
 def clean_db():
-    """Same database file the live server itself uses (data/harborclaim.db)
-    -- there's no separate test database (see STATUS.md for the known
-    tradeoff this shares with test_app.py). Reset before every test so UI
-    tests don't see claims left over from a previous test or a manual
-    click-through session.
+    """The live server these tests drive and this process share a throwaway data
+    folder (see tests/conftest.py), never the dev database in data/. Reset before
+    every test so UI tests don't see claims left over from the previous one.
     """
     storage.init_db()
     storage.reset()
@@ -134,6 +132,7 @@ def test_full_claimant_flow_with_a_real_file_upload(page):
     page.fill("#incident_date", "2026-09-10")
     page.fill("#description", "Rear-end collision, minor damage.")
     page.set_input_files("#files", [str(PROJ / "sample_data" / "police_report_sample.pdf")])
+    page.click("label[for='claim_type_auto']")
     page.click("button.primary")
     page.wait_for_url(f"{BASE}/claims/*")
 
@@ -142,23 +141,74 @@ def test_full_claimant_flow_with_a_real_file_upload(page):
     assert page.get_by_text("Automated extraction -- not AI").is_visible()
     # The extraction actually ran, not just the mock label -- a real value
     # pulled from the real sample PDF's text should be in the facts table.
-    # "Collision" appears twice on the page (summary prose + facts table),
-    # so scope to the table specifically rather than a bare text search.
-    assert page.locator("table.facts-table").get_by_text("Collision").first.is_visible()
+    # "Collision" also appears in the (collapsed) summary prose, so scope to
+    # the grouped facts section specifically rather than a bare text search.
+    assert page.locator(".fact-groups").get_by_text("Collision").first.is_visible()
 
 
-def test_validation_error_is_visible_and_input_values_survive(page):
-    page.context.add_cookies([_claimant_cookie_header()])
+def test_validation_error_is_visible_and_input_values_survive(browser, tmp_path):
+    # The form's browser-side checks (maxlength, date min/max, the upload
+    # script) stop most bad input before it's sent. With JavaScript off, a
+    # disallowed file type still gets through the browser -- <input accept>
+    # only filters the picker -- so this exercises the server-side check and
+    # its error display, the path every client ultimately falls back on.
+    bad_file = tmp_path / "notes.exe"
+    bad_file.write_bytes(b"x")
+    context = browser.new_context(java_script_enabled=False)
+    context.add_cookies([_claimant_cookie_header()])
+    page = context.new_page()
     page.goto(BASE)
-    page.fill("#policy_id", "P" * 50)
+    page.fill("#policy_id", "POL-UI-BAD")
     page.fill("#incident_date", "2026-09-10")
     page.fill("#description", "Should not be submitted.")
+    page.set_input_files("#files", [str(bad_file)])
     page.click("button.primary")
 
     assert page.get_by_text("Please fix the following").is_visible()
-    assert page.get_by_text("too long").is_visible()
+    assert page.get_by_text("file type not allowed").is_visible()
+    assert page.locator("#policy_id").input_value() == "POL-UI-BAD"
     assert page.locator("#incident_date").input_value() == "2026-09-10"
     assert page.locator("#description").input_value() == "Should not be submitted."
+    assert storage.list_claims_for("ui.claimant@example.com") == []
+    context.close()
+
+
+def test_browser_blocks_too_many_files_before_submitting(page, tmp_path):
+    page.context.add_cookies([_claimant_cookie_header()])
+    page.goto(BASE)
+    paths = []
+    for i in range(11):
+        f = tmp_path / f"page{i}.txt"
+        f.write_text("x")
+        paths.append(str(f))
+    page.set_input_files("#files", paths)
+
+    assert page.locator("#file_errors").is_visible()
+    assert page.locator("#file_errors").get_by_text("The limit is 10").is_visible()
+    # Even with everything else filled in, an over-limit selection keeps the button off.
+    page.click("label[for='claim_type_auto']")
+    page.fill("#policy_id", "POL-UI-MANY")
+    page.fill("#incident_date", "2026-09-17")
+    page.fill("#description", "Too many files.")
+    assert page.locator("#submit_button").is_disabled()
+    assert storage.list_claims_for("ui.claimant@example.com") == []
+
+
+def test_browser_limits_policy_length_and_blocks_future_dates(page):
+    page.context.add_cookies([_claimant_cookie_header()])
+    page.goto(BASE)
+    page.fill("#policy_id", "P" * 50)
+    assert len(page.locator("#policy_id").input_value()) == 40
+
+    # A future date counts as not filled in, so the button stays off.
+    page.click("label[for='claim_type_auto']")
+    page.fill("#description", "x")
+    page.set_input_files("#files", [str(PROJ / "sample_data" / "police_report_sample.pdf")])
+    page.fill("#incident_date", "2999-01-01")
+    assert page.eval_on_selector("#incident_date", "el => el.validity.rangeOverflow")
+    assert page.locator("#submit_button").is_disabled()
+    assert page.locator("#ready_status").get_by_text("incident date").is_visible()
+    assert storage.list_claims_for("ui.claimant@example.com") == []
 
 
 def test_real_adjuster_login_flow(page):
@@ -169,7 +219,7 @@ def test_real_adjuster_login_flow(page):
     page.click("button.primary")
     page.wait_for_url(f"{BASE}/adjuster")
 
-    assert page.get_by_text("Needs attention").is_visible()
+    assert page.locator(".stat-label", has_text="Awaiting a decision").is_visible()
     # "ui.adjuster" also appears inside the subtitle prose ("...because
     # ui.adjuster has a provisioned adjuster account...") -- scope to the
     # nav's identity hint specifically rather than a bare text search.
@@ -185,6 +235,7 @@ def test_claimant_route_is_unreachable_with_only_an_adjuster_session(page):
     page.fill("#incident_date", "2026-09-11")
     page.fill("#description", "x")
     page.set_input_files("#files", [str(PROJ / "sample_data" / "theft_report_sample.pdf")])
+    page.click("label[for='claim_type_auto']")
     page.click("button.primary")
     page.wait_for_url(f"{BASE}/claims/*")
     claim_url = page.url
@@ -228,6 +279,7 @@ def test_mock_card_text_is_actually_readable_on_the_adjuster_dark_theme(page):
     page.fill("#incident_date", "2026-09-12")
     page.fill("#description", "x")
     page.set_input_files("#files", [str(PROJ / "sample_data" / "repair_estimate_sample.pdf")])
+    page.click("label[for='claim_type_auto']")
     page.click("button.primary")
     page.wait_for_url(f"{BASE}/claims/*")
     claim_id = page.url.rsplit("/", 1)[-1]
@@ -265,6 +317,7 @@ def test_adjuster_decision_round_trip_is_visible_in_the_browser(page):
     page.fill("#incident_date", "2026-09-13")
     page.fill("#description", "x")
     page.set_input_files("#files", [str(PROJ / "sample_data" / "water_damage_notes_sample.pdf")])
+    page.click("label[for='claim_type_auto']")
     page.click("button.primary")
     page.wait_for_url(f"{BASE}/claims/*")
     claim_id = page.url.rsplit("/", 1)[-1]
@@ -279,9 +332,157 @@ def test_adjuster_decision_round_trip_is_visible_in_the_browser(page):
 
     adjuster_page.goto(f"{BASE}/adjuster/claims/{claim_id}")
     adjuster_page.click("button[value='NEEDS_MORE_REVIEW']")
+    adjuster_page.get_by_role("button", name="Confirm decision").click()
     adjuster_page.wait_for_load_state("networkidle")
     assert adjuster_page.get_by_text("Needs More Review", exact=False).is_visible()
     adjuster_page.close()
 
     page.goto(f"{BASE}/claims/{claim_id}")
     assert page.get_by_text("NEEDS_MORE_REVIEW").is_visible()
+
+
+def test_notification_bell_opens_a_preview_and_links_to_the_full_page(page):
+    page.context.add_cookies([_claimant_cookie_header()])
+    page.goto(BASE)
+    page.fill("#policy_id", "POL-UI-BELL")
+    page.fill("#incident_date", "2026-09-14")
+    page.fill("#description", "x")
+    page.set_input_files("#files", [str(PROJ / "sample_data" / "police_report_sample.pdf")])
+    page.click("label[for='claim_type_auto']")
+    page.click("button.primary")
+    page.wait_for_url(f"{BASE}/claims/*")
+
+    menu = page.locator("details.bell .bell-menu")
+    assert not menu.is_visible()
+    page.click("details.bell > summary")
+    assert menu.is_visible()
+    assert menu.get_by_text("routed to an adjuster").is_visible()
+
+    # Click outside closes it (static/app.js); the bell itself reopens it.
+    page.click("h1")
+    assert not menu.is_visible()
+    page.click("details.bell > summary")
+    menu.get_by_role("link", name="View all notifications").click()
+    page.wait_for_url(f"{BASE}/notifications")
+
+
+def test_submit_button_stays_off_until_every_part_of_the_claim_is_in(page):
+    page.context.add_cookies([_claimant_cookie_header()])
+    page.goto(BASE)
+    button = page.locator("#submit_button")
+    status = page.locator("#ready_status")
+    assert button.is_disabled()
+    assert status.get_by_text("Still needed: claim type, policy ID, incident date, description, documents").is_visible()
+
+    # Each piece on its own is not enough; the button turns on only with the last one.
+    page.click("label[for='claim_type_auto']")
+    assert button.is_disabled()
+    page.fill("#policy_id", "POL-UI-READY")
+    assert button.is_disabled()
+    page.fill("#description", "Cracked windshield.")
+    assert button.is_disabled()
+    page.fill("#incident_date", "2026-09-15")
+    assert button.is_disabled()
+    assert status.inner_text() == "Still needed: documents."
+    page.set_input_files("#files", [str(PROJ / "sample_data" / "police_report_sample.pdf")])
+    assert button.is_enabled()
+    assert status.inner_text() == "Everything's here."
+
+    # Taking anything back out turns it off again.
+    page.fill("#policy_id", "")
+    assert button.is_disabled()
+    page.fill("#policy_id", "POL-UI-READY")
+    page.set_input_files("#files", [])
+    assert button.is_disabled()
+
+
+def test_double_clicking_submit_files_one_claim(page):
+    page.context.add_cookies([_claimant_cookie_header()])
+    page.goto(BASE)
+    page.click("label[for='claim_type_auto']")
+    page.fill("#policy_id", "POL-UI-DOUBLE")
+    page.fill("#incident_date", "2026-09-16")
+    page.fill("#description", "Clicked twice.")
+    page.set_input_files("#files", [str(PROJ / "sample_data" / "police_report_sample.pdf")])
+    page.locator("#submit_button").dblclick()
+    page.wait_for_url(f"{BASE}/claims/*")
+    assert len(storage.list_claims_for("ui.claimant@example.com")) == 1
+
+
+
+def _file_ready_claim(page, policy_id):
+    page.context.add_cookies([_claimant_cookie_header()])
+    page.goto(BASE)
+    page.click("label[for='claim_type_auto']")
+    page.fill("#policy_id", policy_id)
+    page.fill("#incident_date", "2026-09-18")
+    page.fill("#description", "Decision dialog test.")
+    page.set_input_files("#files", [str(PROJ / "sample_data" / "police_report_sample.pdf")])
+    page.click("button.primary")
+    page.wait_for_url(f"{BASE}/claims/*")
+    return page.url.rsplit("/", 1)[-1]
+
+
+def _adjuster_page(page, username):
+    adjuster_page = page.context.browser.new_page()
+    password = storage.create_adjuster(username)
+    adjuster_page.goto(f"{BASE}/adjuster/login")
+    adjuster_page.fill("#username", username)
+    adjuster_page.fill("#password", password)
+    adjuster_page.click("button.primary")
+    adjuster_page.wait_for_url(f"{BASE}/adjuster")
+    return adjuster_page
+
+
+def test_decision_needs_a_confirm_and_cancel_records_nothing(page):
+    claim_id = _file_ready_claim(page, "POL-UI-CONFIRM")
+    adjuster_page = _adjuster_page(page, "confirm.ui.adjuster")
+    adjuster_page.goto(f"{BASE}/adjuster/claims/{claim_id}")
+
+    dialog = adjuster_page.locator("#confirm_dialog")
+    adjuster_page.click("button[value='DECLINED']")
+    assert dialog.is_visible()
+    assert dialog.get_by_text(claim_id).is_visible()
+    assert dialog.get_by_text("Declined").is_visible()
+    adjuster_page.get_by_role("button", name="Cancel").click()
+    assert not dialog.is_visible()
+    assert storage.get_claim(claim_id)["decisions"] == []
+
+    adjuster_page.click("button[value='APPROVED']")
+    adjuster_page.get_by_role("button", name="Confirm decision").dblclick()
+    adjuster_page.wait_for_selector("text=Decisions recorded")
+    decisions = storage.get_claim(claim_id)["decisions"]
+    assert [d["decision"] for d in decisions] == ["APPROVED"]  # one decision, even on a double-click
+    adjuster_page.close()
+
+
+def test_queue_tiles_filter_and_search_narrows_the_table(page):
+    first = _file_ready_claim(page, "POL-UI-FIND-ME")
+    _file_ready_claim(page, "POL-UI-OTHER")
+    adjuster_page = _adjuster_page(page, "queue.ui.adjuster")
+
+    adjuster_page.click("a.stat:has-text('Awaiting a decision')")
+    adjuster_page.wait_for_url(f"{BASE}/adjuster?view=awaiting")
+    assert adjuster_page.locator("table.claims-table tbody tr").count() == 2
+
+    adjuster_page.fill("#queue_q", "find-me")
+    adjuster_page.get_by_role("button", name="Search").click()
+    adjuster_page.wait_for_load_state("networkidle")
+    rows = adjuster_page.locator("table.claims-table tbody tr")
+    assert rows.count() == 1
+    assert adjuster_page.locator("table.claims-table").get_by_text(first).is_visible()
+    adjuster_page.close()
+
+
+def test_adjuster_login_form_will_not_submit_blank(page):
+    page.goto(f"{BASE}/adjuster/login")
+    page.click("button.primary")
+    assert page.url == f"{BASE}/adjuster/login"  # the browser stopped it; no round trip
+    assert page.eval_on_selector("#username", "el => el.validity.valueMissing")
+
+    # With the browser check out of the way (JavaScript off doesn't remove `required`, so
+    # post the form the way a script would), the server answers with a login page too.
+    page.evaluate("document.querySelector('form').noValidate = true")
+    page.click("button.primary")
+    page.wait_for_url(f"{BASE}/adjuster/login?error=empty")
+    assert page.get_by_text("Enter your username and password.").is_visible()

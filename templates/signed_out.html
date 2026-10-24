@@ -2,34 +2,48 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>HarborClaim -- Sign in</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="{{ static_url('style.css') }}">
 </head>
 <body>
+  {% import "_art.html" as art %}
   <div class="page">
     <header class="app-header">
-      <div class="brand">Harbor<span>Claim</span></div>
+      <a class="brand" href="/">{{ art.mark() }}Harbor<span class="brand-accent">Claim</span></a>
       <nav>
         {% if adjuster %}<a href="/adjuster">Adjuster queue</a>{% else %}<a href="/adjuster/login">Adjuster sign-in</a>{% endif %}
       </nav>
     </header>
 
-    <h1>Sign in to file or review a claim</h1>
-    <p class="subtitle">Insurance Claim Intake System &mdash; every claim is tied to the account that submitted it.</p>
-
-    <div class="card">
-      <p style="margin-top:0;">
-        Signing in with Google for the first time creates your account automatically
-        &mdash; there's no separate sign-up step.
+    <section class="hero">
+      <h1>Claims, minus the paperwork.</h1>
+      <p class="subtitle">
+        Four quick questions and your documents. You'll know the moment you submit whether
+        anything is missing, and a real person makes every decision.
       </p>
-      <a class="primary" href="/auth/login" style="display:inline-block; text-decoration:none; text-align:center;">
-        Sign in with Google
-      </a>
-    </div>
+      <div class="hero-cta">
+        <a class="primary btn lg" href="/auth/login">Sign in with Google</a>
+        <span class="hint">First sign-in creates your account &mdash; there's no separate sign-up step.</span>
+      </div>
+      {{ art.harbor() }}
+    </section>
+
+    <section class="band">
+      <h2>How it works</h2>
+      <p class="subtitle">From first notice to a decision, without the back-and-forth.</p>
+      <div class="steps">
+        <div class="step">{{ art.icon("chat") }}<strong>Tell us what happened</strong><span>Claim type, policy, date, and a few words.</span></div>
+        <div class="step">{{ art.icon("upload") }}<strong>Add your documents</strong><span>Police report, estimate, photos, receipts.</span></div>
+        <div class="step">{{ art.icon("check") }}<strong>Instant check</strong><span>See straight away if anything is missing.</span></div>
+        <div class="step">{{ art.icon("person") }}<strong>A person decides</strong><span>A licensed adjuster reviews it. Updates land under the bell.</span></div>
+      </div>
+    </section>
 
     <p class="note">
-      Adjuster access isn't something you can sign up for here &mdash; it's granted
-      separately, off an allowlist, regardless of which Google account you use.
+      Every claim is tied to the account that submitted it. Adjuster access isn't something
+      you can sign up for here &mdash; it's granted separately, off an allowlist, regardless
+      of which Google account you use.
     </p>
   </div>
 </body>

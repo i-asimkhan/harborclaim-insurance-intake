@@ -1,0 +1,15 @@
+{# Claimant top nav. Expects `user`, `unread_count`, `notification_preview`
+   (from app._claimant_nav) and an optional `active` page key. Never links to
+   any /adjuster route -- see test_claimant_pages_never_link_to_an_adjuster_route. #}
+{% import "_art.html" as art %}
+<header class="app-header">
+  <a class="brand" href="/">{{ art.mark() }}Harbor<span class="brand-accent">Claim</span></a>
+  <nav>
+    <a href="/"{% if active == "new" %} class="active"{% endif %}>New claim</a>
+    <a href="/claims"{% if active == "claims" %} class="active"{% endif %}>My claims</a>
+    {% include "_bell.html" %}
+    <span class="hint nav-user" title="{{ user.email }}">{{ user.email }}</span>
+    <a href="/auth/logout">Sign out</a>
+  </nav>
+</header>
+<script src="{{ static_url('app.js') }}" defer></script>

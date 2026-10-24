@@ -2,25 +2,20 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>My claims -- HarborClaim</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="{{ static_url('style.css') }}">
 </head>
 <body>
   <div class="page">
-    <header class="app-header">
-      <div class="brand">Harbor<span>Claim</span></div>
-      <nav>
-        <a href="/">New claim</a>
-        <a href="/notifications">Notifications{% if unread_count %} <span class="badge-count">{{ unread_count }}</span>{% endif %}</a>
-        <span class="hint">{{ user.email }}</span>
-        <a href="/auth/logout">Sign out</a>
-      </nav>
-    </header>
+    {% include "_claimant_header.html" %}
 
-    <h1>My claims</h1>
-    <p class="subtitle">Only claims filed by {{ user.email }} &mdash; backed by a persistent SQLite database.</p>
+    <div class="page-head">
+      <h1>My claims</h1>
+      <p class="subtitle">Only claims filed by {{ user.email }} &mdash; backed by a persistent SQLite database.</p>
+    </div>
 
-    <div class="card">
+    <div class="card{% if claims %} table-card{% endif %}">
       {% if claims %}
       <table class="claims-table">
         <colgroup>
@@ -34,15 +29,15 @@
           <tr>
             <td><a href="/claims/{{ record.claim.claim_id }}">{{ record.claim.claim_id }}</a></td>
             <td>{{ CLAIM_TYPES[record.claim.claim_type][0] if record.claim.claim_type in CLAIM_TYPES else record.claim.claim_type }}</td>
-            <td><span class="truncate" title="{{ record.claim.policy_id or '' }}">{{ record.claim.policy_id or "—" }}</span></td>
+            <td><span class="truncate mono" title="{{ record.claim.policy_id or '' }}">{{ record.claim.policy_id or "—" }}</span></td>
             <td>
               {% if record.status == "READY_FOR_REVIEW" %}
-                <span class="badge ready" style="font-size:0.78rem; padding:0.3rem 0.6rem;">READY_FOR_REVIEW</span>
+                <span class="badge ready">READY_FOR_REVIEW</span>
               {% else %}
-                <span class="badge needs" style="font-size:0.78rem; padding:0.3rem 0.6rem;">NEEDS_INFORMATION</span>
+                <span class="badge needs">NEEDS_INFORMATION</span>
               {% endif %}
             </td>
-            <td title="{{ record.history[0].at }}">{{ record.history[0].at[:10] }}</td>
+            <td class="nowrap" title="{{ record.history[0].at }}">{{ record.history[0].at[:10] }}</td>
           </tr>
           {% endfor %}
         </tbody>

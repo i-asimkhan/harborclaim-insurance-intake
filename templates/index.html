@@ -2,27 +2,24 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>HarborClaim -- New Claim</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Submit a claim -- HarborClaim</title>
+  <link rel="stylesheet" href="{{ static_url('style.css') }}">
 </head>
 <body>
+  {% import "_art.html" as art %}
   <div class="page">
-    <header class="app-header">
-      <div class="brand">Harbor<span>Claim</span></div>
-      <nav>
-        <a href="/claims">My claims</a>
-        <a href="/notifications">Notifications{% if unread_count %} <span class="badge-count">{{ unread_count }}</span>{% endif %}</a>
-        <span class="hint">{{ user.email }}</span>
-        <a href="/auth/logout">Sign out</a>
-      </nav>
-    </header>
+    {% include "_claimant_header.html" %}
 
-    <h1>Submit a claim</h1>
-    <p class="subtitle">Insurance Claim Intake System &mdash; this checks completeness only. No coverage or payout decision is made here.</p>
+    <div class="page-head">
+      <h1>Let's get your claim started</h1>
+      <p class="subtitle">Four quick questions and your documents. You'll see right away if anything is missing, and no coverage or payout decision is made at this step.</p>
+    </div>
 
+    <div class="stack">
     {% if errors %}
     <div class="card error-card">
-      <h2 style="font-size:1rem; margin-top:0; color:var(--warn);">Please fix the following</h2>
+      <h2>Please fix the following</h2>
       <ul class="missing-list">
         {% for e in errors %}
         <li>{{ e }}</li>
@@ -32,48 +29,98 @@
     {% endif %}
 
     <div class="card">
-      <form method="post" action="/claims" enctype="multipart/form-data">
-        {% set selected_type = (form.claim_type if form and form.claim_type in CLAIM_TYPES else "other") %}
-        <div class="field">
-          <label for="claim_type">Claim type</label>
-          <select id="claim_type" name="claim_type">
-            {% for key, (label, hint) in CLAIM_TYPES.items() %}
-            <option value="{{ key }}" data-hint="{{ hint }}"{% if key == selected_type %} selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-          </select>
-          <p class="field-hint" id="claim_type_hint">{{ CLAIM_TYPES[selected_type][1] }}</p>
-        </div>
+      {# Limits mirror validation.py (app.py's LIMITS global); the server re-checks everything. #}
+      <form method="post" action="/claims" enctype="multipart/form-data" id="claim_form"
+            data-max-files="{{ LIMITS.max_files }}" data-max-file-bytes="{{ LIMITS.max_file_bytes }}"
+            data-extensions="{{ LIMITS.extensions | join(',') }}">
+        {% set selected_type = form.claim_type if form and form.claim_type in CLAIM_TYPES else none %}
+        {% set first_name = (user.name or "").split(" ")[0] if user.name else "" %}
 
-        <div class="field">
-          <label for="policy_id">Policy ID</label>
-          <input type="text" id="policy_id" name="policy_id" placeholder="POL-48213" value="{{ form.policy_id if form else '' }}">
-        </div>
+        <section class="chat-step">
+          <div class="chat-row">
+            {{ art.avatar() }}
+            <div class="bubble"><h2 id="claim_type_label">Hi{% if first_name %} {{ first_name }}{% endif %}! What kind of claim is this?</h2></div>
+          </div>
+          <div class="answer">
+            <fieldset class="type-grid" aria-labelledby="claim_type_label">
+              {% for key, (label, hint) in CLAIM_TYPES.items() %}
+              <label class="type-tile" for="claim_type_{{ key }}">
+                <input class="sr-only" type="radio" id="claim_type_{{ key }}" name="claim_type" value="{{ key }}" data-hint="{{ hint }}"{% if key == selected_type %} checked{% endif %}>
+                {{ art.icon(key) }}
+                <span>{{ label }}</span>
+              </label>
+              {% endfor %}
+            </fieldset>
+            <p class="field-hint" id="claim_type_hint">{{ CLAIM_TYPES[selected_type][1] if selected_type else "Pick one and we'll tell you which documents help most. Not sure? Choose Other." }}</p>
+          </div>
+        </section>
 
-        <div class="field">
-          <label for="incident_date">Incident date</label>
-          <input type="date" id="incident_date" name="incident_date" value="{{ form.incident_date if form else '' }}">
-        </div>
+        <section class="chat-step">
+          <div class="chat-row">
+            {{ art.avatar() }}
+            <div class="bubble"><h2>Which policy is this under, and when did it happen?</h2></div>
+          </div>
+          <div class="answer field-row">
+            <div class="field">
+              <label for="policy_id">Policy ID</label>
+              <input type="text" id="policy_id" name="policy_id" placeholder="POL-48213" maxlength="{{ LIMITS.policy_id_max }}" autocomplete="off" value="{{ form.policy_id if form else '' }}">
+              <p class="field-hint">On your insurance card or declarations page.</p>
+            </div>
+            <div class="field">
+              <label for="incident_date">Incident date</label>
+              <input type="date" id="incident_date" name="incident_date" min="{{ LIMITS.earliest_date }}" max="{{ today_iso() }}" value="{{ form.incident_date if form else '' }}">
+            </div>
+          </div>
+        </section>
 
-        <div class="field">
-          <label for="description">Description<span class="hint">what happened</span></label>
-          <textarea id="description" name="description" placeholder="Rear-end collision in parking lot, minor bumper damage.">{{ form.description if form else '' }}</textarea>
-        </div>
+        <section class="chat-step">
+          <div class="chat-row">
+            {{ art.avatar() }}
+            <div class="bubble"><h2>Tell us what happened, in your own words.</h2></div>
+          </div>
+          <div class="answer field">
+            <label class="sr-only" for="description">What happened</label>
+            <textarea id="description" name="description" maxlength="{{ LIMITS.description_max }}" placeholder="Rear-end collision in a parking lot, minor bumper damage.">{{ form.description if form else '' }}</textarea>
+          </div>
+        </section>
 
-        <div class="field">
-          <label for="files">Supporting documents<span class="hint">.pdf/.txt/.jpg/.png/.zip/.doc(x), max 10MB each, up to 10 files</span></label>
-          <input type="file" id="files" name="files" multiple>
-        </div>
+        <section class="chat-step">
+          <div class="chat-row">
+            {{ art.avatar() }}
+            <div class="bubble"><h2>Got documents? Add them here.</h2><span class="hint">Photos, a police report, a repair estimate, receipts.</span></div>
+          </div>
+          <div class="answer field">
+            <label class="sr-only" for="files">Supporting documents</label>
+            <input type="file" id="files" name="files" multiple accept="{{ LIMITS.extensions | join(',') }}">
+            <p class="field-hint">PDF, TXT, JPG, PNG, ZIP or Word, up to {{ LIMITS.max_files }} files, {{ LIMITS.max_file_bytes // (1024 * 1024) }} MB each.</p>
+            <ul class="file-list" id="file_list"></ul>
+            <div class="client-errors" id="file_errors" role="alert" hidden></div>
+          </div>
+        </section>
 
-        <button type="submit" class="primary">Submit claim</button>
+        <div class="form-footer">
+          {# Everything the form needs before it can be sent. Hidden until
+             claim_form.js runs, so a no-script browser just sees an enabled button. #}
+          <div class="readiness" id="readiness" hidden>
+            <ul class="ready-list">
+              <li data-check="claim_type">Claim type</li>
+              <li data-check="policy_id">Policy ID</li>
+              <li data-check="incident_date">Incident date</li>
+              <li data-check="description">What happened</li>
+              <li data-check="files">Documents</li>
+            </ul>
+            <p class="ready-status" id="ready_status" aria-live="polite"></p>
+          </div>
+          <button type="submit" class="primary btn lg" id="submit_button">Submit my claim</button>
+          <ul class="assurances">
+            <li>You'll see right away whether anything is missing.</li>
+            <li>Only you and licensed adjusters can open your documents.</li>
+          </ul>
+        </div>
       </form>
     </div>
-    <script>
-      // The hint is server-rendered for the initial selection; this only keeps it in step after a change.
-      document.getElementById("claim_type").addEventListener("change", function () {
-        document.getElementById("claim_type_hint").textContent =
-          this.options[this.selectedIndex].dataset.hint;
-      });
-    </script>
+    </div>
+    <script src="{{ static_url('claim_form.js') }}" defer></script>
 
     <p class="note">
       Fictional demo data only. The completeness check, file storage, claims

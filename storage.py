@@ -29,12 +29,16 @@ connections against one file fine at this scale.
 import hashlib
 import hmac
 import json
+import os
 import secrets
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-DATA_DIR = Path(__file__).parent / "data"
+# HARBORCLAIM_DATA_DIR moves the database and uploads somewhere else. The tests and the
+# screenshot script set it to a throwaway folder so they never touch the data/ folder a
+# running dev server is using; unset (the normal case) it is data/ next to this file.
+DATA_DIR = Path(os.environ.get("HARBORCLAIM_DATA_DIR") or Path(__file__).parent / "data")
 DB_PATH = DATA_DIR / "harborclaim.db"
 UPLOADS_DIR = DATA_DIR / "uploads"
 
@@ -123,7 +127,8 @@ CREATE TABLE IF NOT EXISTS notifications (
     channel TEXT NOT NULL,
     message TEXT NOT NULL,
     created_at TEXT NOT NULL,
-    read_at TEXT
+    read_at TEXT,
+    delivery TEXT NOT NULL DEFAULT 'simulated'
 );
 """
 
@@ -136,6 +141,12 @@ _MIGRATIONS = [
     ("claimant_email", "ALTER TABLE claims ADD COLUMN claimant_email TEXT"),
     # Claims filed before claim types existed become "other" rather than blocking startup.
     ("claim_type", "ALTER TABLE claims ADD COLUMN claim_type TEXT NOT NULL DEFAULT 'other'"),
+]
+
+# Same idea for the notifications table: rows logged before real email delivery existed
+# were all simulated, which is exactly what the column's default says.
+_NOTIFICATION_MIGRATIONS = [
+    ("delivery", "ALTER TABLE notifications ADD COLUMN delivery TEXT NOT NULL DEFAULT 'simulated'"),
 ]
 
 # The `adjusters` and `adjuster_decisions` tables changed shape (Google-email
@@ -161,7 +172,7 @@ def _connect() -> sqlite3.Connection:
 
 def init_db() -> None:
     """Create the data directory, upload directory, and tables if missing."""
-    DATA_DIR.mkdir(exist_ok=True)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
     UPLOADS_DIR.mkdir(exist_ok=True)
     with _connect() as conn:
         for table, expected_columns in _STALE_SCHEMA_TABLES.items():
@@ -173,6 +184,10 @@ def init_db() -> None:
         existing_columns = {row["name"] for row in conn.execute("PRAGMA table_info(claims)")}
         for column, statement in _MIGRATIONS:
             if column not in existing_columns:
+                conn.execute(statement)
+        notification_columns = {row["name"] for row in conn.execute("PRAGMA table_info(notifications)")}
+        for column, statement in _NOTIFICATION_MIGRATIONS:
+            if column not in notification_columns:
                 conn.execute(statement)
 
 
@@ -529,20 +544,29 @@ def add_summary(claim_id: str, summary_text: str) -> None:
         )
 
 
-def add_notification(claim_id: str, claimant_email: str, channel: str, message: str) -> None:
+def add_notification(
+    claim_id: str, claimant_email: str, channel: str, message: str, delivery: str = "simulated"
+) -> int:
     """Record a notification. `channel` is "in_app" or "email".
 
-    Neither channel actually delivers anything -- there's no SMTP call, no
-    push service. This is the same mock-outbox pattern used elsewhere in the
-    class (an append-only log standing in for a real delivery system), kept
-    honest by never claiming to have sent anything.
+    This is an append-only log. `delivery` says what actually happened for the email
+    channel -- "simulated" (nothing sent, the default), "sent", or "failed" (see
+    email_delivery.py) -- so the page never claims to have sent something it didn't.
+    The in-app channel is just a row the app shows, so it stays "simulated".
     """
     with _connect() as conn:
-        conn.execute(
-            """INSERT INTO notifications (claim_id, claimant_email, channel, message, created_at)
-               VALUES (?, ?, ?, ?, ?)""",
-            (claim_id, claimant_email, channel, message, _now()),
+        cur = conn.execute(
+            """INSERT INTO notifications (claim_id, claimant_email, channel, message, created_at, delivery)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (claim_id, claimant_email, channel, message, _now(), delivery),
         )
+        return cur.lastrowid
+
+
+def set_notification_delivery(notification_id: int, delivery: str) -> None:
+    """Record the final outcome of an email that was queued ("queued" -> "sent" / "failed")."""
+    with _connect() as conn:
+        conn.execute("UPDATE notifications SET delivery = ? WHERE id = ?", (delivery, notification_id))
 
 
 def list_notifications_for(claimant_email: str) -> list[dict]:
@@ -572,8 +596,10 @@ def mark_notifications_read(claimant_email: str) -> None:
 
 
 def claims_needing_adjuster_attention() -> list[dict]:
-    """READY_FOR_REVIEW claims with no decision yet -- the adjuster-side
-    "in-app notifications" view. Deliberately not a stored, per-adjuster
+    """READY_FOR_REVIEW claims still waiting on a final decision -- the adjuster-side
+    "in-app notifications" view. That's a claim with no decision yet, or whose latest
+    decision is NEEDS_MORE_REVIEW (an adjuster asking for a closer look hasn't finished
+    the job: it stays here until an Approved or Declined is recorded). Deliberately not a stored, per-adjuster
     notification feed (that would need tracking what each adjuster has
     already seen, which this app has no concept of yet) -- it's a live,
     derived count computed fresh each time, which is simpler and can't go
@@ -583,7 +609,10 @@ def claims_needing_adjuster_attention() -> list[dict]:
         rows = conn.execute(
             """SELECT c.* FROM claims c
                WHERE c.status = 'READY_FOR_REVIEW'
-               AND NOT EXISTS (SELECT 1 FROM adjuster_decisions d WHERE d.claim_id = c.claim_id)
+               AND COALESCE(
+                     (SELECT d.decision FROM adjuster_decisions d
+                      WHERE d.claim_id = c.claim_id ORDER BY d.id DESC LIMIT 1),
+                     'NEEDS_MORE_REVIEW') = 'NEEDS_MORE_REVIEW'
                ORDER BY c.created_at ASC"""
         ).fetchall()
         return [_row_to_record(conn, row) for row in rows]

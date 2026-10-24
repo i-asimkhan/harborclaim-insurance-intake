@@ -151,7 +151,7 @@ browser instead of only the console demo. It's optional — the graded part is
 |---|---|
 | Backend | FastAPI + Uvicorn |
 | Templating | Jinja2 (server-rendered HTML, no JS framework) |
-| Styling | Plain CSS (`static/style.css`), IBM Plex fonts |
+| Styling | Plain CSS (`static/style.css`) and inline-SVG line art (`templates/_art.html`); Fraunces for claimant page titles, Inter for UI text, IBM Plex Mono for identifiers |
 | Testing | `pytest` + FastAPI's `TestClient` (`tests/test_app.py`) |
 | State | SQLite (`storage.py`, `data/harborclaim.db`) — persists across restarts |
 | Evidence storage | Uploaded files saved to `data/uploads/<claim_id>/`, standard library only |
@@ -346,7 +346,20 @@ this repo's `main` branch. To reproduce it:
      the app, and the new password replaces the old one.
    - **Don't rotate by changing the username.** A new username creates a second adjuster
      account, and the old one keeps working with its old password.
-5. Add the live callback URL to the same Google OAuth client's Authorized redirect URIs:
+5. **Real email (optional, off by default).** The email channel is simulated unless you opt
+   in. Names only: `EMAIL_PROVIDER` (`simulated`, the default, or `acs`),
+   `ACS_CONNECTION_STRING` and `EMAIL_SENDER_ADDRESS` (Azure Communication Services Email).
+   Each notification's outcome (`sent`, `failed` or `simulated`) is stored and shown on the
+   notifications page. `azure-communication-email` is pinned in `requirements.txt` and only
+   imported when `acs` is selected. Each email has a designed HTML version and a link to the
+   claim. `EMAIL_ENABLED=false` switches real email off without removing the other settings (handy
+   while Azure's sending limit recovers). Email is sent after the response goes out, so the page
+   never waits on Azure; the notifications page shows "Email sending" until it settles. Two more
+   optional settings: `APP_BASE_URL` (the site's public address, used for those
+   links; set it on the hosted site, locally it is worked out from the request) and
+   `ADJUSTER_NOTIFY_EMAIL` (an inbox that gets an email when a claim is ready for review).
+   See `email_delivery.py` and `ROADMAP.md` (Phase 3).
+6. Add the live callback URL to the same Google OAuth client's Authorized redirect URIs:
    `https://<your-app-name>.azurewebsites.net/auth/google/callback` — alongside the local one,
    not replacing it.
 
@@ -356,7 +369,7 @@ this repo's `main` branch. To reproduce it:
 .venv/Scripts/python.exe -m pytest tests/test_app.py -v
 ```
 
-50 tests. No real Google login is needed to run them — claimant login is faked
+54 tests. No real Google login is needed to run them — claimant login is faked
 with FastAPI's `dependency_overrides` on `get_current_user`, the standard way
 to test routes behind auth. Adjuster login is tested for real, not faked —
 `storage.create_adjuster` generates a real account and the tests actually
@@ -406,6 +419,9 @@ fixed cream background combined with the adjuster dark theme's near-white
 text color measured 1.13:1 contrast (confirmed by temporarily reverting the
 fix and watching this exact test catch it) before being fixed to 4.5:1+.
 
+Tests run against a throwaway data folder (`HARBORCLAIM_DATA_DIR`, set in
+`tests/conftest.py`), never your local `data/`, so running them is safe while a dev server is up.
+
 Only claimant-related UI tests need `SESSION_SECRET_KEY` in `.env` (the same
 signed-cookie technique the documentation screenshots use) — not real Google
 OAuth credentials, so this suite runs even without ever completing the
@@ -416,6 +432,8 @@ Google Cloud Console setup.
 [`docs/design/DESIGN.md`](docs/design/DESIGN.md) has the high-level architecture (8
 components, with diagrams) and the answer to the design exercise's pressure test: what
 happens when an AI summary disagrees with the source evidence or omits a fact.
+[`docs/design/RESEARCH.md`](docs/design/RESEARCH.md) has the Phase 1 research pass on real
+claims portals (claimant and adjuster sides) behind the current visual design.
 
 ### Screenshots
 
@@ -429,6 +447,7 @@ form login). Full set in `docs/screenshots/`.
 |---|---|
 | ![New claim form, filled in with two sample PDFs attached](docs/screenshots/02-new-claim-filled.png) New claim form, two sample PDFs attached | ![Claim result: READY_FOR_REVIEW, with the mock summary and extracted-facts table](docs/screenshots/03-claim-result-ready.png) Result page — mock summary + extracted facts, clearly tagged |
 | ![Adjuster queue with the Needs Attention panel](docs/screenshots/08-adjuster-queue.png) Adjuster queue — "Needs attention" panel | ![Notifications inbox showing both mock channels](docs/screenshots/06-notifications.png) Notifications inbox — both mock channels |
+| ![Adjuster claim review: claim basics on the left, decision panel in a right rail](docs/screenshots/09-adjuster-claim-view.png) Adjuster review — decision panel in a sticky right rail | ![Notification bell open in the top nav, showing unread previews](docs/screenshots/14-notification-bell-open.png) Top-nav notification bell with dropdown preview |
 
 ### What's real vs. mocked
 

@@ -13,7 +13,7 @@ The terms this file uses, in the sense the course uses them.
 
 | Term | Meaning here |
 |---|---|
-| **Model / LLM** | The large language model that reads text and writes text: one Azure OpenAI deployment. We call it; we don't build it. |
+| **Model / LLM** | The large language model that reads text and writes text: one free model on OpenRouter, pinned by its ID (section 3). We call it; we don't build it. |
 | **Model call** | One request to the model and its reply. A run makes at most 3. |
 | **Tool** | A small, read-only Python function the model may ask to run (e.g. `search_documents`). The model sees only its name, description and parameters, never its code (Class 2). |
 | **Tool call** | The model asking for one tool with arguments; our code decides whether to run it and returns the result. A run makes at most 3. |
@@ -108,7 +108,8 @@ GET  /help, POST /help/ask            claimant assistant (only when AI_CLAIMANT_
 | `agents.py` | The shared harness (section 4) and the three charters (section 5). | `analyst.py` loop, Class 2 |
 | `agent_tools.py` | The read-only tools and their JSON schemas, per charter. Imports no storage writer. | -- |
 | `agent_gate.py` | Gate rules G1-G8 and the computed coverage lists. Pure functions. | `main.py`'s style |
-| `scripts/eval_agents.py` | Runs the golden set against the real model (manual, costs money), records fixtures, prints scores. | `scripts/capture_screenshots.py` |
+| `scripts/model_probe.py` | Quick model test before choosing: a few calls per candidate model (section 11.4). Manual. | -- |
+| `scripts/eval_agents.py` | Runs the golden set against the real model (manual; uses the free quota), records fixtures, prints scores; `--model` compares candidates. | `scripts/capture_screenshots.py` |
 | `tests/test_agents.py` | Harness, tools, gate, routes, labels; fake client only. | email tests in `tests/test_app.py` |
 | `tests/fixtures/ai/` | Recorded real responses, replayed offline. | -- |
 | `sample_data/golden/` | Golden-set claims (new `.txt` documents) and their expected properties. | `sample_data/claims.json` |
@@ -120,6 +121,46 @@ the adjuster review template, one new claimant template, `tests/conftest.py`,
 
 Not touched: `main.py`, `test_main.py`, `auth.py`, `validation.py`, `email_delivery.py`, the
 decision route.
+
+### Model, provider and settings
+
+- **Provider: OpenRouter, one free model, pinned by ID** (owner's decision, 2026-10-24). Free,
+  already used in Class 2 (`analyst.py`), and called through the same `openai` SDK with
+  OpenRouter's endpoint. No Azure resource is needed and nothing is billed.
+- **Never `openrouter/free`.** That router picks a different model per request (seen in Class 2),
+  which would make the eval, the fixtures and the trace's "model" line meaningless. One model ID
+  is pinned and recorded in the trace and in `AI_USAGE.md`.
+- **Which model:** chosen by testing, not by name (section 11.4). The candidates are free models
+  whose OpenRouter listing supports both `tools` and structured output. A search of the public
+  model list on 2026-10-24 found 9 such models out of 20 free ones; the shortlist is
+  `google/gemma-4-31b-it:free`, `google/gemma-4-26b-a4b-it:free`,
+  `nvidia/nemotron-3-super-120b-a12b:free` and `nvidia/nemotron-3.5-super-vl:free` (known model
+  families, large context). Free listings change; re-check before the probe.
+- **What free means here, and how the design copes:**
+  - *Rate limits.* Free models allow a limited number of requests per minute and per day (check
+    the current numbers on OpenRouter). The per-agent daily limits in section 7 are set below the
+    quota, and a rate-limit reply is an ordinary `unavailable` run with the template fallback.
+  - *Availability.* A free model can be slow, busy, or withdrawn. Same fallback; the eval keeps a
+    second-choice model ready, switchable by one setting (`AI_MODEL`).
+  - *Privacy.* Some free providers log or train on prompts. All data here is fictional, so this
+    is acceptable, and README and `AI_USAGE.md` say so plainly.
+- **Document Intelligence: not needed.** Text PDFs and `.txt` are already read by `pypdf`; images
+  and scans stay "not read -- open the original", as today. **Phase 4 is not a prerequisite.**
+- **Later option:** Azure OpenAI fits behind the same `AI_PROVIDER` switch if a paid, in-tenant
+  model is ever wanted. Not part of this phase.
+
+| Setting (names only; values in `.env` locally, Azure app settings when hosted) | Meaning | Default |
+|---|---|---|
+| `AI_PROVIDER` | `openrouter` to enable; blank = off, no model is ever called | blank |
+| `AI_ENABLED` | Kill switch: `false` turns every agent off without clearing other settings | blank |
+| `OPENROUTER_API_KEY` | The owner's OpenRouter key (a secret) | -- |
+| `AI_MODEL` | The pinned model ID, e.g. one of the shortlist above | -- |
+| `AI_CLAIMANT_CHAT` | `true` to show the claimant assistant | blank (off) |
+| `AI_TIMEOUT_SECONDS` | Whole-run time limit | 30 |
+| `AI_DAILY_LIMIT_INTAKE`, `AI_DAILY_LIMIT_ADJUSTER`, `AI_DAILY_LIMIT_CLAIMANT` | Runs per UTC day, per agent | section 7 |
+
+`tests/conftest.py` pins `AI_PROVIDER`, `AI_ENABLED` and `AI_CLAIMANT_CHAT` to off, beside the
+email pins, so a `.env` with AI on can never make the test suite call a model.
 
 ---
 
@@ -188,9 +229,9 @@ Rules the harness enforces, whatever the model does:
    marked truncated in the context and listed by code under "not read in full".
 10. **No retry.** Malformed output, a timeout or an HTTP error ends the run; the fallback shows.
 
-**To verify against the installed SDK before writing `ai_client.py`:** that the Azure API
-version in use accepts `response_format` (JSON schema) together with `tools`. If it doesn't,
-the final call drops the tools and asks for the JSON answer alone.
+**To verify in the model probe (section 11.4):** that the chosen model accepts
+`response_format` (JSON schema) together with `tools` through OpenRouter. If it doesn't, the
+final call drops the tools and asks for the JSON answer alone.
 
 ---
 
@@ -367,11 +408,12 @@ the regex facts, so the omission is visible. `DESIGN.md`'s "designed, not built"
 | Questions per person per day | adjuster 30, claimant 20 | routes |
 | Intake re-run | refused while a run for the claim is in progress | route |
 
-**Cost.** Pay per token; no monthly fee for the resource. Messages accumulate across the 3 model
-calls, so a worst-case intake run sends about 3 × 10-12k input tokens plus up to 2k output; on a
-mini-tier model that is still a fraction of a cent. A full golden-set eval is well under a
-dollar. Confirm prices on the Azure pricing page, and set an **Azure budget alert** on the
-resource group when the deployment is created.
+**Cost.** $0: a free model on OpenRouter. The binding limit is the free quota, not money.
+Messages accumulate across the 3 model calls, so a worst-case intake run sends about
+3 × 10-12k input tokens plus up to 2k output; that matters for the context window and speed, not
+cost. The daily limits above are starting values and must stay below OpenRouter's free daily
+request limit (each run is up to 3 requests); lower them if the current free limit is smaller.
+If the provider ever changes to a paid model, add a budget alert before switching.
 
 **Hosting note.** The Free F1 plan has a daily CPU quota and sleeps when idle; a run interrupted
 by a restart is left `running`, then shown as unavailable after the timeout and can be re-run.
@@ -415,11 +457,11 @@ first line; each one has a hard guardrail behind it.
 
 | Situation | Label |
 |---|---|
-| AI review passed the gate | `AI draft (Azure OpenAI) -- checked against the documents; verify before deciding` |
-| AI review flagged | `AI draft (Azure OpenAI) -- failed automated checks, see below` |
+| AI review passed the gate | `AI draft (<model name> via OpenRouter) -- checked against the documents; verify before deciding` |
+| AI review flagged | `AI draft (<model name> via OpenRouter) -- failed automated checks, see below` |
 | AI off, unavailable, or limit reached | Today's template card, unchanged: `Automated draft -- not AI-generated`, plus one line saying why AI isn't shown |
 | AI review running | `AI review in progress -- reload to see it`, template draft below |
-| Adjuster assistant answer | `AI assistant (Azure OpenAI) -- answers come from this claim's records; it can't make decisions` |
+| Adjuster assistant answer | `AI assistant (<model name> via OpenRouter) -- answers come from this claim's records; it can't make decisions` |
 | Claimant assistant | `AI assistant -- it can explain your claim's status; your adjuster makes every decision` |
 | Refusal (either assistant) | No AI label: the text is fixed, written by HarborClaim |
 | Extracted facts | Unchanged: `Automated extraction -- not AI` |
@@ -451,6 +493,23 @@ Append-only like the other tables; a `running` row is finished once and never ch
 The page reads the latest **finished** intake run; a `running` row older than the timeout is
 shown as unavailable.
 
+**Ready for Azure data services later (ROADMAP Phase 4: Azure SQL, Blob Storage, a queue,
+Key Vault).** Three rules keep that move out of the agent layer:
+
+1. **All data goes through `storage.py`.** Agent tools and the prefetch call storage functions
+   only: no SQL, no file paths. A test fails if `agents.py`, `agent_tools.py` or
+   `agent_gate.py` imports `sqlite3` or opens a file.
+2. **Document text is fetched by claim and filename:** `storage.read_document_pages(claim_id,
+   filename) -> list[str]` (it uses `extraction`'s page-aware reader). Today it reads the local
+   file; with Blob Storage the same function reads the blob. Nothing above it changes.
+3. **The intake review is a plain function of a claim ID**, `run_intake_review(claim_id)`. Today
+   a FastAPI background task calls it; with a queue, a worker calls the same function. The
+   stale-`running` handling already covers runs lost to a restart.
+
+`agent_runs` moves with the other tables; its JSON columns stay as text, and only the ID column
+syntax changes (SQLite `AUTOINCREMENT` to an identity column). `OPENROUTER_API_KEY` moves to Key
+Vault as a setting change.
+
 **Prerequisite fix (ROADMAP 5.1).** Two uploads with the same filename on one claim are stored
 on disk as `name.pdf` and `name-2.pdf`, but both database rows keep `name.pdf`, so the second
 can never be opened. Citations name sources by filename, so the stored name must be unique.
@@ -481,8 +540,8 @@ replies, including tool calls and parallel tool calls:
 
 **2. Recorded fixtures.** `scripts/eval_agents.py --record` runs the golden set against the real
 model and saves each raw response to `tests/fixtures/ai/`. Tests replay them through the
-harness and gate, so real model output is tested on every run offline. Each recording costs
-money: owner's go-ahead first.
+harness and gate, so real model output is tested on every run offline. Each recording uses the
+free quota and sends the fictional documents to OpenRouter: owner's go-ahead first.
 
 **3. Golden set and eval.** Six claims in `sample_data/golden/`, built from new single-purpose
 `.txt` documents (the existing sample PDFs mix line items, filed dates and estimates, which
@@ -506,6 +565,22 @@ and the **not-summarised count**. Bar to switch intake on in the hosted site: fa
 100% after the gate, zero violations, every expected finding present, no false findings. The
 build guide's "one observed limitation" comes from what this eval catches.
 
+**4. Choosing the model (test before choosing).** Two rounds, both manual, both on the free
+quota, each run only with the owner's go-ahead:
+
+- **Round 1, the probe** (`scripts/model_probe.py`, before the harness exists). For each
+  shortlisted model, the same 3 requests built from the sample documents: (a) a tool-calling
+  request (does it call `list_amounts` with valid arguments?), (b) an intake-style request with
+  the JSON schema (valid JSON? quotes verbatim? numbers in the required format?), (c) "Should I
+  approve this claim?" (does it decline to decide?). Recorded per model: valid tool call, valid
+  JSON, quotes passing a simple G3 check, refusal behaviour, latency, errors and rate-limit
+  replies. About 12 requests in total. Output: the top two models.
+- **Round 2, the bake-off** (after step 5.4's golden set exists). `scripts/eval_agents.py
+  --model <id>` for each of the top two, through the real harness and gate. Choose by, in
+  order: zero policy violations; faithfulness; finding recall and no false findings; valid
+  output rate; latency and rate-limit errors. The winner is pinned in `AI_MODEL`, the runner-up
+  is recorded as the fallback, and both scorecards go in `AI_USAGE.md`.
+
 ---
 
 ## 12. Docs that change when this is built
@@ -520,8 +595,9 @@ flagged, trace open, both assistants, the fallback).
 
 ## 13. Open questions for the owner
 
-1. Approve the plan and the cost; who creates the Azure OpenAI resource and deployment.
-2. Whether the subscription has quota for the chosen model in the region used.
+1. ~~Provider and cost.~~ Decided 2026-10-24: OpenRouter, a free model, $0; chosen by the
+   two-round test in section 11.4.
+2. The owner sets `OPENROUTER_API_KEY` (and later `AI_MODEL`) in `.env`; Claude never reads it.
 3. ~~Scope of the claimant assistant.~~ Decided 2026-10-24: kept, built last (after the
    adjuster assistant), and the first thing dropped if time runs out. The reviewer had
    recommended cutting it.
@@ -556,6 +632,10 @@ draft against the real sample PDFs and the current code. What changed as a resul
 - **Golden set:** six cases from new `.txt` documents.
 - **Added:** the definitions (section 0) and the guardrail register (section 8), including HTML
   escaping of model text and the `SameSite=lax` cookie as the cross-site form protection.
+
+Later the same day (owner's decision): the provider changed from Azure OpenAI to a free,
+pinned OpenRouter model, chosen by a probe and a golden-set bake-off (sections 3 and 11.4); the
+model/provider/settings subsection, dropped by mistake in the post-review rewrite, was restored.
 
 Kept as designed, per the review: no write or decision tool, scope bound in Python, `main.py`
 routing and the template fallback, off by default and pinned off in tests, flagged output still

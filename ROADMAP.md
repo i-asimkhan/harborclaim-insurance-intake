@@ -34,7 +34,7 @@ about **Nov 4–9**, plus spare evenings before.
 | Sat Oct 24 | — | PaymentCo meetup, 11 am |
 | Sun Oct 25 – Mon Oct 26 | Finish Phase 3 hosted rollout (Azure settings, `EMAIL_ENABLED=false` first, then on) | — |
 | Tue Oct 27 | — | Class (PaymentCo Week 3) |
-| Oct 28 – Nov 3 | Light only: approve Phase 5, create the Azure OpenAI resource if approved; steps 5.1–5.2 (groundwork, harness, gate; no model calls, no cost) in spare evenings | PaymentCo memo (Nov 1), meetup (Oct 31), presentation (Nov 3) |
+| Oct 28 – Nov 3 | Light only: approve Phase 5, model probe round 1 (free, ~12 requests); steps 5.1–5.2 (groundwork, harness, gate; no model calls) in spare evenings | PaymentCo memo (Nov 1), meetup (Oct 31), presentation (Nov 3) |
 | Wed Nov 4 – Fri Nov 6 | Phase 5 core: 5.3 intake review agent, 5.4 golden set + first live runs, then 5.5 adjuster assistant if on track; 5.6 claimant assistant only if time remains | — |
 | Sat Nov 7 | Code freeze; deploy; regenerate screenshots | — |
 | Sun Nov 8 | Presentation slides + demo script; README final pass | — |
@@ -46,8 +46,8 @@ about **Nov 4–9**, plus spare evenings before.
 - [ ] **AI before Nov 10, or present with the labeled mocks?** Superseded by the Phase 5 plan
       (2026-10-24): three agents on one harness, intake review first. The mocks stay as the
       fallback behind an off-by-default flag, so whatever is built by Nov 9 is what's shown.
-- [ ] **New Azure resources for Phase 5**: Azure OpenAI only (Document Intelligence isn't
-      needed). Costs money and is outward-facing: owner's call (Phase 5, step 5.0).
+- [x] **New Azure resources for Phase 5**: none. Decided 2026-10-24: a free OpenRouter model
+      instead of Azure OpenAI, $0 (Phase 5, step 5.0).
 - [ ] **Phase 4 scope.** The full production setup (Azure SQL, Blob, queue, Key Vault, Entra)
       doesn't fit before Nov 10. Recommendation: build only what Phase 5 needs, and present
       the rest as the documented production design (the "Long-term storage design" below).
@@ -375,7 +375,12 @@ Goal: let a claimant say what kind of claim this is, and let that shape what's a
       ID for adjuster identity from a design into at least a partial build. Phase 5 needs none
       of them (it reads text PDFs with `pypdf`); Document Intelligence comes in only if
       scanned documents or photos need reading, and Key Vault is the natural next home for
-      `AZURE_OPENAI_API_KEY`.
+      `OPENROUTER_API_KEY` and the other secrets.
+- [ ] **Effect on the Phase 5 agents: none, by design.** Agents reach data only through
+      `storage.py` (document text by claim and filename, not by path), and the intake review is
+      a plain function of a claim ID that a queue worker can call instead of a background task.
+      Swapping SQLite for Azure SQL and local uploads for Blob Storage changes `storage.py`
+      only; `agent_runs` moves with the other tables. See AGENTS.md section 10.
 - [ ] Decide whether the Free F1 plan is enough once there's a queue + Document Intelligence
       in the mix, or whether this needs a paid tier -- F1 has no "Always On" and sleeps on
       idle, fine for a demo link but not for a queue worker.
@@ -437,8 +442,10 @@ Decisions already made (2026-10-18 to 10-24 planning sessions):
   proves it), and the terms are defined in section 0.
 - **Design reviewed 2026-10-24** by an independent subagent against the real sample PDFs and the
   current code; its fixes are in AGENTS.md (section 14 lists them).
-- **Provider: Azure OpenAI**, one mini-tier deployment, `openai` SDK. Document Intelligence not
-  needed (text PDFs and `.txt` are already read). Phase 4 is not a prerequisite.
+- **Provider: OpenRouter, one free model pinned by ID** (changed from Azure OpenAI on
+  2026-10-24, owner's decision): $0, the same `openai` SDK as Class 2, never the
+  `openrouter/free` router. The model is chosen by testing (a probe, then a golden-set bake-off;
+  AGENTS.md section 11.4). Document Intelligence not needed; Phase 4 is not a prerequisite.
 - **Regex extraction stays** as the deterministic reference; its label stays "not AI".
 - **Claimant pages never show AI findings or traces**; the claimant assistant has its own
   off-by-default switch (`AI_CLAIMANT_CHAT`).
@@ -452,13 +459,18 @@ runs out.
 
 **5.0 Before building** (owner)
 
-- [ ] Decide whether to commit the current uncommitted work first (local commit only).
-- [ ] Approve this plan and the cost (pay-per-token; a fraction of a cent per run).
-- [ ] Create the Azure OpenAI resource and a mini-tier deployment in `harborclaim-rg`, or let
-      Claude do it with explicit go-ahead. Check region quota. Settings by name only:
-      `AI_PROVIDER`, `AI_ENABLED`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`,
-      `AZURE_OPENAI_DEPLOYMENT`, `AI_CLAIMANT_CHAT`, `AI_TIMEOUT_SECONDS`, and the per-agent
-      daily limits. Set an Azure budget alert on the resource group.
+- [x] Commit the uncommitted work first: done 2026-10-24, two local commits (`852e07b`,
+      `7d1fe0c`), not pushed.
+- [x] Provider and cost: OpenRouter, a free model, $0 (2026-10-24).
+- [ ] Approve this plan.
+- [ ] Owner puts `OPENROUTER_API_KEY` in `.env` (Claude never reads it). Other settings by name:
+      `AI_PROVIDER`, `AI_ENABLED`, `AI_MODEL`, `AI_CLAIMANT_CHAT`, `AI_TIMEOUT_SECONDS`, and the
+      per-agent daily limits. Check OpenRouter's current free rate limits.
+- [ ] **Model probe, round 1** (AGENTS.md section 11.4): `scripts/model_probe.py` sends the same
+      3 requests to each shortlisted free model (about 12 requests, $0; owner's go-ahead
+      first), and the results pick the top two. Shortlist from the 2026-10-24 search:
+      `google/gemma-4-31b-it:free`, `google/gemma-4-26b-a4b-it:free`,
+      `nvidia/nemotron-3-super-120b-a12b:free`, `nvidia/nemotron-3.5-super-vl:free`.
 - [x] Claimant assistant (5.6): decided 2026-10-24 to keep it, built last, after 5.5. The
       design review had recommended cutting it; it's the first thing dropped if time runs out.
 
@@ -468,8 +480,9 @@ runs out.
       stored as `name.pdf` and `name-2.pdf` on disk, but both rows keep the name `name.pdf`, so
       `get_document_path` always returns the first and the second file can't be opened.
       Store the de-duplicated name; regression test first.
-- [ ] `extraction.py`: make the document reader public and page-aware
-      (`read_document_pages(path) -> list[str]`), keeping `extract_facts` output identical.
+- [ ] `extraction.py`: make the document reader public and page-aware, keeping `extract_facts`
+      output identical; `storage.read_document_pages(claim_id, filename)` wraps it, so agents
+      never handle file paths (ready for Blob Storage in Phase 4).
 - [ ] `storage.py`: the `agent_runs` table (AGENTS.md section 10), its queries, `reset()`.
 - [ ] `ai_client.py`: off by default, timeout, never raises, lazy `openai` import; pin `openai`
       in `requirements.txt` after checking the client against the installed SDK.
@@ -502,13 +515,16 @@ runs out.
 - [ ] Claimant page unchanged (template draft only); a test proves no AI output reaches it.
 - [ ] The build guide's three checks: normal, missing/ambiguous, injected model failure.
 
-**5.4 Golden set and first live runs** (costs money: ask before each run)
+**5.4 Golden set, model bake-off and first live runs** (free quota; ask before each run)
 
 - [ ] `sample_data/golden/`: six claims from new single-purpose `.txt` documents (AGENTS.md
       section 11), including the amount-conflict document for the pressure test.
 - [ ] `scripts/eval_agents.py`: `--record` saves real responses to `tests/fixtures/ai/`; the
       default mode prints faithfulness, finding recall, false findings, violations and the
       not-summarised count.
+- [ ] **Model bake-off, round 2:** `eval_agents.py --model` for the probe's top two models;
+      pin the winner in `AI_MODEL`, record the runner-up as the fallback, both scorecards in
+      `AI_USAGE.md`.
 - [ ] First live run locally; fixtures replayed in the test suite; results, model, prompt
       version and one observed limitation recorded in `AI_USAGE.md`.
 

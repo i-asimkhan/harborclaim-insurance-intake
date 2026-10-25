@@ -443,7 +443,7 @@ Decisions already made (2026-10-18 to 10-24 planning sessions):
 - **Design reviewed 2026-10-24** by an independent subagent against the real sample PDFs and the
   current code; its fixes are in AGENTS.md (section 14 lists them).
 - **Provider: OpenRouter, one free model pinned by ID** (changed from Azure OpenAI on
-  2026-10-24, owner's decision): $0, the same `openai` SDK as Class 2, never the
+  2026-10-24, owner's decision): $0, called with `httpx` (no OpenAI package or service), never the
   `openrouter/free` router. The model is chosen by testing (a probe, then a golden-set bake-off;
   AGENTS.md section 11.4). Document Intelligence not needed; Phase 4 is not a prerequisite.
 - **Regex extraction stays** as the deterministic reference; its label stays "not AI".
@@ -484,8 +484,9 @@ runs out.
       output identical; `storage.read_document_pages(claim_id, filename)` wraps it, so agents
       never handle file paths (ready for Blob Storage in Phase 4).
 - [ ] `storage.py`: the `agent_runs` table (AGENTS.md section 10), its queries, `reset()`.
-- [ ] `ai_client.py`: off by default, timeout, never raises, lazy `openai` import; pin `openai`
-      in `requirements.txt` after checking the client against the installed SDK.
+- [ ] `ai_client.py`: off by default, timeout, never raises; calls OpenRouter's
+      `/chat/completions` endpoint with `httpx` (already in `requirements.txt`). No `openai`
+      package, no new dependency.
 - [ ] `tests/conftest.py`: pin `AI_PROVIDER`, `AI_ENABLED`, `AI_CLAIMANT_CHAT` to off.
 - [ ] `.env.example` and README: the settings, names only.
 
@@ -502,6 +503,11 @@ runs out.
       PDFs' text: limits, read-only proof, scope, one pass/fail per gate rule, the
       pressure-test case ($2,150 vs $2,500), the false-positive sentences, the injection
       document, `<script>` in model output.
+
+- [ ] **Challenge 1 (independent subagent):** try to break the harness and gate before any agent
+      is wired in: exceed the caps, call tools out of scope, slip invented numbers and quotes
+      past G3/G4, false positives on G5, injection text. Every hole it finds becomes a failing
+      test first, then a fix (AGENTS.md section 11.5).
 
 **5.3 Agent 1: intake review** -- **(demoable)**
 
@@ -528,6 +534,11 @@ runs out.
 - [ ] First live run locally; fixtures replayed in the test suite; results, model, prompt
       version and one observed limitation recorded in `AI_USAGE.md`.
 
+- [ ] **Challenge 2 (independent subagent):** review the live outputs, the chosen model's
+      scorecard and the recorded fixtures; write new adversarial golden claims (injection
+      variants, conflicting documents, near-miss quotes) and run them (free quota; owner's
+      go-ahead). Findings recorded in `AI_USAGE.md`.
+
 **5.5 Agent 2: adjuster assistant** -- **(demoable)**
 
 - [ ] "Ask about this claim" form on the review page (`POST /adjuster/claims/{id}/ask`), three
@@ -548,6 +559,11 @@ runs out.
 - [ ] `MOCKS.md`, `docs/design/DESIGN.md` (components 3 and 5, pressure test marked built),
       README, `AI_USAGE.md`, new screenshots (AI review passed and flagged, trace open, both
       assistants, the fallback).
+
+- [ ] **Challenge 3 (independent subagent), before code freeze:** a full review of Phase 5 as
+      built against AGENTS.md: every guardrail in the register has its code and its test, labels
+      are honest, claimant pages leak nothing, `main.py`/`test_main.py` untouched, no secrets in
+      the repo. Blockers fixed before 5.8.
 
 **5.8 Hosted rollout** (owner: outward-facing)
 

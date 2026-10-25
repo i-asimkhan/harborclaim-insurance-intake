@@ -104,7 +104,7 @@ GET  /help, POST /help/ask            claimant assistant (only when AI_CLAIMANT_
 
 | File | Responsibility | Mirrors |
 |---|---|---|
-| `ai_client.py` | Provider switch and the one function that calls the model. Off by default, timeout, never raises (returns a result or a typed failure). Lazy `openai` import. | `email_delivery.py` |
+| `ai_client.py` | Provider switch and the one function that calls the model. Off by default, timeout, never raises (returns a result or a typed failure). One `httpx` POST to OpenRouter's `/chat/completions`; no `openai` package. | `email_delivery.py` |
 | `agents.py` | The shared harness (section 4) and the three charters (section 5). | `analyst.py` loop, Class 2 |
 | `agent_tools.py` | The read-only tools and their JSON schemas, per charter. Imports no storage writer. | -- |
 | `agent_gate.py` | Gate rules G1-G8 and the computed coverage lists. Pure functions. | `main.py`'s style |
@@ -125,8 +125,12 @@ decision route.
 ### Model, provider and settings
 
 - **Provider: OpenRouter, one free model, pinned by ID** (owner's decision, 2026-10-24). Free,
-  already used in Class 2 (`analyst.py`), and called through the same `openai` SDK with
-  OpenRouter's endpoint. No Azure resource is needed and nothing is billed.
+  and called with one `httpx` POST to OpenRouter's `/chat/completions` endpoint (`httpx` is
+  already in `requirements.txt`). **No OpenAI service, model, key or package is used.** No Azure
+  resource is needed and nothing is billed.
+- **Not Claude in the app.** A Claude subscription doesn't give an app API access; that would
+  need a separate, paid Anthropic API key. It can join the bake-off later behind the same
+  `AI_PROVIDER` switch if one is ever available.
 - **Never `openrouter/free`.** That router picks a different model per request (seen in Class 2),
   which would make the eval, the fixtures and the trace's "model" line meaningless. One model ID
   is pinned and recorded in the trace and in `AI_USAGE.md`.
@@ -146,8 +150,8 @@ decision route.
     is acceptable, and README and `AI_USAGE.md` say so plainly.
 - **Document Intelligence: not needed.** Text PDFs and `.txt` are already read by `pypdf`; images
   and scans stay "not read -- open the original", as today. **Phase 4 is not a prerequisite.**
-- **Later option:** Azure OpenAI fits behind the same `AI_PROVIDER` switch if a paid, in-tenant
-  model is ever wanted. Not part of this phase.
+- **Later option:** another provider (for example Claude through a paid Anthropic API key) fits
+  behind the same `AI_PROVIDER` switch if ever wanted. Not part of this phase.
 
 | Setting (names only; values in `.env` locally, Azure app settings when hosted) | Meaning | Default |
 |---|---|---|
@@ -582,6 +586,14 @@ quota, each run only with the owner's go-ahead:
   is recorded as the fallback, and both scorecards go in `AI_USAGE.md`.
 
 ---
+
+**5. Independent challenge.** A separate Claude subagent, with no memory of the build session,
+tries to break the work at three checkpoints (ROADMAP 5.2, 5.4, 5.7): the harness and gate
+before any agent is wired in; the live outputs and chosen model with new adversarial golden
+claims; and the whole phase against this document before code freeze. It never edits project
+files, reads secrets or touches Azure; model calls only with the owner's go-ahead. Every hole it
+finds becomes a failing test first, then a fix, the same way the 2026-10-24 design review fed
+section 14.
 
 ## 12. Docs that change when this is built
 

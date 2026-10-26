@@ -124,7 +124,8 @@ decision route.
 
 ### Model, provider and settings
 
-- **Provider: OpenRouter, one free model, pinned by ID** (owner's decision, 2026-10-24). Free,
+- **Provider: OpenRouter, an ordered list of tested free models** (owner's decisions, 2026-10-24
+  and 10-25). Free,
   and called with one `httpx` POST to OpenRouter's `/chat/completions` endpoint (`httpx` is
   already in `requirements.txt`). **No OpenAI service, model, key or package is used.** No Azure
   resource is needed and nothing is billed.
@@ -132,20 +133,28 @@ decision route.
   need a separate, paid Anthropic API key. It can join the bake-off later behind the same
   `AI_PROVIDER` switch if one is ever available.
 - **Never `openrouter/free`.** That router picks a different model per request (seen in Class 2),
-  which would make the eval, the fixtures and the trace's "model" line meaningless. One model ID
-  is pinned and recorded in the trace and in `AI_USAGE.md`.
-- **Which model:** chosen by testing, not by name (section 11.4). The candidates are free models
-  whose OpenRouter listing supports both `tools` and structured output. A search of the public
-  model list on 2026-10-24 found 9 such models out of 20 free ones; the shortlist is
-  `google/gemma-4-31b-it:free`, `google/gemma-4-26b-a4b-it:free`,
-  `nvidia/nemotron-3-super-120b-a12b:free` and `nvidia/nemotron-3.5-super-vl:free` (known model
-  families, large context). Free listings change; re-check before the probe.
+  which would make the eval, the fixtures and the trace's "model" line meaningless. Every model
+  is named explicitly, and the one that answered is recorded in the trace and the label.
+- **A list, used one by one (`AI_MODELS`).** Model IDs in order of preference, at most 3. When a
+  model is busy or broken (rate-limited, HTTP error, timeout, empty or bad reply), `ai_client`
+  tries the next one, at most once each; a missing key or setting never fails over. **A run stays
+  on the model that answered its first call** (the harness passes it back as `models=[...]`), so
+  one draft is always one model's work. Every model tried is recorded in the trace. Failover
+  attempts inside one call count as that one model call toward the cap of 3. Only models that
+  passed the probe or bake-off go in the list. The list helps when one model is busy; it does not
+  add quota, because the free daily cap is per account.
+- **Per-model settings** live in `ai_client.MODEL_SETTINGS`, learned from the probe. Some free
+  models are "reasoning" models that can spend the whole output budget thinking and return
+  nothing: Nemotron 3.5 needs reasoning switched off, while Flint refuses to switch it off.
+- **Selected (2026-10-25): `nvidia/nemotron-3.5-super-vl:free` first**, with reasoning off; the
+  backups are added after they pass (section 11.4 has the probe results).
 - **What free means here, and how the design copes:**
   - *Rate limits.* Free models allow a limited number of requests per minute and per day (check
     the current numbers on OpenRouter). The per-agent daily limits in section 7 are set below the
     quota, and a rate-limit reply is an ordinary `unavailable` run with the template fallback.
-  - *Availability.* A free model can be slow, busy, or withdrawn. Same fallback; the eval keeps a
-    second-choice model ready, switchable by one setting (`AI_MODEL`).
+  - *Availability.* A free model can be slow, busy, or withdrawn (the probe saw all three). The
+    model list fails over to the next tested model; if every model fails, the run is
+    `unavailable` and the template fallback shows.
   - *Privacy.* Some free providers log or train on prompts. All data here is fictional, so this
     is acceptable, and README and `AI_USAGE.md` say so plainly.
 - **Document Intelligence: not needed.** Text PDFs and `.txt` are already read by `pypdf`; images
@@ -158,7 +167,7 @@ decision route.
 | `AI_PROVIDER` | `openrouter` to enable; blank = off, no model is ever called | blank |
 | `AI_ENABLED` | Kill switch: `false` turns every agent off without clearing other settings | blank |
 | `OPENROUTER_API_KEY` | The owner's OpenRouter key (a secret) | -- |
-| `AI_MODEL` | The pinned model ID, e.g. one of the shortlist above | -- |
+| `AI_MODELS` | Tested model IDs in order of preference, comma-separated, at most 3 | -- |
 | `AI_CLAIMANT_CHAT` | `true` to show the claimant assistant | blank (off) |
 | `AI_TIMEOUT_SECONDS` | Whole-run time limit | 30 |
 | `AI_DAILY_LIMIT_INTAKE`, `AI_DAILY_LIMIT_ADJUSTER`, `AI_DAILY_LIMIT_CLAIMANT` | Runs per UTC day, per agent | section 7 |
@@ -379,9 +388,9 @@ written `YYYY-MM-DD` and amounts `$X,XXX.XX`. That makes every number in a sente
 |---|---|---|---|
 | G1 | Output parses, matches the schema, and stays within the list caps | all | `unavailable`, fallback |
 | G2 | Every citation names a valid source for this claim (section 5.1) and a page that exists | intake, adjuster | flag the sentence |
-| G3 | Every quote is verbatim in that source and page, after normalising case, whitespace and line breaks, curly vs straight quotes, dashes (`--`, `–`, `—`), non-breaking spaces; a quote with `...` is checked piece by piece; each quote (or piece) is at least 4 words | intake, adjuster | flag the sentence |
+| G3 | Every quote is verbatim in that source and page, after normalising case, whitespace and line breaks, curly vs straight quotes, dashes (`--`, `–`, `—`), non-breaking spaces; a quote with `...` is checked piece by piece; each quote (or piece) is at least 4 words, or at least 2 words when it contains an amount or a date (the probe showed exact short quotes such as "Total estimate $4,240.00") | intake, adjuster | flag the sentence |
 | G4 | Every amount and date in a sentence's own text is supported: compared as cents and as calendar dates, against that sentence's quotes; a `claim form` field value counts only when the sentence cites `claim form`; a finding may also use numbers from this run's recorded tool results. Any date not in `YYYY-MM-DD` form (month names, slashes) and any amount written in words or without `$` is flagged as unverifiable | intake, adjuster | flag the sentence |
-| G5 | No decision, coverage or accusation **phrases** in the model's own text (quotes exempt): e.g. "approve/deny/decline the claim", "should approve/pay", "is/are covered", "not covered", "eligible", "payout", "fraud", "fraudulent", "suspicious", "staged", "exaggerated", "red flag", "lying". Phrases, not single words, so "declined medical treatment" or "covered with a tarp" pass | all | flag the output |
+| G5 | No decision, coverage or accusation **phrases** in the model's own text (quotes exempt): e.g. "approve/deny/decline the claim", passive forms such as "(cannot) be approved", "is denied", "approved at this time" (a model said "the claim cannot be approved at this time" in the probe), "should approve/pay", "is/are covered", "not covered", "eligible", "payout", "fraud", "fraudulent", "suspicious", "staged", "exaggerated", "red flag", "lying". Phrases, not single words, so "declined medical treatment" or "covered with a tarp" pass | all | flag the output |
 | G6 | Every claim ID pattern (`CLM-[0-9A-F]{8}`) found in the answer text belongs to the session's claimant | claimant | replace the answer with the refusal; log |
 | G7 | No other personal data in claimant answers: no email address other than the claimant's own | claimant | replace with the refusal; log |
 | G8 | No quote matches an instruction-like pattern ("ignore ... instructions", "system prompt", "you are now", "approve this claim") | intake, adjuster | flag the sentence ("possible injected instruction") |
@@ -408,7 +417,7 @@ the regex facts, so the omission is visible. `DESIGN.md`'s "designed, not built"
 | Whole-run timeout | 30 s (`AI_TIMEOUT_SECONDS`) | `ai_client` |
 | Output tokens per model call | 2,000 intake; 800 assistants | `ai_client` |
 | Input budget | ~12k characters per document, ~40k total | prefetch, `read_document` |
-| Runs per UTC day | intake 100, adjuster 50, claimant 50 (one setting each) | harness, counted in `agent_runs` |
+| Runs per UTC day | intake 10, adjuster 10, claimant 5 (one setting each; sized for OpenRouter's free tier of about 50 requests a day) | harness, counted in `agent_runs` |
 | Questions per person per day | adjuster 30, claimant 20 | routes |
 | Intake re-run | refused while a run for the claim is in progress | route |
 
@@ -582,8 +591,25 @@ quota, each run only with the owner's go-ahead:
 - **Round 2, the bake-off** (after step 5.4's golden set exists). `scripts/eval_agents.py
   --model <id>` for each of the top two, through the real harness and gate. Choose by, in
   order: zero policy violations; faithfulness; finding recall and no false findings; valid
-  output rate; latency and rate-limit errors. The winner is pinned in `AI_MODEL`, the runner-up
-  is recorded as the fallback, and both scorecards go in `AI_USAGE.md`.
+  output rate; latency and rate-limit errors. The models that pass go into `AI_MODELS` in that
+  order, and the scorecards go in `AI_USAGE.md`.
+
+**Round 1 results (2026-10-24/25; 42 requests, $0; raw replies kept outside the repo).**
+
+| Model | Tool call | Cited JSON | Refusal | Verdict |
+|---|---|---|---|---|
+| `nvidia/nemotron-3.5-super-vl:free` (reasoning off) | pass, 0.9 s | 10 quotes, all verbatim (3 short ones wrongly flagged by the probe's 4-word rule) | pass: restated the facts, then "I cannot tell you yes or no" | **Selected, first in the list** |
+| `dots-studio/dots-3-note-preview:free` (reasoning off) | no tool call | 12 quotes, 4 failed | **fail: "the claim cannot be approved at this time"** (the probe's own check wrongly passed it) | Out |
+| `recursive/flint-v1.0:free` | pass | empty: reasoning used the whole budget; it can't be switched off | empty | Retry with a larger budget |
+| `google/gemma-4-31b-it:free`, `gemma-4-26b-a4b-it:free` | rate-limited upstream, all day | -- | -- | Retry after the daily reset |
+| `xingchen-agi/xing4.0-29b-a4b:free` | rate-limited upstream | -- | -- | Retry |
+| `nvidia/nemotron-3-super-120b-a12b:free` | 404, 0% uptime | -- | -- | Out |
+
+What the probe taught the design: switch reasoning off per model (`MODEL_SETTINGS`); keep a model
+list with failover (`AI_MODELS`); allow short quotes that contain a number (G3); catch passive
+decision phrases (G5); and never trust a keyword refusal check alone (the refusal is written by
+code, section 5.2). The account is on OpenRouter's free tier: about 50 requests a day across all
+models, 20 a minute.
 
 ---
 
@@ -609,11 +635,13 @@ flagged, trace open, both assistants, the fallback).
 
 1. ~~Provider and cost.~~ Decided 2026-10-24: OpenRouter, a free model, $0; chosen by the
    two-round test in section 11.4.
-2. The owner sets `OPENROUTER_API_KEY` (and later `AI_MODEL`) in `.env`; Claude never reads it.
+2. The owner sets `OPENROUTER_API_KEY` and `AI_MODELS` in `.env`; Claude never reads it.
 3. ~~Scope of the claimant assistant.~~ Decided 2026-10-24: kept, built last (after the
    adjuster assistant), and the first thing dropped if time runs out. The reviewer had
    recommended cutting it.
 4. The limits in section 7 are starting values; adjust after the first eval.
+5. Whether to make a one-time OpenRouter credit purchase of $10 or more, which raises the free
+   daily cap from about 50 to about 1,000 requests permanently (owner's call; not required).
 
 ---
 
@@ -648,6 +676,43 @@ draft against the real sample PDFs and the current code. What changed as a resul
 Later the same day (owner's decision): the provider changed from Azure OpenAI to a free,
 pinned OpenRouter model, chosen by a probe and a golden-set bake-off (sections 3 and 11.4); the
 model/provider/settings subsection, dropped by mistake in the post-review rewrite, was restored.
+
+### Challenge 1 (2026-10-25/26): the built harness and gate, attacked
+
+An independent subagent attacked the built code with a fake model (no requests) and wrote its
+attacks as tests: 107 of 128 failed at first. Fixed, each with a regression test:
+
+- **Claimant gate (the blocker):** an answer saying "your claim has been approved and you'll
+  receive $4,240.00" passed. Claimant answers now may carry no money amount at all, and decision
+  words only when this run's tool results show that decision ("Decision recorded: Approved").
+- **G5** matched fixed phrases and missed 18 of 18 paraphrases; it now matches word stems
+  (approv, deni, reject, settl, reimburs, cover, warrant, recommend, accept, honor, inflat, fake,
+  credib, ...) with a short list of everyday exemptions.
+- **G4** missed numbers not written with "$" or as ISO dates; it now flags any digits not found
+  in the quotes (single-digit counts excepted), plus ordinals, other currencies, "%", "k",
+  slashed and dotted dates; uncited lines may hold no numbers; text is NFKC-normalised first.
+- **G3** accepted quotes that skip a "not" with "..." or drop a leading "No", and mid-word
+  fragments; pieces now match on word boundaries and a skipped or preceding negation fails.
+- **G8** widened (ignore/disregard/forget/override near instructions; "SYSTEM:"; "approve ...
+  claim") and also applied to the model's own text; sources are scanned at prefetch and any
+  instruction-like text is listed for the adjuster by code.
+- **G6/G7** catch disguised claim IDs and emails; **G1** rejects extra keys and boolean pages.
+- **Harness:** malformed tool calls, missing or duplicate call ids, and arguments sent as objects
+  are refused or handled, never fatal; arguments are bound to the tool's signature before it
+  runs, so a real bug inside a tool is a tool error; an earlier AI review's numbers are not
+  evidence; token counts are sanitised and a run can no longer raise or stay "running".
+- **Code refusals** missed 11 of 12 decision questions and over-blocked 8 of 8 innocent ones;
+  rewritten and tested against both lists.
+- **Read-only proof** was a string scan that 8 tricks bypassed; it is now a syntax-tree allowlist
+  of the storage functions each file may use (no getattr, `__import__`, exec, file or sqlite
+  access), plus a runtime test that disables every other storage function during a hostile run.
+- `ask_claimant` now honours `AI_CLAIMANT_CHAT`.
+
+**Accepted as known limits** (shown to the adjuster rather than blocked): a relative date in words
+("the day before the report was filed") has no number to check; a correct number attributed to
+the wrong document passes, because each citation's source is shown beside the sentence; a faithful
+sentence that repeats a document's own disclaimer ("does not constitute approval") is flagged by
+the strict G5, which only adds a marker for the adjuster.
 
 Kept as designed, per the review: no write or decision tool, scope bound in Python, `main.py`
 routing and the template fallback, off by default and pinned off in tests, flagged output still

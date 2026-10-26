@@ -67,11 +67,12 @@ authoritative, honest labels); production roadmap (Phases 4–5).
   adjuster provisioned credentials), persistent SQLite storage, document upload, a mocked
   extraction/summary pipeline, a notification log, claim type at intake, a redesigned
   claimant side and adjuster side, and email delivery behind an off-by-default flag are all
-  built. **94 tests pass**: 74 in `tests/test_app.py`, 15 Playwright tests in
+  built. **262 tests pass** (2026-10-26): 82 in `tests/test_app.py`, 160 in `tests/test_agents.py`
+  (Phase 5), 15 Playwright tests in
   `tests/test_ui.py`, 5 in `test_main.py`.
-- **Everything since the Phase 2 commit is uncommitted and not deployed** (about 40 changed
-  files: Phases 1, 1b and the first slice of 3). The live Azure site still runs the older
-  build. Committing, pushing and the Azure Sync are the owner's call.
+- **Phases 1, 1b and 3 are committed locally (2026-10-24), not pushed or deployed;** Phase 5
+  steps 5.1-5.2 are uncommitted. The live Azure site still runs the older build. Pushing and
+  the Azure Sync are the owner's call.
 - Deployed live at **[harborclaim-demo-2630.azurewebsites.net](https://harborclaim-demo-2630.azurewebsites.net)**
   (Azure App Service, Free F1 plan), deployed from this repo's `main` branch. Deployment is
   a **manual sync**, not automatic on push (`isManualIntegration: true`, no webhook): after
@@ -442,8 +443,8 @@ Decisions already made (2026-10-18 to 10-24 planning sessions):
   proves it), and the terms are defined in section 0.
 - **Design reviewed 2026-10-24** by an independent subagent against the real sample PDFs and the
   current code; its fixes are in AGENTS.md (section 14 lists them).
-- **Provider: OpenRouter, one free model pinned by ID** (changed from Azure OpenAI on
-  2026-10-24, owner's decision): $0, called with `httpx` (no OpenAI package or service), never the
+- **Provider: OpenRouter, an ordered list of tested free models with failover** (changed from
+  Azure OpenAI on 2026-10-24; list added 2026-10-25; Nemotron 3.5 VL selected first): $0, called with `httpx` (no OpenAI package or service), never the
   `openrouter/free` router. The model is chosen by testing (a probe, then a golden-set bake-off;
   AGENTS.md section 11.4). Document Intelligence not needed; Phase 4 is not a prerequisite.
 - **Regex extraction stays** as the deterministic reference; its label stays "not AI".
@@ -462,52 +463,66 @@ runs out.
 - [x] Commit the uncommitted work first: done 2026-10-24, two local commits (`852e07b`,
       `7d1fe0c`), not pushed.
 - [x] Provider and cost: OpenRouter, a free model, $0 (2026-10-24).
-- [ ] Approve this plan.
-- [ ] Owner puts `OPENROUTER_API_KEY` in `.env` (Claude never reads it). Other settings by name:
-      `AI_PROVIDER`, `AI_ENABLED`, `AI_MODEL`, `AI_CLAIMANT_CHAT`, `AI_TIMEOUT_SECONDS`, and the
-      per-agent daily limits. Check OpenRouter's current free rate limits.
-- [ ] **Model probe, round 1** (AGENTS.md section 11.4): `scripts/model_probe.py` sends the same
-      3 requests to each shortlisted free model (about 12 requests, $0; owner's go-ahead
-      first), and the results pick the top two. Shortlist from the 2026-10-24 search:
-      `google/gemma-4-31b-it:free`, `google/gemma-4-26b-a4b-it:free`,
-      `nvidia/nemotron-3-super-120b-a12b:free`, `nvidia/nemotron-3.5-super-vl:free`.
+- [x] Plan approved by the owner (2026-10-25).
+- [x] Owner put `OPENROUTER_API_KEY` in `.env` (Claude never reads it); the key checks out as
+      valid, free tier (about 50 requests a day across all models, 20 a minute), $0 used. Other
+      settings by name: `AI_PROVIDER`, `AI_ENABLED`, `AI_MODELS`, `AI_CLAIMANT_CHAT`,
+      `AI_TIMEOUT_SECONDS`, and the per-agent daily limits.
+- [x] **Model probe, round 1** (`scripts/model_probe.py`; AGENTS.md section 11.4 has the
+      results): 8 free models, 42 requests, $0. **Selected: `nvidia/nemotron-3.5-super-vl:free`
+      with reasoning off** (all 10 quotes verbatim; declined to decide). Dots out (it said "the
+      claim cannot be approved"); Nemotron 120B out (down); Gemma, XingChen, Flint to retry.
+- [x] **Model list with failover** (owner's request, 2026-10-25): `AI_MODELS` holds up to 3
+      tested models in order; a busy or broken model fails over to the next; a run stays on the
+      model that answered; per-model settings in `ai_client.MODEL_SETTINGS`.
+- [ ] **Probe retry for backups** after the daily reset (about 6 requests): the two Gemma models,
+      and Flint with a larger output budget. Passing ones join `AI_MODELS` after Nemotron.
+- [ ] Optional: one-time OpenRouter credit of $10 or more raises the daily cap to about 1,000
+      (owner's call).
 - [x] Claimant assistant (5.6): decided 2026-10-24 to keep it, built last, after 5.5. The
       design review had recommended cutting it; it's the first thing dropped if time runs out.
 
-**5.1 Groundwork** (no model call anywhere yet)
+**5.1 Groundwork** (no model call anywhere yet) -- done 2026-10-25
 
-- [ ] Fix a bug the agents would inherit: two uploads with the same filename on one claim are
+- [x] Fix a bug the agents would inherit: two uploads with the same filename on one claim are
       stored as `name.pdf` and `name-2.pdf` on disk, but both rows keep the name `name.pdf`, so
       `get_document_path` always returns the first and the second file can't be opened.
       Store the de-duplicated name; regression test first.
-- [ ] `extraction.py`: make the document reader public and page-aware, keeping `extract_facts`
+- [x] `extraction.py`: make the document reader public and page-aware, keeping `extract_facts`
       output identical; `storage.read_document_pages(claim_id, filename)` wraps it, so agents
       never handle file paths (ready for Blob Storage in Phase 4).
-- [ ] `storage.py`: the `agent_runs` table (AGENTS.md section 10), its queries, `reset()`.
-- [ ] `ai_client.py`: off by default, timeout, never raises; calls OpenRouter's
+- [x] `storage.py`: the `agent_runs` table (AGENTS.md section 10), its queries, `reset()`.
+- [x] `ai_client.py`: off by default, timeout, never raises; calls OpenRouter's
       `/chat/completions` endpoint with `httpx` (already in `requirements.txt`). No `openai`
-      package, no new dependency.
-- [ ] `tests/conftest.py`: pin `AI_PROVIDER`, `AI_ENABLED`, `AI_CLAIMANT_CHAT` to off.
-- [ ] `.env.example` and README: the settings, names only.
+      package, no new dependency. Model list with failover and per-model settings.
+- [x] Tests: `tests/test_agents.py` (28: reader, `agent_runs`, client, failover).
+- [x] `tests/conftest.py`: pin `AI_PROVIDER`, `AI_ENABLED`, `AI_MODELS`, `AI_CLAIMANT_CHAT`, `OPENROUTER_API_KEY` to off.
+- [x] `.env.example` and README: the settings, names only.
 
-**5.2 The shared harness, the tools and the gate** (fake client only)
+**5.2 The shared harness, the tools and the gate** (fake client only) -- done 2026-10-26,
+including Challenge 1
 
-- [ ] `agents.py`: the loop (AGENTS.md section 4): every tool call answered, allowlist,
+- [x] `agents.py`: the loop (AGENTS.md section 4): every tool call answered, allowlist,
       argument checks, 3 model calls and 3 tool calls (parallel calls counted), scope bound in
       Python, empty results valid, exceptions stop the run, per-agent daily limits, the trace,
       code-written refusals.
-- [ ] `agent_tools.py`: the read-only tools for all three charters, deterministic Python.
-- [ ] `agent_gate.py`: rules G1-G8 and the code-computed "Not summarised" / "Not read in full"
+- [x] `agent_tools.py`: the read-only tools for all three charters, deterministic Python. Search
+      returns whole sentences (PDF line breaks split sentences mid-way).
+- [x] `agent_gate.py`: rules G1-G8 and the code-computed "Not summarised" / "Not read in full"
       lists.
-- [ ] `tests/test_agents.py`: the offline tests in AGENTS.md section 11, using the real sample
+- [x] `tests/test_agents.py`: the offline tests in AGENTS.md section 11, using the real sample
       PDFs' text: limits, read-only proof, scope, one pass/fail per gate rule, the
       pressure-test case ($2,150 vs $2,500), the false-positive sentences, the injection
-      document, `<script>` in model output.
+      document. 160 tests in the file after Challenge 1, zero model requests. (`<script>` in
+      model output is tested in 5.3, with the page that renders it.)
 
-- [ ] **Challenge 1 (independent subagent):** try to break the harness and gate before any agent
+- [x] **Challenge 1 (independent subagent):** try to break the harness and gate before any agent
       is wired in: exceed the caps, call tools out of scope, slip invented numbers and quotes
       past G3/G4, false positives on G5, injection text. Every hole it finds becomes a failing
       test first, then a fix (AGENTS.md section 11.5).
+      **Done 2026-10-26:** its attack suite went from 107 failing cases to 4, all accepted as
+      known limits (AGENTS.md section 14). Worst hole fixed: a claimant answer promising
+      "approved, you'll receive $4,240.00" passed the gate. 87 regression tests added.
 
 **5.3 Agent 1: intake review** -- **(demoable)**
 
@@ -529,8 +544,7 @@ runs out.
       default mode prints faithfulness, finding recall, false findings, violations and the
       not-summarised count.
 - [ ] **Model bake-off, round 2:** `eval_agents.py --model` for the probe's top two models;
-      pin the winner in `AI_MODEL`, record the runner-up as the fallback, both scorecards in
-      `AI_USAGE.md`.
+      the models that pass go into `AI_MODELS` in order, scorecards in `AI_USAGE.md`.
 - [ ] First live run locally; fixtures replayed in the test suite; results, model, prompt
       version and one observed limitation recorded in `AI_USAGE.md`.
 
@@ -598,7 +612,7 @@ the claimant is notified. Fictional demo data only. The owner is Asim Khan.
 - Server: `python -m uvicorn app:app --port 8123`. **No `--reload`**: it didn't notice Python
   edits in this OneDrive folder and died mid-edit. Restart the server by hand after changing any
   `.py` file; templates and CSS/JS changes show on a refresh.
-- Tests: `python -m pytest -q` from inside this folder (94 tests, about 45 s, includes the
+- Tests: `python -m pytest -q` from inside this folder (262 tests, about 90 s, includes the
   Playwright browser tests; `python -m playwright install chromium` once).
 - Screenshots: `python scripts/capture_screenshots.py` regenerates all 14 in
   `docs/screenshots/` from a live instance.

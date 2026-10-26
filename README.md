@@ -359,7 +359,15 @@ this repo's `main` branch. To reproduce it:
    links; set it on the hosted site, locally it is worked out from the request) and
    `ADJUSTER_NOTIFY_EMAIL` (an inbox that gets an email when a claim is ready for review).
    See `email_delivery.py` and `ROADMAP.md` (Phase 3).
-6. Add the live callback URL to the same Google OAuth client's Authorized redirect URIs:
+6. **AI agents (Phase 5, in progress; off by default).** No model is ever called unless you
+   opt in. Names only: `AI_PROVIDER` (`openrouter` to enable; blank = off), `AI_ENABLED`
+   (`false` switches AI off without clearing the rest), `OPENROUTER_API_KEY`, `AI_MODELS` (tested
+   free model IDs in order of preference; the next is tried when one is busy or down; never the
+   `openrouter/free` router), `AI_TIMEOUT_SECONDS`. The model is
+   a free OpenRouter model called with `httpx`; no OpenAI service, model, key or package is
+   used. Free providers may log prompts, which is acceptable only because every claim and
+   document here is fictional. See `ai_client.py` and `docs/design/AGENTS.md`.
+7. Add the live callback URL to the same Google OAuth client's Authorized redirect URIs:
    `https://<your-app-name>.azurewebsites.net/auth/google/callback` — alongside the local one,
    not replacing it.
 

@@ -130,6 +130,28 @@ CREATE TABLE IF NOT EXISTS notifications (
     read_at TEXT,
     delivery TEXT NOT NULL DEFAULT 'simulated'
 );
+
+-- One row per Phase 5 agent run (docs/design/AGENTS.md section 10). Append-only: a row is
+-- written as "running" and finished once; nothing changes it after finished_at.
+CREATE TABLE IF NOT EXISTS agent_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    claim_id TEXT REFERENCES claims(claim_id),
+    agent TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    question TEXT,
+    status TEXT NOT NULL,
+    error_type TEXT,
+    model TEXT,
+    prompt_version TEXT NOT NULL,
+    output_json TEXT,
+    gate_json TEXT,
+    trace_json TEXT,
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    latency_ms INTEGER,
+    started_at TEXT NOT NULL,
+    finished_at TEXT
+);
 """
 
 # A fresh checkout (or a DB created before accounts existed) may already have
@@ -199,6 +221,7 @@ def reset() -> None:
     the DELETE.
     """
     with _connect() as conn:
+        conn.execute("DELETE FROM agent_runs")
         conn.execute("DELETE FROM adjuster_decisions")
         conn.execute("DELETE FROM status_history")
         conn.execute("DELETE FROM documents")
@@ -475,6 +498,31 @@ def get_document_path(claim_id: str, filename: str) -> Path | None:
     return path if path.exists() else None
 
 
+def read_document_pages(claim_id: str, filename: str) -> list[str] | None:
+    """A stored document's text, one string per page; None if the claim has no such document.
+
+    The only way the Phase 5 agents read a document: by claim and filename, never by path,
+    so moving uploads to Blob Storage later (ROADMAP Phase 4) changes this function and
+    nothing above it. An unreadable file (image, zip) is an empty list, not None.
+    """
+    path = get_document_path(claim_id, filename)
+    if path is None:
+        return None
+    from extraction import read_document_pages as read_pages  # lazy: keeps pypdf out of storage's imports
+    return read_pages(path)
+
+
+def claims_for_policy(policy_id: str) -> list[dict]:
+    """Claim IDs and filed times on one policy, oldest first -- no claimant details, no contents.
+    For the intake agent's find_claims_for_policy tool."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT claim_id, created_at FROM claims WHERE policy_id = ? ORDER BY created_at",
+            (policy_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+
 def list_claims() -> list[dict]:
     """All claims, regardless of owner -- for the adjuster queue only."""
     with _connect() as conn:
@@ -593,6 +641,98 @@ def mark_notifications_read(claimant_email: str) -> None:
             "UPDATE notifications SET read_at = ? WHERE claimant_email = ? AND read_at IS NULL",
             (_now(), claimant_email),
         )
+
+
+AGENT_RUN_STATUSES = ("passed", "flagged", "unavailable")
+_AGENT_RUN_JSON = ("output_json", "gate_json", "trace_json")
+
+
+def _agent_run(row: sqlite3.Row) -> dict:
+    run = dict(row)
+    for column in _AGENT_RUN_JSON:
+        run[column.removesuffix("_json")] = json.loads(run.pop(column)) if run[column] else None
+    return run
+
+
+def start_agent_run(claim_id: str | None, agent: str, actor: str, prompt_version: str,
+                    question: str | None = None, model: str | None = None) -> int:
+    """Open a run as "running" and return its id."""
+    with _connect() as conn:
+        cur = conn.execute(
+            """INSERT INTO agent_runs (claim_id, agent, actor, question, status, model, prompt_version,
+                                       started_at)
+               VALUES (?, ?, ?, ?, 'running', ?, ?, ?)""",
+            (claim_id, agent, actor, question, model, prompt_version, _now()),
+        )
+        return cur.lastrowid
+
+
+def finish_agent_run(run_id: int, status: str, *, error_type: str | None = None, output=None, gate=None,
+                     trace=None, input_tokens: int | None = None, output_tokens: int | None = None,
+                     latency_ms: int | None = None) -> None:
+    """Close a running run, once. A run that is already finished is left exactly as it was."""
+    if status not in AGENT_RUN_STATUSES:
+        raise ValueError(f"unknown agent run status {status!r}")
+    dumps = lambda value: None if value is None else json.dumps(value)
+    with _connect() as conn:
+        conn.execute(
+            """UPDATE agent_runs SET status = ?, error_type = ?, output_json = ?, gate_json = ?,
+                      trace_json = ?, input_tokens = ?, output_tokens = ?, latency_ms = ?, finished_at = ?
+               WHERE id = ? AND status = 'running'""",
+            (status, error_type, dumps(output), dumps(gate), dumps(trace), input_tokens, output_tokens,
+             latency_ms, _now(), run_id),
+        )
+
+
+def get_agent_run(run_id: int) -> dict | None:
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM agent_runs WHERE id = ?", (run_id,)).fetchone()
+        return _agent_run(row) if row else None
+
+
+def latest_finished_agent_run(claim_id: str, agent: str) -> dict | None:
+    """The newest finished run, so a newer run still in progress never hides it."""
+    with _connect() as conn:
+        row = conn.execute(
+            """SELECT * FROM agent_runs WHERE claim_id = ? AND agent = ? AND status != 'running'
+               ORDER BY id DESC LIMIT 1""",
+            (claim_id, agent),
+        ).fetchone()
+        return _agent_run(row) if row else None
+
+
+def recent_agent_runs(claim_id: str, agent: str, limit: int = 5) -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM agent_runs WHERE claim_id = ? AND agent = ? ORDER BY id DESC LIMIT ?",
+            (claim_id, agent, limit),
+        ).fetchall()
+        return [_agent_run(row) for row in rows]
+
+
+def agent_run_in_progress(claim_id: str, agent: str, timeout_seconds: int) -> bool:
+    """A "running" row younger than the timeout. An older one was lost (a restart mid-run) and
+    is treated as unavailable, so it never blocks a re-run."""
+    cutoff = datetime.fromtimestamp(datetime.now(timezone.utc).timestamp() - timeout_seconds, timezone.utc)
+    with _connect() as conn:
+        row = conn.execute(
+            """SELECT 1 FROM agent_runs WHERE claim_id = ? AND agent = ? AND status = 'running'
+               AND started_at > ? LIMIT 1""",
+            (claim_id, agent, cutoff.isoformat(timespec="seconds")),
+        ).fetchone()
+        return row is not None
+
+
+def agent_runs_today(agent: str, actor: str | None = None) -> int:
+    """Runs started since midnight UTC, for one agent (and optionally one person): the daily limits."""
+    midnight = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    query = "SELECT COUNT(*) AS n FROM agent_runs WHERE agent = ? AND started_at >= ?"
+    params: list = [agent, midnight.isoformat(timespec="seconds")]
+    if actor is not None:
+        query += " AND actor = ?"
+        params.append(actor)
+    with _connect() as conn:
+        return conn.execute(query, params).fetchone()["n"]
 
 
 def claims_needing_adjuster_attention() -> list[dict]:

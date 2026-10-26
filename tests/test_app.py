@@ -156,6 +156,24 @@ def test_uploaded_file_is_persisted_to_disk_and_downloadable():
     assert download.content == b"fictional repair estimate bytes"
 
 
+def test_two_uploads_with_the_same_name_are_both_stored_and_downloadable():
+    # Regression: the second file was saved to disk as photo-2.jpg but its row kept the name
+    # photo.jpg, so it could never be opened (every lookup by name returned the first file).
+    login_as_claimant(CLAIMANT)
+    response = submit(
+        policy_id="POL-DUP",
+        incident_date="2026-02-02",
+        description="Two photos that happen to share a filename.",
+        files=[("photo.jpg", b"first photo"), ("photo.jpg", b"second photo")],
+    )
+    claim_id = response.headers["location"].rsplit("/", 1)[-1]
+
+    names = storage.get_claim(claim_id)["claim"]["documents"]
+    assert names == ["photo.jpg", "photo-2.jpg"]
+    assert client.get(f"/claims/{claim_id}/documents/photo.jpg").content == b"first photo"
+    assert client.get(f"/claims/{claim_id}/documents/photo-2.jpg").content == b"second photo"
+
+
 def test_a_claimant_cannot_view_another_claimants_claim():
     login_as_claimant(CLAIMANT)
     response = submit(

@@ -470,16 +470,19 @@ async def submit_claim(
     for upload in uploads:
         content = await upload.read()
         stored_path = storage.save_uploaded_file(claim_id, upload.filename, content)
+        # Record the name the file was actually saved under: a second "photo.jpg" is saved as
+        # "photo-2.jpg", and every later lookup (downloads, citations) is by this name.
         storage.add_document(
             claim_id=claim_id,
-            filename=upload.filename,
+            filename=stored_path.name,
             stored_path=stored_path,
             content_type=upload.content_type,
             size_bytes=len(content),
         )
         stored_documents.append(
-            {"filename": upload.filename, "stored_path": stored_path, "content_type": upload.content_type}
+            {"filename": stored_path.name, "stored_path": stored_path, "content_type": upload.content_type}
         )
+    document_names = [d["filename"] for d in stored_documents]
 
     # Pipeline continues past the completeness check regardless of status --
     # even an incomplete claim gets whatever can be extracted from what it

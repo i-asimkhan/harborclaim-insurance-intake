@@ -24,3 +24,11 @@ os.environ["EMAIL_PROVIDER"] = "simulated"
 os.environ["EMAIL_ENABLED"] = ""
 os.environ["ADJUSTER_NOTIFY_EMAIL"] = ""
 os.environ["APP_BASE_URL"] = ""
+
+# Same for AI (Phase 5): the .env may switch real model calls on. Tests must never call a model,
+# so AI is pinned off here. Tests that need it on use monkeypatch and a fake ai_client._post.
+os.environ["AI_PROVIDER"] = ""
+os.environ["AI_ENABLED"] = ""
+os.environ["AI_MODELS"] = ""
+os.environ["AI_CLAIMANT_CHAT"] = ""
+os.environ["OPENROUTER_API_KEY"] = ""

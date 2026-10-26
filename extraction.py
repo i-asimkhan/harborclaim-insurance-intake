@@ -39,21 +39,29 @@ INCIDENT_KEYWORDS = {
 }
 
 
-def _read_document_text(stored_path: Path, content_type: str | None) -> str:
-    """Best-effort text read. Returns "" for anything this mock can't read
-    (images, zips, unknown binary) -- it does not guess or hallucinate text
-    for formats it has no real way to parse.
+def read_document_pages(stored_path: Path) -> list[str]:
+    """Best-effort text read, one string per page. A .txt file is one page. Returns [] for
+    anything that can't be read as text (images, zips, unknown binary, a damaged file) -- it
+    does not guess or hallucinate text for formats it has no real way to parse.
+
+    Public because the Phase 5 agents cite documents by page; they reach it only through
+    storage.read_document_pages(claim_id, filename), never with a path of their own.
     """
     suffix = stored_path.suffix.lower()
     try:
         if suffix == ".txt":
-            return stored_path.read_text(encoding="utf-8", errors="ignore")
+            return [stored_path.read_text(encoding="utf-8", errors="ignore")]
         if suffix == ".pdf":
             reader = PdfReader(str(stored_path))
-            return "\n".join(page.extract_text() or "" for page in reader.pages)
+            return [page.extract_text() or "" for page in reader.pages]
     except Exception:
-        return ""
-    return ""
+        return []
+    return []
+
+
+def _read_document_text(stored_path: Path, content_type: str | None) -> str:
+    """The whole document as one string ("" if unreadable), for the regex scan below."""
+    return "\n".join(read_document_pages(stored_path))
 
 
 def extract_facts(description: str, documents: list[dict]) -> list[dict]:

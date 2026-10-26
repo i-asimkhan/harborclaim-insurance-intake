@@ -32,42 +32,240 @@ Run: uvicorn app:app --reload
 
 import os
 import uuid
+from datetime import date, datetime, timezone
+from pathlib import Path
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 import storage
+import email_delivery
+from email_delivery import send_email
 from auth import get_current_adjuster, get_current_user, router as auth_router
 from extraction import extract_facts
 from main import check_claim, READY_FOR_REVIEW, NEEDS_INFORMATION
 from summary import generate_summary
 from validation import (
+    ALLOWED_EXTENSIONS,
     CLAIM_TYPES,
+    DESCRIPTION_MAX_LENGTH,
+    EARLIEST_INCIDENT_DATE,
+    MAX_FILE_SIZE_BYTES,
+    MAX_FILES,
+    POLICY_ID_MAX_LENGTH,
     normalize_claim_type,
     validate_claim_fields,
     validate_claim_type,
     validate_files,
+    validate_not_empty,
 )
 
 DECISIONS = ["APPROVED", "DECLINED", "NEEDS_MORE_REVIEW"]
 
 
-def _notify(claim_id: str, claimant_email: str, message: str) -> None:
-    """Record a notification on both mock channels. See storage.add_notification
-    -- neither channel actually delivers anything; this just logs that a real
-    system would have, which is enough to demonstrate the pipeline stage
-    without pretending to send real email.
+def _base_url(request: Request) -> str:
+    """Absolute site address for links in emails. APP_BASE_URL (set on the hosted site, where
+    the app sits behind a proxy) wins; locally the request's own address is right."""
+    return (os.environ.get("APP_BASE_URL", "").strip() or str(request.base_url)).rstrip("/")
+
+
+def _email_content(claim_id: str, heading: str, message: str, link: str, button: str) -> tuple[str, str]:
+    """Plain-text and HTML versions of one notification email. Only the status message and
+    the claim number go in -- no description, no document text."""
+    text = "\n".join([message, "", f"Claim number: {claim_id}", f"{button}: {link}"])
+    html = templates.get_template("email/notification.html").render(
+        heading=heading, message=message, claim_id=claim_id, link=link, button=button,
+    )
+    return text, html
+
+
+def _send_and_record(notification_id: int, to: str, subject: str, text: str, html: str) -> None:
+    """Background task: send the email, then store what happened on its notification row."""
+    storage.set_notification_delivery(notification_id, send_email(to, subject, text, html))
+
+
+def _notify(claim_id: str, claimant_email: str, message: str, base_url: str,
+            background: BackgroundTasks) -> None:
+    """Record a notification on both channels (in-app and email).
+
+    The in-app channel is a row the app shows. The email channel goes through
+    email_delivery.send_email. When email is simulated the row is stored as such straight
+    away; when it is real, the row is stored as "queued" and the send happens after the
+    response has gone out (a background task), which then records "sent" or "failed" -- so the
+    page never waits on Azure and always reports what really happened. A failed email never
+    breaks the request: send_email can't raise. The email links to the claim and carries only
+    the status message and the claim number.
     """
     storage.add_notification(claim_id, claimant_email, "in_app", message)
-    storage.add_notification(claim_id, claimant_email, "email", message)
+    subject = f"HarborClaim: update on claim {claim_id}"
+    if email_delivery.provider() == email_delivery.SIMULATED:
+        storage.add_notification(claim_id, claimant_email, "email", message)
+        return
+    text, html = _email_content(
+        claim_id, "Claim update", message, f"{base_url}/claims/{claim_id}", "View your claim"
+    )
+    row_id = storage.add_notification(claim_id, claimant_email, "email", message, delivery="queued")
+    background.add_task(_send_and_record, row_id, claimant_email, subject, text, html)
+
+
+def _notify_adjusters(claim_id: str, claim_type: str, base_url: str, background: BackgroundTasks) -> None:
+    """Email the adjusters' shared inbox (ADJUSTER_NOTIFY_EMAIL) that a claim is ready for
+    review, after the response. Nothing happens when the setting is empty. Not logged as a
+    notification row -- those belong to claimants -- and a failure is already logged by
+    send_email."""
+    to = os.environ.get("ADJUSTER_NOTIFY_EMAIL", "").strip()
+    if not to:
+        return
+    message = f"A new {claim_type} claim is ready for review."
+    text, html = _email_content(
+        claim_id, "Ready for review", message, f"{base_url}/adjuster/claims/{claim_id}", "Open in review queue"
+    )
+    background.add_task(send_email, to, f"HarborClaim: claim {claim_id} ready for review", text, html)
+
+
+def _claimant_nav(claimant_email: str) -> dict:
+    """Context for the claimant top nav's notification bell (_claimant_header.html).
+
+    Every event is logged on both channels, so the bell counts and previews only
+    the in_app rows -- one status change shows as one notification, not two.
+    """
+    in_app = [n for n in storage.list_notifications_for(claimant_email) if n["channel"] == "in_app"]
+    return {
+        "unread_count": sum(1 for n in in_app if not n["read_at"]),
+        "notification_preview": in_app[:5],
+    }
+
+
+# Claimant view of extracted facts: one row per kind of fact, each distinct value
+# shown once with every document it came from, instead of one table row per hit.
+FACT_GROUPS = [
+    ("incident_type", "What happened", "chat"),
+    ("mentioned_amount", "Amounts mentioned", "money"),
+    ("mentioned_date", "Dates mentioned", "calendar"),
+]
+
+
+def _amount_key(value: str) -> float:
+    try:
+        return float(value.replace("$", "").replace(",", ""))
+    except ValueError:
+        return 0.0
+
+
+def _group_facts(facts: list[dict]) -> dict:
+    groups = []
+    for field, label, icon in FACT_GROUPS:
+        values: dict[str, list[str]] = {}
+        for f in facts:
+            if f["field"] == field:
+                sources = values.setdefault(f["value"], [])
+                if f["source"] not in sources:
+                    sources.append(f["source"])
+        if not values:
+            continue
+        items = [{"value": v, "sources": src} for v, src in values.items()]
+        if field == "mentioned_amount":
+            items.sort(key=lambda i: _amount_key(i["value"]))
+        elif field == "mentioned_date":
+            items.sort(key=lambda i: i["value"])
+        group_sources = []
+        for item in items:
+            group_sources += [s for s in item["sources"] if s not in group_sources]
+        groups.append({"label": label, "icon": icon, "items": items, "sources": group_sources})
+    unread = [f["source"] for f in facts if f["field"] == "document_not_processed"]
+    return {"groups": groups, "unread_documents": unread}
+
+
+def _group_notifications(rows: list[dict]) -> list[dict]:
+    """One entry per event instead of one per channel row. _notify writes the
+    same message on two channels back to back, so consecutive rows with the
+    same claim and message (and a channel not already in the entry) are one
+    event. Matching on adjacency, not exact timestamps: the two rows can land
+    either side of a second boundary.
+    """
+    events: list[dict] = []
+    for row in rows:
+        last = events[-1] if events else None
+        if (last and last["claim_id"] == row["claim_id"] and last["message"] == row["message"]
+                and row["channel"] not in last["channels"]):
+            last["channels"].append(row["channel"])
+            last["unread"] = last["unread"] or not row["read_at"]
+            if row["channel"] == "email":
+                last["email_delivery"] = row["delivery"]
+            continue
+        events.append({
+            "claim_id": row["claim_id"],
+            "message": row["message"],
+            "created_at": row["created_at"],
+            "channels": [row["channel"]],
+            "unread": not row["read_at"],
+            "email_delivery": "simulated",
+        })
+        last = events[-1]
+        if row["channel"] == "email":
+            last["email_delivery"] = row["delivery"]
+    for event in events:
+        event["channels"].sort(key=lambda c: c != "in_app")  # in-app first
+    return events
+
+
+QUEUE_VIEWS = {
+    "all": "All claims",
+    "awaiting": "Awaiting a decision",
+    "waiting": "Waiting on claimant",
+    "decided": "Decided",
+}
+
+
+def _queue_category(record: dict) -> str:
+    """Where a claim sits in the queue, by its *latest* decision: Approved or Declined
+    finishes it, but "Needs more review" means the adjuster still has to act, so it stays
+    with the claims awaiting a decision (the same rule as the bell, in storage).
+    """
+    latest = record["decisions"][-1]["decision"] if record["decisions"] else None
+    if latest and latest != "NEEDS_MORE_REVIEW":
+        return "decided"
+    return "awaiting" if record["status"] == READY_FOR_REVIEW else "waiting"
+
+
+def _order_queue(records: list[dict]) -> list[dict]:
+    """Work first: claims awaiting a decision (oldest first, so nothing sits
+    unnoticed), then claims waiting on the claimant, then decided ones (newest first).
+    """
+    buckets: dict[str, list[dict]] = {"awaiting": [], "waiting": [], "decided": []}
+    for record in records:
+        buckets[_queue_category(record)].append(record)
+    filed = lambda r: r["history"][0]["at"]
+    return (
+        sorted(buckets["awaiting"], key=filed)
+        + sorted(buckets["waiting"], key=filed, reverse=True)
+        + sorted(buckets["decided"], key=filed, reverse=True)
+    )
+
+
+def _queue_matches(record: dict, query: str) -> bool:
+    """Every word typed must appear somewhere in claim ID, claimant, policy or type."""
+    claim = record["claim"]
+    type_label = CLAIM_TYPES[claim["claim_type"]][0] if claim["claim_type"] in CLAIM_TYPES else claim["claim_type"]
+    haystack = " ".join(
+        [claim["claim_id"], claim["claimant_email"] or "", claim["policy_id"] or "", type_label]
+    ).lower()
+    return all(term in haystack for term in query.lower().split())
+
+
+def _adjuster_nav() -> dict:
+    """Context for the adjuster top nav's bell (_adjuster_header.html): the same
+    live "needs attention" list the queue and /adjuster/notifications compute.
+    """
+    return {"needs_attention": storage.claims_needing_adjuster_attention()}
 
 
 @asynccontextmanager
@@ -95,6 +293,58 @@ app.include_router(auth_router)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 templates.env.globals["CLAIM_TYPES"] = CLAIM_TYPES
+# Browser-side input limits on the claim form mirror validation.py's server-side
+# ones, so both always agree. The server checks still run on every submission.
+templates.env.globals["LIMITS"] = {
+    "policy_id_max": POLICY_ID_MAX_LENGTH,
+    "description_max": DESCRIPTION_MAX_LENGTH,
+    "earliest_date": EARLIEST_INCIDENT_DATE.isoformat(),
+    "max_files": MAX_FILES,
+    "max_file_bytes": MAX_FILE_SIZE_BYTES,
+    "extensions": sorted(ALLOWED_EXTENSIONS),
+}
+templates.env.globals["today_iso"] = lambda: date.today().isoformat()
+
+STATIC_DIR = Path(__file__).parent / "static"
+
+
+def static_url(path: str) -> str:
+    """/static/<path>?v=<mtime>, so a browser never keeps using a stale cached
+    stylesheet or script after the file changes (the dev server isn't restarted
+    for CSS/JS edits, so this is computed per render, not once at startup)."""
+    try:
+        version = int((STATIC_DIR / path).stat().st_mtime)
+    except OSError:
+        version = 0
+    return f"/static/{path}?v={version}"
+
+
+def time_ago(iso: str) -> str:
+    """"just now", "5 minutes ago", "yesterday", ... for an ISO timestamp; older
+    than a week falls back to the date itself."""
+    try:
+        then = datetime.fromisoformat(iso)
+    except (TypeError, ValueError):
+        return iso
+    seconds = int((datetime.now(timezone.utc) - then).total_seconds())
+    if seconds < 60:
+        return "just now"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes} minute{'s' if minutes != 1 else ''} ago"
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours} hour{'s' if hours != 1 else ''} ago"
+    days = hours // 24
+    if days == 1:
+        return "yesterday"
+    if days < 7:
+        return f"{days} days ago"
+    return then.date().isoformat()
+
+
+templates.env.globals["static_url"] = static_url
+templates.env.filters["ago"] = time_ago
 
 
 @app.exception_handler(Exception)
@@ -139,13 +389,14 @@ def home(
     return templates.TemplateResponse(
         request,
         "index.html",
-        {"user": user, "adjuster": adjuster, "unread_count": storage.unread_notification_count_for(user["email"])},
+        {"user": user, "adjuster": adjuster, "active": "new", **_claimant_nav(user["email"])},
     )
 
 
 @app.post("/claims")
 async def submit_claim(
     request: Request,
+    background: BackgroundTasks,
     policy_id: str = Form(""),
     incident_date: str = Form(""),
     description: str = Form(""),
@@ -163,11 +414,15 @@ async def submit_claim(
     claim_type = normalize_claim_type(claim_type)
     errors = validate_claim_type(claim_type)
     errors += validate_claim_fields(policy_id, incident_date, description)
+    errors += validate_not_empty(policy_id, incident_date, description, len(uploads))
+    # Validate the uploads as one batch: validate_files' file-count limit only
+    # works if it sees every file at once, not one single-file list per upload.
+    files_and_sizes = []
     for upload in uploads:
         upload.file.seek(0, 2)  # seek to end to get size without reading content twice
-        size = upload.file.tell()
+        files_and_sizes.append((upload.filename, upload.file.tell()))
         upload.file.seek(0)
-        errors.extend(validate_files([(upload.filename, size)]))
+    errors.extend(validate_files(files_and_sizes))
     if errors:
         return templates.TemplateResponse(
             request,
@@ -175,7 +430,8 @@ async def submit_claim(
             {
                 "user": user,
                 "adjuster": None,
-                "unread_count": storage.unread_notification_count_for(user["email"]),
+                "active": "new",
+                **_claimant_nav(user["email"]),
                 "errors": errors,
                 "form": {
                     "policy_id": policy_id,
@@ -214,16 +470,19 @@ async def submit_claim(
     for upload in uploads:
         content = await upload.read()
         stored_path = storage.save_uploaded_file(claim_id, upload.filename, content)
+        # Record the name the file was actually saved under: a second "photo.jpg" is saved as
+        # "photo-2.jpg", and every later lookup (downloads, citations) is by this name.
         storage.add_document(
             claim_id=claim_id,
-            filename=upload.filename,
+            filename=stored_path.name,
             stored_path=stored_path,
             content_type=upload.content_type,
             size_bytes=len(content),
         )
         stored_documents.append(
-            {"filename": upload.filename, "stored_path": stored_path, "content_type": upload.content_type}
+            {"filename": stored_path.name, "stored_path": stored_path, "content_type": upload.content_type}
         )
+    document_names = [d["filename"] for d in stored_documents]
 
     # Pipeline continues past the completeness check regardless of status --
     # even an incomplete claim gets whatever can be extracted from what it
@@ -243,7 +502,10 @@ async def submit_claim(
         message = f"We still need: {', '.join(result['missing'])}. Please add these to your claim."
     else:
         message = "Your claim is complete and has been routed to an adjuster for review."
-    _notify(claim_id, user["email"], message)
+    base_url = _base_url(request)
+    _notify(claim_id, user["email"], message, base_url, background)
+    if result["status"] != NEEDS_INFORMATION:
+        _notify_adjusters(claim_id, claim_type, base_url, background)
 
     return RedirectResponse(url=f"/claims/{claim_id}", status_code=303)
 
@@ -269,7 +531,8 @@ def view_claim(request: Request, claim_id: str, user: dict | None = Depends(get_
             "user": user,
             "READY_FOR_REVIEW": READY_FOR_REVIEW,
             "NEEDS_INFORMATION": NEEDS_INFORMATION,
-            "unread_count": storage.unread_notification_count_for(user["email"]),
+            "facts_view": _group_facts(record["facts"]),
+            **_claimant_nav(user["email"]),
         },
     )
 
@@ -300,9 +563,21 @@ def list_claims(request: Request, user: dict | None = Depends(get_current_user))
         {
             "claims": storage.list_claims_for(user["email"]),
             "user": user,
-            "unread_count": storage.unread_notification_count_for(user["email"]),
+            "active": "claims",
+            **_claimant_nav(user["email"]),
         },
     )
+
+
+@app.get("/notifications/bell")
+def notification_bell(request: Request, user: dict | None = Depends(get_current_user)):
+    """Just the bell, for static/app.js to poll. 204 (not a redirect) when signed out, so the
+    script quietly stops instead of swapping a login page into the nav."""
+    if user is None:
+        return Response(status_code=204)
+    response = templates.TemplateResponse(request, "_bell.html", _claimant_nav(user["email"]))
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @app.get("/notifications")
@@ -315,7 +590,7 @@ def notifications(request: Request, user: dict | None = Depends(get_current_user
     return templates.TemplateResponse(
         request,
         "notifications.html",
-        {"notifications": items, "user": user, "unread_count": 0},
+        {"events": _group_notifications(items), "user": user, **_claimant_nav(user["email"])},
     )
 
 
@@ -326,17 +601,41 @@ def notifications(request: Request, user: dict | None = Depends(get_current_user
 # ---------------------------------------------------------------------------
 
 @app.get("/adjuster")
-def adjuster_queue(request: Request, adjuster: dict | None = Depends(get_current_adjuster)):
+def adjuster_queue(
+    request: Request,
+    view: str = "all",
+    q: str = "",
+    adjuster: dict | None = Depends(get_current_adjuster),
+):
     if adjuster is None:
         return RedirectResponse(url="/adjuster/login", status_code=303)
+
+    if view not in QUEUE_VIEWS:
+        view = "all"
+    query = q.strip()
+    ordered = _order_queue(storage.list_claims())
+    counts = {key: 0 for key in QUEUE_VIEWS}
+    for record in ordered:
+        counts["all"] += 1
+        counts[_queue_category(record)] += 1
+    shown = [
+        r for r in ordered
+        if (view == "all" or _queue_category(r) == view) and (not query or _queue_matches(r, query))
+    ]
 
     return templates.TemplateResponse(
         request,
         "adjuster_queue.html",
         {
-            "claims": storage.list_claims(),
-            "needs_attention": storage.claims_needing_adjuster_attention(),
+            "claims": shown,
+            "total": counts["all"],
+            "counts": counts,
+            "views": QUEUE_VIEWS,
+            "view": view,
+            "q": query,
             "adjuster": adjuster,
+            "active": "queue",
+            **_adjuster_nav(),
             "READY_FOR_REVIEW": READY_FOR_REVIEW,
         },
     )
@@ -360,6 +659,8 @@ def adjuster_view_claim(request: Request, claim_id: str, adjuster: dict | None =
             "record": record,
             "adjuster": adjuster,
             "decisions": DECISIONS,
+            "facts_view": _group_facts(record["facts"]),
+            **_adjuster_nav(),
             "READY_FOR_REVIEW": READY_FOR_REVIEW,
             "NEEDS_INFORMATION": NEEDS_INFORMATION,
         },
@@ -367,7 +668,7 @@ def adjuster_view_claim(request: Request, claim_id: str, adjuster: dict | None =
 
 
 @app.post("/adjuster/claims/{claim_id}/decision")
-def record_decision(claim_id: str, decision: str = Form(...), adjuster: dict | None = Depends(get_current_adjuster)):
+def record_decision(request: Request, background: BackgroundTasks, claim_id: str, decision: str = Form(""), adjuster: dict | None = Depends(get_current_adjuster)):
     if adjuster is None:
         return RedirectResponse(url="/adjuster/login", status_code=303)
 
@@ -392,6 +693,8 @@ def record_decision(claim_id: str, decision: str = Form(...), adjuster: dict | N
         claim_id,
         record["claim"]["claimant_email"],
         f"An adjuster has recorded a decision on your claim: {decision.replace('_', ' ').title()}.",
+        _base_url(request),
+        background,
     )
     return RedirectResponse(url=f"/adjuster/claims/{claim_id}", status_code=303)
 
@@ -421,7 +724,7 @@ def adjuster_notifications(request: Request, adjuster: dict | None = Depends(get
         "adjuster_notifications.html",
         {
             "adjuster": adjuster,
-            "needs_attention": storage.claims_needing_adjuster_attention(),
+            **_adjuster_nav(),
             "recent_logins": storage.list_login_events()[:20],
         },
     )
@@ -433,7 +736,12 @@ def adjuster_login_form(request: Request, error: str | None = None):
 
 
 @app.post("/adjuster/login")
-def adjuster_login(request: Request, username: str = Form(...), password: str = Form(...)):
+def adjuster_login(request: Request, username: str = Form(""), password: str = Form("")):
+    # FastAPI treats a blank required form field as missing and answers with a raw JSON
+    # 422, so both default to "" and a blank submit is handled here, as a normal login
+    # page message. (The form's own `required` attributes catch it in the browser first.)
+    if not username.strip() or not password:
+        return RedirectResponse(url="/adjuster/login?error=empty", status_code=303)
     adjuster = storage.verify_adjuster(username, password)
     if adjuster is None:
         # Same generic error whether the username doesn't exist or the

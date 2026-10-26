@@ -15,7 +15,7 @@ in this project is made up for the class. Nothing here is a real claims system.
 |---|---|---|---|
 | Fact extraction | `extraction.py` | Reads real text (the claim description, plus the real text layer of uploaded `.txt`/`.pdf` files via `pypdf`), then finds dollar amounts, dates, and a fixed list of incident keywords with plain regular expressions. | No model call. No NLP library. No inference beyond a literal regex match. Can't read images, zips, or any format besides `.txt`/`.pdf`. |
 | Summary generation | `summary.py` | Assembles a paragraph from fields already on the claim plus whatever extraction found, using a fixed string template. | No model call. Generates nothing that isn't a direct restatement of data already stored and visible on the same page -- it cannot "hallucinate" a fact, because it has no way to introduce one that isn't already in the database. |
-| Notifications | `storage.add_notification` / `app._notify` | Writes a row to the `notifications` table on two "channels" (`in_app`, `email`) every time a claim's status changes or an adjuster decides on it. | No SMTP call, no email provider, no push service. The `email` channel is a label on a database row, not a sent message -- see the "Email (simulated)" tag on the notifications page. |
+| Notifications | `storage.add_notification` / `app._notify` / `email_delivery.py` | Writes a row to the `notifications` table on two "channels" (`in_app`, `email`) every time a claim's status changes or an adjuster decides on it. The email channel goes through `email_delivery.send_email`, and each row records what happened: `simulated`, `sent` or `failed`. | **By default nothing is sent**: with `EMAIL_PROVIDER` unset the email channel is a label on a database row, shown as "Email (simulated)". Real delivery through Azure Communication Services exists behind `EMAIL_PROVIDER=acs` and has been run once against the real service (one claim-filed email, locally); the hosted site is not switched on. No push service; the in-app channel is only a row shown on page load. |
 
 ## Why mocks instead of nothing
 
@@ -58,9 +58,10 @@ those are placeholders standing in for something not yet built.
   from, plus a way to flag when the generated text says something the source documents
   don't support -- the exact failure mode the Design Deliverable's pressure test asks
   about.
-- **Notifications**: a real email provider (e.g. SendGrid, SES) for the email channel, and
-  a push/websocket mechanism for the in-app channel to update live instead of only on
-  page load.
+- **Notifications**: real email works behind a flag (`email_delivery.py`, Azure
+  Communication Services, first real send done locally) but the hosted site still has to be
+  switched on; the in-app channel still needs a push/websocket mechanism to
+  update live instead of only on page load.
 
 ## Sample documents for trying this yourself
 

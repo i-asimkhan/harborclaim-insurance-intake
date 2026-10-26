@@ -2,124 +2,139 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ record.claim.claim_id }} -- Adjuster -- HarborClaim</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="{{ static_url('style.css') }}">
 </head>
 <body class="adjuster-theme">
-  <div class="page">
-    <header class="app-header">
-      <div class="brand">Harbor<span>Claim</span> <span class="role-tag">ADJUSTER</span></div>
-      <nav>
-        <a href="/adjuster">Queue</a>
-        <a href="/adjuster/notifications">Notifications</a>
-        <span class="hint">{{ adjuster.username }}</span>
-        <a href="/adjuster/logout">Sign out</a>
-      </nav>
-    </header>
+  <div class="page wide">
+    {% include "_adjuster_header.html" %}
 
-    <h1>Claim review</h1>
-    <p class="subtitle claim-id">{{ record.claim.claim_id }}</p>
+    <div class="page-head">
+      <span class="eyebrow">Claim review</span>
+      <div class="title-row">
+        <h1 class="claim-id">{{ record.claim.claim_id }}</h1>
+        {% if record.status == READY_FOR_REVIEW %}
+          <span class="badge lg ready">&#10003; READY_FOR_REVIEW</span>
+        {% else %}
+          <span class="badge lg needs">&#9888; NEEDS_INFORMATION</span>
+        {% endif %}
+      </div>
+    </div>
 
-    <div class="card">
-      {% if record.status == READY_FOR_REVIEW %}
-        <span class="badge ready">&#10003; READY_FOR_REVIEW</span>
-      {% else %}
-        <span class="badge needs">&#9888; NEEDS_INFORMATION</span>
-        <p style="margin-top:1rem; color:var(--ink-soft);">Missing from the claimant:</p>
-        <ul class="missing-list">
-          {% for field in record.missing %}
-          <li>{{ field }}</li>
-          {% endfor %}
-        </ul>
-      {% endif %}
+    <div class="review-layout">
+      <div class="stack">
+        {% if record.status != READY_FOR_REVIEW %}
+        <div class="card">
+          <h2>Missing from the claimant</h2>
+          <ul class="missing-list">
+            {% for field in record.missing %}
+            <li>{{ field }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
 
-      <dl class="detail-grid">
-        <dt>Claimant</dt><dd>{{ record.claim.claimant_email or "—" }}</dd>
-        <dt>Claim type</dt><dd>{{ CLAIM_TYPES[record.claim.claim_type][0] if record.claim.claim_type in CLAIM_TYPES else record.claim.claim_type }}</dd>
-        <dt>Policy ID</dt><dd>{{ record.claim.policy_id or "—" }}</dd>
-        <dt>Incident date</dt><dd>{{ record.claim.incident_date or "—" }}</dd>
-        <dt>Description</dt><dd>{{ record.claim.description or "—" }}</dd>
-        <dt>Documents</dt>
-        <dd>
-          {% if record.documents %}
-            <ul class="document-list">
-              {% for doc in record.documents %}
-              <li>
-                <a href="/adjuster/claims/{{ record.claim.claim_id }}/documents/{{ doc.filename }}">{{ doc.filename }}</a>
-                <span class="hint">{{ (doc.size_bytes / 1024) | round(1) }} KB &middot; {{ doc.content_type or "unknown type" }}</span>
-              </li>
-              {% endfor %}
-            </ul>
+        <div class="card">
+          <h2>Basics</h2>
+          <dl class="detail-grid">
+            <dt>Claimant</dt><dd>{{ record.claim.claimant_email or "—" }}</dd>
+            <dt>Claim type</dt><dd>{{ CLAIM_TYPES[record.claim.claim_type][0] if record.claim.claim_type in CLAIM_TYPES else record.claim.claim_type }}</dd>
+            <dt>Policy ID</dt><dd class="mono">{{ record.claim.policy_id or "—" }}</dd>
+            <dt>Incident date</dt><dd>{{ record.claim.incident_date or "—" }}</dd>
+            <dt>Filed</dt><dd title="{{ record.history[0].at }}">{{ record.history[0].at | ago }}</dd>
+            <dt>Description</dt><dd>{{ record.claim.description or "—" }}</dd>
+            <dt>Documents</dt>
+            <dd>
+              {% if record.documents %}
+                <ul class="document-list">
+                  {% for doc in record.documents %}
+                  <li>
+                    <a href="/adjuster/claims/{{ record.claim.claim_id }}/documents/{{ doc.filename }}">{{ doc.filename }}</a>
+                    <span class="hint">{{ (doc.size_bytes / 1024) | round(1) }} KB &middot; {{ doc.content_type or "unknown type" }}</span>
+                  </li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                none
+              {% endif %}
+            </dd>
+          </dl>
+        </div>
+
+        {% if record.summary %}
+        <div class="card mock-card">
+          <h2>Draft summary <span class="mock-tag">Automated draft -- not AI-generated</span></h2>
+          <p class="summary-text">{{ record.summary.summary_text }}</p>
+          <span class="hint" title="{{ record.summary.generated_at }}">Generated {{ record.summary.generated_at | ago }}</span>
+        </div>
+        {% endif %}
+
+        {% if facts_view.groups or facts_view.unread_documents %}
+        <div class="card mock-card">
+          <h2>What the documents say <span class="mock-tag">Automated extraction -- not AI</span></h2>
+          <p class="hint">A keyword scan. Check anything that matters against the originals above.</p>
+          {% set description_label = "the claimant's description" %}
+          {% include "_facts_groups.html" %}
+        </div>
+        {% endif %}
+      </div>
+
+      <aside class="review-rail stack">
+        <div class="card">
+          <h2>Record a decision</h2>
+          {% if record.status != READY_FOR_REVIEW %}
+          <p class="muted">
+            Decisions open once the claim is complete. The claimant has been told what's missing.
+          </p>
+          {% elif adjuster.linked_claimant_email and adjuster.linked_claimant_email == record.claim.claimant_email %}
+          <p style="color:var(--warn);">
+            Blocked: separation of duties. This adjuster account is linked to the claimant who
+            filed this claim, so it can't decide on it.
+          </p>
           {% else %}
-            none
+          {% if record.decisions and record.decisions[-1].decision == "NEEDS_MORE_REVIEW" %}
+          <p class="rail-flag">Marked for more review. It stays on your list until you record a final decision.</p>
           {% endif %}
-        </dd>
-      </dl>
-    </div>
+          <p class="hint">
+            A human judgment call, not an automated one. It's recorded under your name and the
+            claimant is told straight away.
+          </p>
+          <form method="post" id="decision_form" data-claim-id="{{ record.claim.claim_id }}"
+                action="/adjuster/claims/{{ record.claim.claim_id }}/decision" class="stack" style="margin-top:var(--space-4);">
+            {% set intents = {"APPROVED": "approve", "DECLINED": "decline"} %}
+            {% for choice in decisions %}
+            <button type="submit" name="decision" value="{{ choice }}" class="btn block {{ intents.get(choice, 'secondary') }}">{{ choice.replace("_", " ") | title }}</button>
+            {% endfor %}
+          </form>
 
-    {% if record.summary %}
-    <div class="card mock-card" style="margin-top:1.2rem;">
-      <h2 style="font-size:1.1rem; margin-top:0;">
-        Adjuster summary <span class="mock-tag">Automated draft -- not AI-generated</span>
-      </h2>
-      <p style="white-space:pre-line;">{{ record.summary.summary_text }}</p>
-      <span class="hint">Generated {{ record.summary.generated_at }}</span>
-    </div>
-    {% endif %}
+          {# Confirm step. Without JavaScript the buttons above post directly, as before. #}
+          <dialog id="confirm_dialog" class="confirm-dialog" aria-labelledby="confirm_title">
+            <h2 id="confirm_title">Confirm decision</h2>
+            <p id="confirm_text"></p>
+            <div class="confirm-actions">
+              <button type="button" class="btn secondary" id="confirm_cancel">Cancel</button>
+              <button type="button" class="btn" id="confirm_ok">Confirm decision</button>
+            </div>
+          </dialog>
+          {% endif %}
+        </div>
 
-    {% if record.facts %}
-    <div class="card mock-card" style="margin-top:1.2rem;">
-      <h2 style="font-size:1.1rem; margin-top:0;">
-        Extracted facts <span class="mock-tag">Automated extraction -- not AI</span>
-      </h2>
-      <table class="facts-table">
-        <thead><tr><th>Field</th><th>Value</th><th>Source</th></tr></thead>
-        <tbody>
-          {% for f in record.facts %}
-          <tr><td>{{ f.field }}</td><td>{{ f.value }}</td><td>{{ f.source }}</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
+        {% if record.decisions %}
+        <div class="card">
+          <h2>Decisions recorded</h2>
+          <ul class="decision-list">
+            {% for d in record.decisions %}
+            <li><strong>{{ d.decision }}</strong> by {{ d.adjuster_username }}<span class="hint" style="display:block;" title="{{ d.decided_at }}">{{ d.decided_at | ago }}</span></li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+      </aside>
     </div>
-    {% endif %}
-
-    {% if record.decisions %}
-    <div class="card" style="margin-top:1.2rem;">
-      <h2 style="font-size:1.1rem; margin-top:0;">Decisions recorded</h2>
-      <ul class="missing-list" style="color:var(--ink);">
-        {% for d in record.decisions %}
-        <li><strong>{{ d.decision }}</strong> by {{ d.adjuster_username }} &mdash; {{ d.decided_at }}</li>
-        {% endfor %}
-      </ul>
-    </div>
-    {% endif %}
-
-    {% if record.status == READY_FOR_REVIEW %}
-      {% if adjuster.linked_claimant_email and adjuster.linked_claimant_email == record.claim.claimant_email %}
-      <div class="card" style="margin-top:1.2rem;">
-        <h2 style="font-size:1.1rem; margin-top:0;">Record a decision</h2>
-        <p style="margin-top:0; color:var(--warn);">
-          Blocked: separation of duties. This adjuster account is linked to the claimant who
-          filed this claim, so it can't decide on it.
-        </p>
-      </div>
-      {% else %}
-      <div class="card" style="margin-top:1.2rem;">
-        <h2 style="font-size:1.1rem; margin-top:0;">Record a decision</h2>
-        <p class="note" style="margin-top:0;">
-          This is a human judgment call, not an automated one &mdash; the completeness
-          checker never makes this decision itself.
-        </p>
-        <form method="post" action="/adjuster/claims/{{ record.claim.claim_id }}/decision" style="display:flex; gap:0.6rem; flex-wrap:wrap;">
-          {% for choice in decisions %}
-          <button type="submit" name="decision" value="{{ choice }}" class="primary adjuster-btn">{{ choice.replace("_", " ") | title }}</button>
-          {% endfor %}
-        </form>
-      </div>
-      {% endif %}
-    {% endif %}
 
     <a class="back-link" href="/adjuster">&larr; back to queue</a>
   </div>
+  <script src="{{ static_url('review.js') }}" defer></script>
 </body>
 </html>

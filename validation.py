@@ -72,6 +72,16 @@ def validate_claim_fields(policy_id: str, incident_date: str, description: str) 
     return errors
 
 
+def validate_not_empty(policy_id: str, incident_date: str, description: str, file_count: int) -> list[str]:
+    """A submission with nothing at all in it isn't a claim, so it's rejected rather than
+    stored as an empty NEEDS_INFORMATION record. Any one detail is enough: a partly filled
+    claim is a supported outcome (check_claim lists what's missing), an empty one isn't.
+    """
+    if policy_id.strip() or incident_date.strip() or description.strip() or file_count:
+        return []
+    return ["Add at least one detail before submitting: a policy ID, an incident date, a description, or a document."]
+
+
 def validate_files(filenames_and_sizes: list[tuple[str, int]]) -> list[str]:
     """Checks uploaded files for type and size -- not content. A renamed .exe with a
     .pdf extension would still pass; this is a basic filter, not a security boundary.

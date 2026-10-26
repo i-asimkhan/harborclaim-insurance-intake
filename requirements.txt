@@ -16,3 +16,7 @@ python-dotenv==1.2.3
 # (extraction.py). Real text extraction; the "mock" part is the regex
 # matching on top of it, not this -- see MOCKS.md.
 pypdf==6.19.0
+
+# Real email through Azure Communication Services (email_delivery.py), used only
+# when EMAIL_PROVIDER=acs. Pulls in azure-core and isodate.
+azure-communication-email==1.1.0

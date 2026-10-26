@@ -1,0 +1,23 @@
+{# Extracted facts, one row per kind, each distinct value once. Shared by the claimant
+   and adjuster claim pages. Expects `facts_view` (app._group_facts) and
+   `description_label` -- who wrote the description ("your description" for the claimant,
+   "the claimant's description" for the adjuster). #}
+{% import "_art.html" as art %}
+<div class="fact-groups">
+  {% for group in facts_view.groups %}
+  <div class="fact-group">
+    <div class="fact-group-label">{{ art.icon(group.icon) }}<span>{{ group.label }}</span></div>
+    <div>
+      <ul class="chips">
+        {% for item in group["items"] %}
+        <li class="chip" title="Found in: {{ item.sources | join(', ') }}">{{ item.value }}</li>
+        {% endfor %}
+      </ul>
+      <p class="fact-sources">Found in {% for s in group.sources %}{{ description_label if s == "description" else s }}{{ ", " if not loop.last }}{% endfor %}</p>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% if facts_view.unread_documents %}
+<p class="hint fact-note">Couldn't read: {{ facts_view.unread_documents | join(", ") }} (this demo only reads .txt and .pdf text).</p>
+{% endif %}

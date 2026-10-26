@@ -15,23 +15,33 @@ Usage:
     .venv/Scripts/python.exe -m playwright install chromium   # once
     .venv/Scripts/python.exe scripts/capture_screenshots.py [name ...]
 
-With no arguments, regenerates all 13 screenshots. With one or more names
+With no arguments, regenerates all 14 screenshots. With one or more names
 (e.g. `03-claim-result-ready`), the full flow still runs -- later pages depend
 on earlier ones -- but only those files are written.
 
-Wipes the local database (data/) first, like tests/test_ui.py does.
+Uses a throwaway data folder (HARBORCLAIM_DATA_DIR), so it never touches the data/ folder
+a running dev server is using.
 """
 
 import base64
 import json
 import os
 import socket
+import atexit
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
 PROJ = Path(__file__).parent.parent
+
+# Before storage is imported (it reads this once): the live server started below and the
+# seed script both inherit it, so everything in this run shares one throwaway folder.
+_data_dir = tempfile.mkdtemp(prefix="harborclaim-shots-")
+os.environ["HARBORCLAIM_DATA_DIR"] = _data_dir
+atexit.register(shutil.rmtree, _data_dir, ignore_errors=True)
 PORT = 8299
 BASE = f"http://127.0.0.1:{PORT}"
 OUT_DIR = PROJ / "docs" / "screenshots"
@@ -84,6 +94,7 @@ ALL = [
     "11-adjuster-notifications",
     "12-validation-errors",
     "13-seeded-adjuster-queue",
+    "14-notification-bell-open",
 ]
 
 
@@ -112,7 +123,7 @@ def start_server():
 
 def fill_claim_form(page, claim):
     page.goto(BASE)
-    page.select_option("#claim_type", claim["claim_type"])
+    page.click(f"label[for='claim_type_{claim['claim_type']}']")
     page.fill("#policy_id", claim["policy_id"])
     if claim["incident_date"]:
         page.fill("#incident_date", claim["incident_date"])
@@ -120,8 +131,13 @@ def fill_claim_form(page, claim):
     page.set_input_files("#files", [str(f) for f in claim["files"]])
 
 
-def submit(page):
-    page.click("button.primary")
+def submit(page, incomplete=False):
+    if incomplete:
+        # The form keeps its button off until every part of the claim is in, so an
+        # incomplete claim is sent the way a script or older client would send it.
+        page.evaluate("document.getElementById('claim_form').submit()")
+    else:
+        page.click("button.primary")
     page.wait_for_url(f"{BASE}/claims/*")
     return page.url.rsplit("/", 1)[-1]
 
@@ -169,23 +185,43 @@ def run(selected: set[str]):
             shot(claimant, "03-claim-result-ready")
 
             fill_claim_form(claimant, NEEDS_INFO_CLAIM)
-            submit(claimant)
+            submit(claimant, incomplete=True)
             shot(claimant, "04-claim-result-needs-information")
 
             claimant.goto(f"{BASE}/claims")
             shot(claimant, "05-my-claims")
+            # Before /notifications marks everything read, so the badge and
+            # unread rows show. Viewport-only: the open menu is what matters.
+            claimant.click("details.bell > summary")
+            claimant.wait_for_selector("details.bell .bell-menu", state="visible")
+            if "14-notification-bell-open" in selected:
+                claimant.screenshot(path=str(OUT_DIR / "14-notification-bell-open.png"),
+                                    clip={"x": 0, "y": 0, "width": 1280, "height": 520})
+                print("  wrote 14-notification-bell-open.png")
+            claimant.keyboard.press("Escape")
             claimant.goto(f"{BASE}/notifications")
             shot(claimant, "06-notifications")
 
-            # Rejected before anything is stored, so it doesn't add a claim.
-            claimant.goto(BASE)
-            claimant.fill("#policy_id", "P" * 50)
-            claimant.fill("#incident_date", "2026-09-10")
-            claimant.fill("#description", "Testing the validation error display.")
-            claimant.click("button.primary")
-            claimant.wait_for_selector("text=Please fix the following")
-            shot(claimant, "12-validation-errors")
             claimant.close()
+
+            # Server-side rejection, so nothing is stored. JavaScript is off for
+            # this one because the form's own script would stop the bad file
+            # in the browser first; the server check is what's shown here.
+            no_js = browser.new_context(viewport=viewport, java_script_enabled=False)
+            no_js.add_cookies([_claimant_cookie()])
+            errors_page = no_js.new_page()
+            with tempfile.TemporaryDirectory() as tmp:
+                bad_file = Path(tmp) / "invoice.exe"
+                bad_file.write_bytes(b"x")
+                errors_page.goto(BASE)
+                errors_page.fill("#policy_id", "POL-48213")
+                errors_page.fill("#incident_date", "2026-09-10")
+                errors_page.fill("#description", "Testing the validation error display.")
+                errors_page.set_input_files("#files", [str(bad_file)])
+                errors_page.click("button.primary")
+                errors_page.wait_for_selector("text=Please fix the following")
+            shot(errors_page, "12-validation-errors")
+            no_js.close()
 
             # --- Adjuster: real login, queue, review, decision, notifications ---
             adjuster = browser.new_page(viewport=viewport)
@@ -194,6 +230,7 @@ def run(selected: set[str]):
             adjuster.goto(f"{BASE}/adjuster/claims/{ready_id}")
             shot(adjuster, "09-adjuster-claim-view")
             adjuster.get_by_role("button", name="Approved").click()
+            adjuster.get_by_role("button", name="Confirm decision").click()
             adjuster.wait_for_selector("text=Decisions recorded")
             shot(adjuster, "10-adjuster-decision-recorded")
             adjuster.goto(f"{BASE}/adjuster/notifications")

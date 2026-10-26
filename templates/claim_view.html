@@ -2,101 +2,151 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ record.claim.claim_id }} -- HarborClaim</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="{{ static_url('style.css') }}">
 </head>
 <body>
+  {% import "_art.html" as art %}
+  {% set ready = record.status == READY_FOR_REVIEW %}
+  {% set latest = record.decisions[-1] if record.decisions else none %}
+  {# Approved/Declined are final; "needs more review" means the adjuster is still working on it. #}
+  {% set final = latest is not none and latest.decision != "NEEDS_MORE_REVIEW" %}
+  {% set decision_labels = {"APPROVED": "Approved", "DECLINED": "Declined", "NEEDS_MORE_REVIEW": "Needs more review"} %}
   <div class="page">
-    <header class="app-header">
-      <div class="brand">Harbor<span>Claim</span></div>
-      <nav>
-        <a href="/claims">My claims</a>
-        <a href="/">New claim</a>
-        <a href="/notifications">Notifications{% if unread_count %} <span class="badge-count">{{ unread_count }}</span>{% endif %}</a>
-        <span class="hint">{{ user.email }}</span>
-        <a href="/auth/logout">Sign out</a>
-      </nav>
-    </header>
+    {% include "_claimant_header.html" %}
 
-    <h1>Claim result</h1>
-    <p class="subtitle claim-id">{{ record.claim.claim_id }}</p>
+    <div class="page-head">
+      <span class="eyebrow">Claim number</span>
+      <div class="title-row">
+        <h1 class="claim-id">{{ record.claim.claim_id }}</h1>
+        {% if ready %}
+          <span class="badge lg ready">&#10003; READY_FOR_REVIEW</span>
+        {% else %}
+          <span class="badge lg needs">&#9888; NEEDS_INFORMATION</span>
+        {% endif %}
+      </div>
+    </div>
 
+    <div class="stack">
+    {# 1. Outcome, then where the claim is now. #}
     <div class="card">
-      {% if record.status == READY_FOR_REVIEW %}
-        <span class="badge ready">&#10003; READY_FOR_REVIEW</span>
-        <p style="margin-top:1rem; color:var(--ink-soft);">
-          Everything required is present. A mock summary (below) has been generated for
-          the adjuster; source documents stay authoritative over it.
-        </p>
-      {% else %}
-        <span class="badge needs">&#9888; NEEDS_INFORMATION</span>
-        <p style="margin-top:1rem; color:var(--ink-soft);">The claimant would be notified to provide:</p>
-        <ul class="missing-list">
-          {% for field in record.missing %}
-          <li>{{ field }}</li>
-          {% endfor %}
-        </ul>
-      {% endif %}
-
-      <dl class="detail-grid">
-        <dt>Claim type</dt><dd>{{ CLAIM_TYPES[record.claim.claim_type][0] if record.claim.claim_type in CLAIM_TYPES else record.claim.claim_type }}</dd>
-        <dt>Policy ID</dt><dd>{{ record.claim.policy_id or "—" }}</dd>
-        <dt>Incident date</dt><dd>{{ record.claim.incident_date or "—" }}</dd>
-        <dt>Description</dt><dd>{{ record.claim.description or "—" }}</dd>
-        <dt>Documents</dt>
-        <dd>
-          {% if record.documents %}
-            <ul class="document-list">
-              {% for doc in record.documents %}
-              <li>
-                <a href="/claims/{{ record.claim.claim_id }}/documents/{{ doc.filename }}">{{ doc.filename }}</a>
-                <span class="hint">{{ (doc.size_bytes / 1024) | round(1) }} KB &middot; {{ doc.content_type or "unknown type" }}</span>
-              </li>
+      <div class="result-message">
+        {% if latest %}
+          {{ art.icon("person") }}
+          <div>
+            {% if latest.decision == "APPROVED" %}
+            <h2>Good news: an adjuster approved your claim.</h2>
+            {% elif latest.decision == "DECLINED" %}
+            <h2>An adjuster has declined this claim.</h2>
+            {% else %}
+            <h2>Your adjuster wants a closer look.</h2>
+            {% endif %}
+            <p class="muted">The decision and who made it are in the history below. We sent the same update to your notifications.</p>
+          </div>
+        {% elif ready %}
+          {{ art.icon("check") }}
+          <div>
+            <h2>You're all set. Everything required is here.</h2>
+            <p class="muted">Your claim is with an adjuster now. You'll get an update under the bell when they decide.</p>
+          </div>
+        {% else %}
+          {{ art.icon("other") }}
+          <div>
+            <h2>Almost there. We just need a little more.</h2>
+            <p class="muted">Your claim is saved. To move it forward, please provide:</p>
+            <ul class="missing-list">
+              {% for field in record.missing %}
+              <li>{{ field }}</li>
               {% endfor %}
             </ul>
-          {% else %}
-            none
-          {% endif %}
-        </dd>
-      </dl>
-    </div>
+          </div>
+        {% endif %}
+      </div>
 
-    {% if record.summary %}
-    <div class="card mock-card" style="margin-top:1.2rem;">
-      <h2 style="font-size:1.1rem; margin-top:0;">
-        Adjuster summary <span class="mock-tag">Automated draft -- not AI-generated</span>
-      </h2>
-      <p style="white-space:pre-line;">{{ record.summary.summary_text }}</p>
-      <span class="hint">Generated {{ record.summary.generated_at }}</span>
-    </div>
-    {% endif %}
+      <ol class="tracker" aria-label="Claim progress">
+        <li class="done"><span class="tracker-dot"></span><strong>Submitted</strong><span>{{ record.history[0].at[:10] }}</span></li>
+        {% if ready %}
+        <li class="done"><span class="tracker-dot"></span><strong>Completeness check</strong><span>Complete</span></li>
+        {% else %}
+        <li class="attention"><span class="tracker-dot"></span><strong>Completeness check</strong><span>Waiting on you</span></li>
+        {% endif %}
+        {% if final %}
+        <li class="done"><span class="tracker-dot"></span><strong>Adjuster review</strong><span>Reviewed</span></li>
+        <li class="done"><span class="tracker-dot"></span><strong>Decision</strong><span>{{ decision_labels.get(latest.decision, latest.decision) }}</span></li>
+        {% elif ready %}
+        <li class="current"><span class="tracker-dot"></span><strong>Adjuster review</strong><span>In progress</span></li>
+        <li><span class="tracker-dot"></span><strong>Decision</strong><span>Not yet</span></li>
+        {% else %}
+        <li><span class="tracker-dot"></span><strong>Adjuster review</strong><span>Starts once complete</span></li>
+        <li><span class="tracker-dot"></span><strong>Decision</strong><span>Not yet</span></li>
+        {% endif %}
+      </ol>
 
-    {% if record.facts %}
-    <div class="card mock-card" style="margin-top:1.2rem;">
-      <h2 style="font-size:1.1rem; margin-top:0;">
-        Extracted facts <span class="mock-tag">Automated extraction -- not AI</span>
-      </h2>
-      <table class="facts-table">
-        <thead><tr><th>Field</th><th>Value</th><th>Source</th></tr></thead>
-        <tbody>
-          {% for f in record.facts %}
-          <tr><td>{{ f.field }}</td><td>{{ f.value }}</td><td>{{ f.source }}</td></tr>
+      {% if record.decisions %}
+      <div class="decision-history">
+        <h3>Decision history</h3>
+        <ul class="decision-list">
+          {% for d in record.decisions %}
+          <li><strong>{{ d.decision }}</strong> by {{ d.adjuster_username }} <span class="hint">&middot; {{ d.decided_at[:16].replace("T", " ") }} UTC</span></li>
           {% endfor %}
-        </tbody>
-      </table>
+        </ul>
+      </div>
+      {% endif %}
     </div>
-    {% endif %}
 
-    {% if record.decisions %}
-    <div class="card" style="margin-top:1.2rem;">
-      <h2 style="font-size:1.1rem; margin-top:0;">Adjuster decisions</h2>
-      <ul class="missing-list" style="color:var(--ink);">
-        {% for d in record.decisions %}
-        <li><strong>{{ d.decision }}</strong> by {{ d.adjuster_username }} &mdash; {{ d.decided_at }}</li>
+    {# 2. What the claimant submitted. #}
+    <div class="card">
+      <h2>Your claim</h2>
+      <dl class="fact-strip">
+        <div><dt>Claim type</dt><dd>{{ CLAIM_TYPES[record.claim.claim_type][0] if record.claim.claim_type in CLAIM_TYPES else record.claim.claim_type }}</dd></div>
+        <div><dt>Policy ID</dt><dd class="mono">{{ record.claim.policy_id or "—" }}</dd></div>
+        <div><dt>Incident date</dt><dd>{{ record.claim.incident_date or "—" }}</dd></div>
+      </dl>
+      <blockquote class="claim-quote">{{ record.claim.description or "No description given." }}</blockquote>
+
+      <h3>Documents</h3>
+      {% if record.documents %}
+      <ul class="doc-tiles">
+        {% for doc in record.documents %}
+        <li>
+          <a href="/claims/{{ record.claim.claim_id }}/documents/{{ doc.filename }}" title="{{ doc.filename }}">
+            {{ art.icon("file") }}
+            <span class="doc-name">{{ doc.filename }}</span>
+            <span class="hint">{{ (doc.size_bytes / 1024) | round(1) }} KB &middot; {{ (doc.content_type or "unknown").split("/")[-1] | upper }}</span>
+          </a>
+        </li>
         {% endfor %}
       </ul>
+      {% else %}
+      <p class="muted">No documents attached.</p>
+      {% endif %}
+    </div>
+
+    {# 3. Extracted facts, grouped by kind -- one row per kind, not per hit. #}
+    {% if facts_view.groups or facts_view.unread_documents %}
+    <div class="card">
+      <h2>What we found in your documents <span class="mock-tag">Automated extraction -- not AI</span></h2>
+      <p class="hint">A simple keyword scan, so your adjuster can check it against the originals. Your documents always take precedence.</p>
+      {% set description_label = "your description" %}
+      {% include "_facts_groups.html" %}
     </div>
     {% endif %}
+
+    {# 4. The adjuster-facing draft: available, but not in the claimant's way. #}
+    {% if record.summary %}
+    <details class="card draft-summary">
+      <summary>
+        <span>The draft summary your adjuster sees</span>
+        <span class="mock-tag">Automated draft -- not AI-generated</span>
+      </summary>
+      <div class="draft-body">
+        <p class="summary-text">{{ record.summary.summary_text }}</p>
+        <span class="hint">Generated {{ record.summary.generated_at[:16].replace("T", " ") }} UTC</span>
+      </div>
+    </details>
+    {% endif %}
+    </div>
 
     <a class="back-link" href="/">&larr; submit another claim</a>
   </div>

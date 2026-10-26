@@ -70,9 +70,16 @@ authoritative, honest labels); production roadmap (Phases 4–5).
   built. **262 tests pass** (2026-10-26): 82 in `tests/test_app.py`, 160 in `tests/test_agents.py`
   (Phase 5), 15 Playwright tests in
   `tests/test_ui.py`, 5 in `test_main.py`.
-- **Phases 1, 1b and 3 are committed locally (2026-10-24), not pushed or deployed;** Phase 5
-  steps 5.1-5.2 are uncommitted. The live Azure site still runs the older build. Pushing and
-  the Azure Sync are the owner's call.
+- **Phases 1-3 and Phase 5 steps 5.1-5.2 are on branch `phase-5-agents`, open as
+  [PR #1](https://github.com/i-asimkhan/harborclaim-insurance-intake/pull/1) into `main`**
+  (2026-10-26); not merged, not deployed. The live Azure site still runs the older build. Merging
+  and the Azure Sync are the owner's call.
+- **CI (GitHub Actions, 2026-10-26):** `.github/workflows/tests.yml` runs the graded minimum and
+  the full suite on every PR and push to `main`, with no secrets (passing). CI found that the
+  browser tests depended on the local `.env`'s `SESSION_SECRET_KEY`; `tests/conftest.py` now pins
+  a test-only key. `.github/workflows/claude-review.yml` runs an automatic Claude review on each
+  PR using the owner's subscription; it needs the Claude GitHub App installed and the
+  `CLAUDE_CODE_OAUTH_TOKEN` repository secret (from `claude setup-token`) -- not yet done.
 - Deployed live at **[harborclaim-demo-2630.azurewebsites.net](https://harborclaim-demo-2630.azurewebsites.net)**
   (Azure App Service, Free F1 plan), deployed from this repo's `main` branch. Deployment is
   a **manual sync**, not automatic on push (`isManualIntegration: true`, no webhook): after

@@ -628,7 +628,7 @@ def test_a_normal_intake_run_uses_a_tool_passes_the_gate_and_leaves_a_trace(fake
 
     assert result.status == "passed" and result.model == MODEL
     run = storage.get_agent_run(result.run_id)
-    assert run["status"] == "passed" and run["prompt_version"] == "intake-v1"
+    assert run["status"] == "passed" and run["prompt_version"] == "intake-v3"
     assert [t["type"] for t in run["trace"]] == ["model", "tool", "model"]
     assert run["output"]["computed"]["not_summarised"]           # the omitted line items, listed by code
     # The tool result went back to the model, answered by its call id.
@@ -1023,3 +1023,205 @@ def test_c1_decision_questions_are_refused(question):
 ])
 def test_c1_innocent_questions_are_not_refused(question):
     assert not agents.DECISION_QUESTION.search(question)
+
+
+# --- Step 5.3: the intake review in the app ----------------------------------------------------
+# The build guide's three checks (normal, missing/ambiguous, injected model failure), the labels
+# in AGENTS.md section 9, the re-run button, and the claimant page that never shows AI output.
+
+from fastapi.testclient import TestClient  # noqa: E402
+
+import app as app_module  # noqa: E402
+from auth import get_current_user  # noqa: E402
+
+web = TestClient(app_module.app)
+PASSED_LABEL = f"AI draft ({MODEL} via OpenRouter) -- checked against the documents; verify before deciding"
+FLAGGED_LABEL = f"AI draft ({MODEL} via OpenRouter) -- failed automated checks, see below"
+TEMPLATE_LABEL = "Automated draft -- not AI-generated"
+
+
+@pytest.fixture
+def adjuster_web():
+    web.cookies.clear()
+    password = storage.create_adjuster("adj.review")
+    r = web.post("/adjuster/login", data={"username": "adj.review", "password": password}, follow_redirects=False)
+    assert r.status_code == 303
+    yield web
+    web.cookies.clear()
+
+
+def _page(claim_id="CLM-5A5A5A5A"):
+    return web.get(f"/adjuster/claims/{claim_id}").text
+
+
+def _reviewed_claim(script, output):
+    _sample_claim()
+    storage.add_summary("CLM-5A5A5A5A", "Template draft text.")
+    script.append(_json_reply(output))
+    return agents.run_intake_review("CLM-5A5A5A5A")
+
+
+def test_submitting_a_claim_runs_the_review_after_the_response_and_changes_nothing(fake_model, monkeypatch):
+    script, _ = fake_model
+    script.append(_json_reply(GOOD_INTAKE))
+    user = {"id": 1, "email": "claimant@example.com", "name": "Casey"}
+    storage.get_or_create_user(user["email"], user["name"])
+    monkeypatch.setitem(app_module.app.dependency_overrides, get_current_user, lambda: user)
+    files = [("files", (n, (SAMPLE / n).read_bytes(), "application/pdf")) for n in (POLICE, ESTIMATE)]
+    r = web.post("/claims", data={"policy_id": "HC-AUTO-1042", "incident_date": "2026-09-10", "claim_type": "auto",
+                                  "description": "Another car hit my rear bumper in a store parking lot."},
+                 files=files, follow_redirects=False)
+    claim_id = r.headers["location"].rsplit("/", 1)[-1]
+
+    run = storage.latest_finished_agent_run(claim_id, "intake")
+    assert run["status"] == "passed" and run["model"] == MODEL and run["actor"] == "system"
+    record = storage.get_claim(claim_id)
+    assert record["status"] == "READY_FOR_REVIEW" and record["decisions"] == []
+    # The claimant's page is unchanged: the template draft only, never the AI review (R9).
+    claimant_page = web.get(f"/claims/{claim_id}").text
+    assert "AI draft" not in claimant_page and "AI review" not in claimant_page
+    assert GOOD_INTAKE["summary"][0]["text"] not in claimant_page
+    assert "visual estimate" not in claimant_page
+
+
+def test_ai_off_queues_nothing_and_the_page_says_why(adjuster_web):
+    _sample_claim()
+    storage.add_summary("CLM-5A5A5A5A", "Template draft text.")
+    page = _page()
+    assert TEMPLATE_LABEL in page and "No AI review: AI review is off on this site." in page
+    assert "AI draft" not in page and "Re-run AI review" not in page
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/intake-review", follow_redirects=False)
+    assert storage.recent_agent_runs("CLM-5A5A5A5A", "intake") == []
+
+
+def test_check_1_normal_a_passed_review_shows_cited_and_labelled(fake_model, adjuster_web):
+    script, _ = fake_model
+    assert _reviewed_claim(script, GOOD_INTAKE).status == "passed"
+    page = _page()
+    assert PASSED_LABEL in page
+    assert TEMPLATE_LABEL not in page                       # the AI card replaces the template card
+    assert "The repair estimate totals $4,240.00." in page
+    assert f"{ESTIMATE}, p. 1" in page and 'title="Total estimate $4,240.00"' in page
+    assert "amount difference" in page and "No photos of the damage are attached." in page
+    assert "Not summarised" in page                          # computed by code, shown under the summary
+    assert "AI trace" in page and "Model call 1: fake/model:free" in page
+    assert "Re-run AI review" in page
+    assert "Automated extraction -- not AI" in page          # the regex facts card keeps its own label
+
+
+def test_check_2_missing_or_ambiguous_shows_what_is_unclear(fake_model, adjuster_web):
+    script, _ = fake_model
+    unclear = {"summary": [GOOD_INTAKE["summary"][0]], "worth_checking": [],
+               "missing_or_unclear": ["No photos of the damage are attached.",
+                                      "The description does not say which vehicle was hit."]}
+    assert _reviewed_claim(script, unclear).status == "passed"
+    page = _page()
+    assert PASSED_LABEL in page and "Nothing flagged." in page
+    assert "The description does not say which vehicle was hit." in page
+
+
+def test_check_3_injected_model_failure_falls_back_to_the_template(fake_model, adjuster_web):
+    script, _ = fake_model
+    _sample_claim()
+    storage.add_summary("CLM-5A5A5A5A", "Template draft text.")
+    script.append(_failed_reply("timeout"))
+    assert agents.run_intake_review("CLM-5A5A5A5A").status == "unavailable"
+    page = _page()
+    assert TEMPLATE_LABEL in page and "Template draft text." in page
+    assert "No AI review: the AI service didn&#39;t answer in time." in page
+    assert "AI draft" not in page and "Re-run AI review" in page
+
+
+def test_a_flagged_review_says_so_and_marks_the_failing_sentence(fake_model, adjuster_web):
+    script, _ = fake_model
+    bad = _with_sentence("The repair estimate totals $9,999.00.", _cite(ESTIMATE, "Total estimate $4,240.00"))
+    assert _reviewed_claim(script, bad).status == "flagged"
+    page = _page()
+    assert FLAGGED_LABEL in page and PASSED_LABEL not in page
+    assert "Failed automated checks" in page and "$9,999.00 is not in the cited quotes" in page
+    assert page.count("failed checks</span>") == 1
+
+
+def test_model_text_is_escaped_never_rendered_as_html(fake_model, adjuster_web):
+    script, _ = fake_model
+    _reviewed_claim(script, _with_sentence("<script>alert(1)</script> injected", _cite(POLICE, "<b>x</b> y z w")))
+    page = _page()
+    assert "<script>alert(1)</script>" not in page and "<b>x</b>" not in page
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in page
+
+
+def test_a_run_in_progress_shows_its_label_and_blocks_a_rerun(fake_model, adjuster_web):
+    _sample_claim()
+    storage.add_summary("CLM-5A5A5A5A", "Template draft text.")
+    storage.start_agent_run("CLM-5A5A5A5A", "intake", "system", "intake-v1")
+    page = _page()
+    assert "AI review in progress -- reload to see it" in page and TEMPLATE_LABEL in page
+    assert "Re-run AI review" not in page
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/intake-review", follow_redirects=False)
+    assert len(storage.recent_agent_runs("CLM-5A5A5A5A", "intake")) == 1   # refused: no second run
+
+
+def test_a_newer_run_in_progress_never_hides_the_finished_review(fake_model, adjuster_web):
+    script, _ = fake_model
+    _reviewed_claim(script, GOOD_INTAKE)
+    storage.start_agent_run("CLM-5A5A5A5A", "intake", "system", "intake-v1")
+    page = _page()
+    assert PASSED_LABEL in page and "A newer AI review is in progress" in page
+
+
+def test_a_run_lost_to_a_restart_shows_as_unavailable_and_can_be_rerun(fake_model, adjuster_web):
+    script, _ = fake_model
+    _sample_claim()
+    storage.add_summary("CLM-5A5A5A5A", "Template draft text.")
+    run_id = storage.start_agent_run("CLM-5A5A5A5A", "intake", "system", "intake-v1")
+    with storage._connect() as conn:
+        conn.execute("UPDATE agent_runs SET started_at = '2026-01-01T00:00:00+00:00' WHERE id = ?", (run_id,))
+    page = _page()
+    assert "the last AI review didn&#39;t finish" in page and "Re-run AI review" in page
+
+    script.append(_json_reply(GOOD_INTAKE))
+    r = adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/intake-review", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/adjuster/claims/CLM-5A5A5A5A"
+    assert storage.latest_finished_agent_run("CLM-5A5A5A5A", "intake")["status"] == "passed"
+    assert PASSED_LABEL in _page()
+
+
+def test_rerun_needs_an_adjuster_session():
+    web.cookies.clear()
+    _sample_claim()
+    r = web.post("/adjuster/claims/CLM-5A5A5A5A/intake-review", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/adjuster/login"
+    assert storage.recent_agent_runs("CLM-5A5A5A5A", "intake") == []
+
+
+def test_an_empty_intake_review_is_never_shown_as_checked(fake_model):
+    # Seen in the first live run (2026-11-01): the model returned all three lists empty, and the
+    # page would have said "checked against the documents" over nothing.
+    script, _ = fake_model
+    _sample_claim()
+    script.append(_json_reply({"summary": [], "worth_checking": [], "missing_or_unclear": []}))
+    result = agents.run_intake_review("CLM-5A5A5A5A")
+    assert result.status == "unavailable" and result.error_type == "bad_output"
+    assert "summary is empty" in str(storage.get_agent_run(result.run_id)["gate"])
+
+
+def test_a_short_field_with_an_id_can_be_quoted_but_a_bare_id_cannot():
+    # Live run 3: "Policy ID: HC-AUTO-1042" is verbatim on the claim form but was 3 words, under the
+    # 4-word minimum for quotes without a number. Any digits now count as a number (2-word minimum).
+    form = "Policy ID: HC-AUTO-1042\nIncident date: 2026-09-10\nClaim type: Auto"
+    assert agent_gate.quote_ok("Policy ID: HC-AUTO-1042", form)
+    assert not agent_gate.quote_ok("HC-AUTO-1042", form)
+    assert not agent_gate.quote_ok("retail plaza.", "in the parking lot of a\nretail plaza.")
+
+
+def test_a_whole_claim_form_line_is_a_valid_quote_but_only_on_the_claim_form():
+    # Live run 5: "Claim type: Auto" is a whole line of the code-written claim form (3 words, no digits).
+    _sample_claim()
+    out = _with_sentence("The claim form lists the claim type as Auto.", _cite("claim form", "Claim type: Auto"))
+    assert "G3" not in _rules(_gate(out))
+    # A short whole line of a document is still too short to count as evidence.
+    out = _with_sentence("It happened in a retail plaza.", _cite(POLICE, "retail plaza."))
+    assert "G3" in _rules(_gate(out))
+    # And a made-up form line is still not on the form.
+    out = _with_sentence("The claim form lists the claim type as Home.", _cite("claim form", "Claim type: Home"))
+    assert "G3" in _rules(_gate(out))

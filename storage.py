@@ -669,18 +669,20 @@ def start_agent_run(claim_id: str | None, agent: str, actor: str, prompt_version
 
 def finish_agent_run(run_id: int, status: str, *, error_type: str | None = None, output=None, gate=None,
                      trace=None, input_tokens: int | None = None, output_tokens: int | None = None,
-                     latency_ms: int | None = None) -> None:
-    """Close a running run, once. A run that is already finished is left exactly as it was."""
+                     latency_ms: int | None = None, model: str | None = None) -> None:
+    """Close a running run, once. A run that is already finished is left exactly as it was.
+    `model` is the model that answered (shown in the page's label); None keeps what start set."""
     if status not in AGENT_RUN_STATUSES:
         raise ValueError(f"unknown agent run status {status!r}")
     dumps = lambda value: None if value is None else json.dumps(value)
     with _connect() as conn:
         conn.execute(
             """UPDATE agent_runs SET status = ?, error_type = ?, output_json = ?, gate_json = ?,
-                      trace_json = ?, input_tokens = ?, output_tokens = ?, latency_ms = ?, finished_at = ?
+                      trace_json = ?, input_tokens = ?, output_tokens = ?, latency_ms = ?, finished_at = ?,
+                      model = COALESCE(?, model)
                WHERE id = ? AND status = 'running'""",
             (status, error_type, dumps(output), dumps(gate), dumps(trace), input_tokens, output_tokens,
-             latency_ms, _now(), run_id),
+             latency_ms, _now(), model, run_id),
         )
 
 

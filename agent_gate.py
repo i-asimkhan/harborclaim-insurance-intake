@@ -122,7 +122,8 @@ def quote_ok(quote: str, page_text: str) -> bool:
     if not pieces:
         return False
     for piece in pieces:
-        has_number = bool(amounts_in(piece) or dates_in(piece))
+        # Any digits count, so a short field like "Policy ID: HC-AUTO-1042" (first live run) can be quoted.
+        has_number = bool(amounts_in(piece) or dates_in(piece) or re.search(r"\d", piece))
         if len(piece.split()) < (2 if has_number else 4):
             return False
     haystack = normalise(page_text)
@@ -225,6 +226,10 @@ def shape_errors(agent: str, output) -> list[str]:
     if agent == "intake":
         if not all(isinstance(output[k], list) for k in TOP_KEYS["intake"]):
             return ["summary, worth_checking and missing_or_unclear must be lists"]
+        if not output["summary"]:
+            # Seen in the first live run: an empty review would otherwise "pass" and be labelled
+            # "checked against the documents" with nothing under it.
+            errors.append("summary is empty")
         errors += [f"summary[{i}] malformed" for i, s in enumerate(output["summary"]) if not _is_sentence(s)]
         errors += [f"worth_checking[{i}] malformed" for i, f in enumerate(output["worth_checking"])
                    if not (_is_sentence(f, "finding", {"kind"}) and f["kind"] in FINDING_KINDS)]
@@ -274,7 +279,12 @@ def _check_cited(where: str, text: str, citations: list[dict], sources: dict[str
         if not 1 <= c["page"] <= len(pages):
             reasons.append(_reason("G2", where, f"{c['source']} has no page {c['page']}"))
             continue
-        if not quote_ok(c["quote"], pages[c["page"] - 1]):
+        page = pages[c["page"] - 1]
+        # The claim form is code-written, one short field per line ("Claim type: Auto"), so a whole
+        # line of it is a precise quote even under the word minimum. Documents get no such exception.
+        whole_form_line = c["source"] == "claim form" and normalise(c["quote"]).strip(" .") in {
+            normalise(line) for line in page.splitlines() if line.strip()}
+        if not (whole_form_line or quote_ok(c["quote"], page)):
             reasons.append(_reason("G3", where, f"quote not found verbatim in {c['source']}"))
         if INJECTION.search(nfkc(c["quote"])):
             reasons.append(_reason("G8", where, "quote looks like an injected instruction"))

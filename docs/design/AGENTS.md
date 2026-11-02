@@ -506,8 +506,10 @@ Append-only like the other tables; a `running` row is finished once and never ch
 The page reads the latest **finished** intake run; a `running` row older than the timeout is
 shown as unavailable.
 
-**Ready for Azure data services later (ROADMAP Phase 4: Azure SQL, Blob Storage, a queue,
-Key Vault).** Three rules keep that move out of the agent layer:
+**For the Nov 10 demo the agents use the app's SQLite database and uploads on local disk; no
+Azure data service is used** (decided 2026-11-01). **Ready for Azure data services later
+(ROADMAP Phase 4: Azure SQL, Blob Storage, a queue, Key Vault).** Three rules keep that move
+out of the agent layer:
 
 1. **All data goes through `storage.py`.** Agent tools and the prefetch call storage functions
    only: no SQL, no file paths. A test fails if `agents.py`, `agent_tools.py` or
@@ -610,6 +612,21 @@ list with failover (`AI_MODELS`); allow short quotes that contain a number (G3);
 decision phrases (G5); and never trust a keyword refusal check alone (the refusal is written by
 code, section 5.2). The account is on OpenRouter's free tier: about 50 requests a day across all
 models, 20 a minute.
+
+**First live intake runs (2026-11-01; 5 runs on the sample auto claim, 5 requests, $0; Nemotron
+3.5 Super, throwaway data folder).** Each run was one model call; the model never chose a tool.
+
+| Run | Prompt | Result | What it taught |
+|---|---|---|---|
+| 1 | intake-v1 | **passed with all three lists empty** (19 output tokens) | An empty review would have been labelled "checked against the documents". G1 now rejects an empty summary; the schema says `minItems: 1`; the prompt asks for 2-8 sentences. |
+| 2 | intake-v2 | flagged: 6 reasons | Citations written into the sentence text; one-word quotes ("$1,850.00"); one quote for a three-fact sentence. Prompt: citations only in the list, whole-phrase quotes, one or two facts a sentence. |
+| 3 | intake-v3 | flagged: 4 | Much cleaner. `Policy ID: HC-AUTO-1042` is verbatim but 3 words: G3 now counts any digits as a number (2-word minimum). |
+| 4 | intake-v3 | flagged: 4 | Same prompt, very different reply (citations back in the text, a misspelt filename): the provider's default temperature. `ai_client` now sends `temperature: 0`. |
+| 5 | intake-v3, temperature 0 | flagged: 1 | `Claim type: Auto` is a whole line of the code-written claim form: such a line is now a valid quote (claim form only; a short document line is not). **Re-checked offline, run 5 passes.** |
+
+Observed limitation: one free model, one claim, five samples. The gate caught every real problem
+(an empty review, unverifiable numbers, a wrong filename) and no checks were relaxed for documents.
+How often it passes across different claims is what the golden set and round 2 (5.4) measure.
 
 ---
 

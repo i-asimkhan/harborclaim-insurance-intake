@@ -115,6 +115,7 @@ def _call_one(name: str, key: str, messages: list[dict], tools: list[dict] | Non
         "model": name,
         "messages": messages,
         "max_tokens": max_tokens,
+        "temperature": 0,  # a draft that must quote sources exactly: as repeatable as the model allows
         "reasoning": MODEL_SETTINGS.get(name, {}).get("reasoning", DEFAULT_REASONING),
     }
     if tools:

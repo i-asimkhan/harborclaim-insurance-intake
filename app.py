@@ -47,6 +47,8 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 import storage
+import agents
+import ai_client
 import email_delivery
 from email_delivery import send_email
 from auth import get_current_adjuster, get_current_user, router as auth_router
@@ -129,6 +131,60 @@ def _notify_adjusters(claim_id: str, claim_type: str, base_url: str, background:
         claim_id, "Ready for review", message, f"{base_url}/adjuster/claims/{claim_id}", "Open in review queue"
     )
     background.add_task(send_email, to, f"HarborClaim: claim {claim_id} ready for review", text, html)
+
+
+def _start_intake_review(claim_id: str, background: BackgroundTasks) -> None:
+    """Queue the AI intake review after the response (the email pattern). Nothing is queued when
+    AI is off. The review only reads: it never changes the claim, its status or its routing."""
+    if ai_client.enabled():
+        background.add_task(agents.run_intake_review, claim_id)
+
+
+# Why the page shows the template draft instead of an AI review, by the run's error type.
+AI_UNAVAILABLE_REASONS = {
+    "timeout": "the AI service didn't answer in time",
+    "rate_limited": "the free AI service's request limit was reached",
+    "http_error": "the AI service returned an error",
+    "bad_response": "the AI service sent a reply that couldn't be read",
+    "empty_reply": "the AI service sent an empty reply",
+    "bad_config": "the AI settings are incomplete",
+    "bad_output": "the AI's answer wasn't in the expected format",
+    "tool_error": "a lookup failed during the review",
+    "harness_error": "the review hit an internal error",
+}
+
+
+def _intake_stale_seconds() -> int:
+    """How long a "running" intake review counts as in progress: the run's own timeout plus room
+    to read the documents and check the answer. Older than that, it was lost (e.g. a restart)."""
+    return ai_client.timeout_seconds() + 30
+
+
+def _intake_review_view(claim_id: str) -> dict:
+    """What the adjuster page shows for the AI intake review. Always from the latest *finished*
+    run, so a re-run in progress never hides a result. The template draft stays the fallback."""
+    run = storage.latest_finished_agent_run(claim_id, "intake")
+    newest = storage.recent_agent_runs(claim_id, "intake", limit=1)
+    running = storage.agent_run_in_progress(claim_id, "intake", _intake_stale_seconds())
+    lost = bool(newest) and newest[0]["status"] == "running" and not running
+    view = {"ai_on": ai_client.enabled(), "running": running, "run": None, "reason": None, "flagged": set()}
+
+    if run and run["status"] in ("passed", "flagged") and run["output"]:
+        view["run"] = run
+        view["flagged"] = {r["where"] for r in (run["gate"] or {}).get("reasons", [])}
+    elif running:
+        pass
+    elif lost:
+        view["reason"] = "the last AI review didn't finish (the server may have restarted); re-run it"
+    elif run:
+        view["reason"] = AI_UNAVAILABLE_REASONS.get(run["error_type"], "the AI review was unavailable")
+    elif not view["ai_on"]:
+        view["reason"] = "AI review is off on this site"
+    elif storage.agent_runs_today("intake") >= agents.CHARTERS["intake"].daily_limit():
+        view["reason"] = "today's AI review limit is reached"
+    else:
+        view["reason"] = "no AI review has run for this claim yet"
+    return view
 
 
 def _claimant_nav(claimant_email: str) -> dict:
@@ -521,6 +577,7 @@ async def submit_claim(
     _notify(claim_id, user["email"], message, base_url, background)
     if result["status"] != NEEDS_INFORMATION:
         _notify_adjusters(claim_id, claim_type, base_url, background)
+    _start_intake_review(claim_id, background)
 
     return RedirectResponse(url=f"/claims/{claim_id}", status_code=303)
 
@@ -675,11 +732,26 @@ def adjuster_view_claim(request: Request, claim_id: str, adjuster: dict | None =
             "adjuster": adjuster,
             "decisions": DECISIONS,
             "facts_view": _group_facts(record["facts"]),
+            "ai_review": _intake_review_view(claim_id),
             **_adjuster_nav(),
             "READY_FOR_REVIEW": READY_FOR_REVIEW,
             "NEEDS_INFORMATION": NEEDS_INFORMATION,
         },
     )
+
+
+@app.post("/adjuster/claims/{claim_id}/intake-review")
+def rerun_intake_review(claim_id: str, background: BackgroundTasks,
+                        adjuster: dict | None = Depends(get_current_adjuster)):
+    """Re-run the AI intake review. Refused (a plain redirect back) while one is in progress or
+    when AI is off. It only reads the claim; nothing about the claim changes."""
+    if adjuster is None:
+        return RedirectResponse(url="/adjuster/login", status_code=303)
+    if storage.get_claim(claim_id) is None:
+        return RedirectResponse(url="/adjuster", status_code=303)
+    if not storage.agent_run_in_progress(claim_id, "intake", _intake_stale_seconds()):
+        _start_intake_review(claim_id, background)
+    return RedirectResponse(url=f"/adjuster/claims/{claim_id}", status_code=303)
 
 
 @app.post("/adjuster/claims/{claim_id}/decision")

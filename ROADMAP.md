@@ -48,9 +48,11 @@ about **Nov 4–9**, plus spare evenings before.
       fallback behind an off-by-default flag, so whatever is built by Nov 9 is what's shown.
 - [x] **New Azure resources for Phase 5**: none. Decided 2026-10-24: a free OpenRouter model
       instead of Azure OpenAI, $0 (Phase 5, step 5.0).
-- [ ] **Phase 4 scope.** The full production setup (Azure SQL, Blob, queue, Key Vault, Entra)
-      doesn't fit before Nov 10. Recommendation: build only what Phase 5 needs, and present
-      the rest as the documented production design (the "Long-term storage design" below).
+- [x] **Phase 4 scope: decided 2026-11-01, no Azure data services for the Nov 10 demo.** The
+      demo, local and hosted, keeps the app's own SQLite database (`data/harborclaim.db`) and
+      uploads on the server's disk. No Azure SQL, Blob Storage, queue or Key Vault is built or
+      created. Phase 4 is presented as the documented production design (the "Long-term
+      storage design" below), not as built work.
 - [ ] **Phase 1b open items** (decision note, "Worth checking") only if time allows; the
       decision note is the better demo moment.
 - [ ] **Confirm the final-project requirements** with the instructors: presentation length,
@@ -67,7 +69,7 @@ authoritative, honest labels); production roadmap (Phases 4–5).
   adjuster provisioned credentials), persistent SQLite storage, document upload, a mocked
   extraction/summary pipeline, a notification log, claim type at intake, a redesigned
   claimant side and adjuster side, and email delivery behind an off-by-default flag are all
-  built. **265 tests pass** (2026-11-01): 84 in `tests/test_app.py`, 161 in `tests/test_agents.py`
+  built. **279 tests pass** (2026-11-01): 84 in `tests/test_app.py`, 175 in `tests/test_agents.py`
   (Phase 5), 15 Playwright tests in
   `tests/test_ui.py`, 5 in `test_main.py`.
 - **Phases 1-3 and Phase 5 steps 5.1-5.2 are on branch `phase-5-agents`, open as
@@ -384,6 +386,9 @@ Goal: let a claimant say what kind of claim this is, and let that shape what's a
 
 ## Phase 4 -- Azure production setup
 
+**Not part of the Nov 10 demo** (decided 2026-11-01): the demo stays on SQLite and local
+uploads. Everything below is the production design, kept for the presentation and for later.
+
 - [ ] Flesh out Blob Storage, Document Intelligence, a queue, Key Vault, Azure SQL, and Entra
       ID for adjuster identity from a design into at least a partial build. Phase 5 needs none
       of them (it reads text PDFs with `pypdf`); Document Intelligence comes in only if
@@ -536,17 +541,22 @@ including Challenge 1
       known limits (AGENTS.md section 14). Worst hole fixed: a claimant answer promising
       "approved, you'll receive $4,240.00" passed the gate. 87 regression tests added.
 
-**5.3 Agent 1: intake review** -- **(demoable)**
+**5.3 Agent 1: intake review** -- **(demoable)** -- built 2026-11-01 with the fake model; first
+live run is 5.4
 
-- [ ] Background task after `POST /claims` (the email pattern, a plain `def`); re-run button on
+- [x] Background task after `POST /claims` (the email pattern, a plain `def`); re-run button on
       the review page, refused only while a run is in progress; the page shows the latest
       finished run; a `running` row older than the timeout shows as unavailable.
-- [ ] Adjuster review page: the "AI review" card (cited summary, "Worth checking", missing or
+- [x] Adjuster review page: the "AI review" card (cited summary, "Worth checking", missing or
       unclear, not summarised, not read in full), the collapsible AI trace, the labels in
       AGENTS.md section 9, and the template card as the fallback. This builds Phase 1b's "Worth
       checking" panel.
-- [ ] Claimant page unchanged (template draft only); a test proves no AI output reaches it.
-- [ ] The build guide's three checks: normal, missing/ambiguous, injected model failure.
+- [x] Claimant page unchanged (template draft only); a test proves no AI output reaches it.
+- [x] The build guide's three checks: normal, missing/ambiguous, injected model failure.
+- [x] Tests (11 in `tests/test_agents.py`): the three checks, passed and flagged labels, `<script>`
+      escaped, run in progress (re-run refused), a newer run never hides the finished one, a run
+      lost to a restart, AI off, re-run needs an adjuster. The run now stores the model that
+      answered, for the label. Card in `templates/_ai_review.html`.
 
 **5.4 Golden set, model bake-off and first live runs** (free quota; ask before each run)
 
@@ -557,8 +567,13 @@ including Challenge 1
       not-summarised count.
 - [ ] **Model bake-off, round 2:** `eval_agents.py --model` for the probe's top two models;
       the models that pass go into `AI_MODELS` in order, scorecards in `AI_USAGE.md`.
-- [ ] First live run locally; fixtures replayed in the test suite; results, model, prompt
-      version and one observed limitation recorded in `AI_USAGE.md`.
+- [x] **First live runs locally (2026-11-01):** 5 intake runs on the sample claim, $0. Found
+      and fixed: an empty review passed the gate (now rejected), citations written into the text
+      and too-short quotes (prompt now intake-v3, adjuster-v2), short claim-form fields under the
+      quote minimum, and run-to-run variance (`temperature: 0`). Run 5 passes. Results table in
+      AGENTS.md section 11.4.
+- [ ] Fixtures replayed in the test suite; results, model, prompt version and one observed
+      limitation recorded in `AI_USAGE.md`.
 
 - [ ] **Challenge 2 (independent subagent):** review the live outputs, the chosen model's
       scorecard and the recorded fixtures; write new adversarial golden claims (injection
@@ -624,7 +639,7 @@ the claimant is notified. Fictional demo data only. The owner is Asim Khan.
 - Server: `python -m uvicorn app:app --port 8123`. **No `--reload`**: it didn't notice Python
   edits in this OneDrive folder and died mid-edit. Restart the server by hand after changing any
   `.py` file; templates and CSS/JS changes show on a refresh.
-- Tests: `python -m pytest -q` from inside this folder (265 tests, about 2 min, includes the
+- Tests: `python -m pytest -q` from inside this folder (279 tests, about 2 min, includes the
   Playwright browser tests; `python -m playwright install chromium` once).
 - Screenshots: `python scripts/capture_screenshots.py` regenerates all 14 in
   `docs/screenshots/` from a live instance.

@@ -62,13 +62,7 @@
           </dl>
         </div>
 
-        {% if record.summary %}
-        <div class="card mock-card">
-          <h2>Draft summary <span class="mock-tag">Automated draft -- not AI-generated</span></h2>
-          <p class="summary-text">{{ record.summary.summary_text }}</p>
-          <span class="hint" title="{{ record.summary.generated_at }}">Generated {{ record.summary.generated_at | ago }}</span>
-        </div>
-        {% endif %}
+        {% include "_ai_review.html" %}
 
         {% if facts_view.groups or facts_view.unread_documents %}
         <div class="card mock-card">

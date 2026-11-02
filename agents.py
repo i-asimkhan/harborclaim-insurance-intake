@@ -51,7 +51,7 @@ _CITED_SENTENCE = {"type": "object", "additionalProperties": False, "required": 
 INTAKE_SCHEMA = {"type": "object", "additionalProperties": False,
                  "required": ["summary", "worth_checking", "missing_or_unclear"],
                  "properties": {
-                     "summary": {"type": "array", "items": _CITED_SENTENCE},
+                     "summary": {"type": "array", "items": _CITED_SENTENCE, "minItems": 1},
                      "worth_checking": {"type": "array", "items": {
                          "type": "object", "additionalProperties": False, "required": ["finding", "kind", "citations"],
                          "properties": {"finding": {"type": "string"},
@@ -76,8 +76,13 @@ _RULES = (
     "- Use only the sources provided. Each source is marked '=== SOURCE: <name> | PAGE <n> ==='.\n"
     "- Every sentence cites at least one source: its exact name, its page number, and a quote copied "
     "word for word from that page.\n"
-    "- Write dates as YYYY-MM-DD and amounts as $X,XXX.XX in your own words. Every amount or date in a "
-    "sentence must appear in that sentence's quotes.\n"
+    "- Citations go only in the citations list. Never write source names, page numbers, brackets or "
+    "quotes inside the sentence text.\n"
+    "- Each quote is a whole phrase of at least 5 words (or a full short field line such as "
+    "'Policy ID: ...'), copied exactly; a quote may run across a line break. Keep to one or two facts per "
+    "sentence, and add a citation for each: every amount, date and number in a sentence (including "
+    "policy and report numbers) must appear inside one of that sentence's quotes.\n"
+    "- Write dates as YYYY-MM-DD and amounts as $X,XXX.XX in your own words.\n"
     "- Never approve, deny, decline or recommend a decision, never say whether anything is covered or "
     "eligible, and never suggest a payment amount. A human adjuster decides.\n"
     "- Describe differences as observations, never accusations: never call anything fraud, suspicious, "
@@ -87,8 +92,10 @@ _RULES = (
 )
 INTAKE_PROMPT = (
     "You prepare a first draft for a human insurance adjuster reviewing a newly filed claim.\n"
-    "Write a short cited summary (at most 8 sentences), list specific things worth checking (at most 6, "
-    "each with a kind), and list anything missing or unclear (at most 5, plain sentences).\n"
+    "Write a short cited summary (at least 2 and at most 8 sentences) of what the documents and the "
+    "claim form say: what happened, when, and the amounts. An empty summary is never acceptable.\n"
+    "Then list specific things worth checking (at most 6, each with a kind) and anything missing or "
+    "unclear (at most 5, plain sentences); these two lists may be empty.\n"
     "You may call up to 3 tools first if they help: list_amounts, list_dates, find_claims_for_policy. "
     "A line item and a total are not a difference; a filed or valid-through date is not a conflict.\n\n"
     + _RULES)
@@ -106,7 +113,7 @@ CLAIMANT_PROMPT = (
     "never give legal advice: set refused to true for those questions. Mention only the claimant's own "
     "claims. Reply with JSON matching the schema, and nothing else."
 )
-PROMPT_VERSION = {"intake": "intake-v1", "adjuster": "adjuster-v1", "claimant": "claimant-v1"}
+PROMPT_VERSION = {"intake": "intake-v3", "adjuster": "adjuster-v2", "claimant": "claimant-v1"}
 
 # --- Code-written refusals: decision and coverage questions never reach the model -------------
 
@@ -252,7 +259,7 @@ def run_agent(charter: Charter, scope: agent_tools.Scope, *, actor: str, questio
                 storage.finish_agent_run(run_id, status, error_type=error_type, output=output, gate=gate,
                                          trace=trace, input_tokens=tokens["in"] or None,
                                          output_tokens=tokens["out"] or None,
-                                         latency_ms=int((time.monotonic() - started) * 1000))
+                                         latency_ms=int((time.monotonic() - started) * 1000), model=model)
             except Exception as exc:  # noqa: BLE001 -- e.g. an unstorable value; record the failure plainly
                 log.warning("Agent run could not be stored: %s.", type(exc).__name__)
                 try:

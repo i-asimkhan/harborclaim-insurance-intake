@@ -214,7 +214,22 @@ def _group_notifications(rows: list[dict]) -> list[dict]:
             last["email_delivery"] = row["delivery"]
     for event in events:
         event["channels"].sort(key=lambda c: c != "in_app")  # in-app first
+        if event["email_delivery"] == "queued" and _older_than(event["created_at"], QUEUED_STALE_MINUTES):
+            event["email_delivery"] = "unconfirmed"
     return events
+
+
+# A real send settles within seconds. A row still "queued" after this long was most likely cut
+# off by a restart, so the page says "not confirmed" rather than claiming it is still sending.
+QUEUED_STALE_MINUTES = 10
+
+
+def _older_than(iso: str, minutes: int) -> bool:
+    try:
+        then = datetime.fromisoformat(iso)
+    except (TypeError, ValueError):
+        return False
+    return (datetime.now(timezone.utc) - then).total_seconds() > minutes * 60
 
 
 QUEUE_VIEWS = {

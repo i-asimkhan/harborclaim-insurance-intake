@@ -67,7 +67,7 @@ authoritative, honest labels); production roadmap (Phases 4–5).
   adjuster provisioned credentials), persistent SQLite storage, document upload, a mocked
   extraction/summary pipeline, a notification log, claim type at intake, a redesigned
   claimant side and adjuster side, and email delivery behind an off-by-default flag are all
-  built. **262 tests pass** (2026-10-26): 82 in `tests/test_app.py`, 160 in `tests/test_agents.py`
+  built. **265 tests pass** (2026-11-01): 84 in `tests/test_app.py`, 161 in `tests/test_agents.py`
   (Phase 5), 15 Playwright tests in
   `tests/test_ui.py`, 5 in `test_main.py`.
 - **Phases 1-3 and Phase 5 steps 5.1-5.2 are on branch `phase-5-agents`, open as
@@ -79,7 +79,12 @@ authoritative, honest labels); production roadmap (Phases 4–5).
   browser tests depended on the local `.env`'s `SESSION_SECRET_KEY`; `tests/conftest.py` now pins
   a test-only key. `.github/workflows/claude-review.yml` runs an automatic Claude review on each
   PR using the owner's subscription; it needs the Claude GitHub App installed and the
-  `CLAUDE_CODE_OAUTH_TOKEN` repository secret (from `claude setup-token`) -- not yet done.
+  `CLAUDE_CODE_OAUTH_TOKEN` repository secret (from `claude setup-token`). **Enabled 2026-11-01**
+  (the workflow had to be on `main` first, PR #2). Its first review of PR #1 led to: an email
+  still "queued" after 10 minutes now shows "Email not confirmed"; AGENTS.md records that
+  `find_claims_for_policy` stays adjuster-only (it can reveal other people's claims on a typed-in
+  policy ID); boundary tests for `time_ago` and notification grouping. Fork PRs: not applicable
+  (solo repo).
 - Deployed live at **[harborclaim-demo-2630.azurewebsites.net](https://harborclaim-demo-2630.azurewebsites.net)**
   (Azure App Service, Free F1 plan), deployed from this repo's `main` branch. Deployment is
   a **manual sync**, not automatic on push (`isManualIntegration: true`, no webhook): after
@@ -619,7 +624,7 @@ the claimant is notified. Fictional demo data only. The owner is Asim Khan.
 - Server: `python -m uvicorn app:app --port 8123`. **No `--reload`**: it didn't notice Python
   edits in this OneDrive folder and died mid-edit. Restart the server by hand after changing any
   `.py` file; templates and CSS/JS changes show on a refresh.
-- Tests: `python -m pytest -q` from inside this folder (262 tests, about 90 s, includes the
+- Tests: `python -m pytest -q` from inside this folder (265 tests, about 2 min, includes the
   Playwright browser tests; `python -m playwright install chromium` once).
 - Screenshots: `python scripts/capture_screenshots.py` regenerates all 14 in
   `docs/screenshots/` from a live instance.

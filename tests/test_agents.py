@@ -556,6 +556,13 @@ def test_claimant_tools_see_only_the_claimants_own_claims():
         agent_tools.get_claim_status(mine, "'; DROP TABLE claims; --")
 
 
+def test_claimant_assistant_has_no_policy_lookup_and_no_intake_review():
+    # find_claims_for_policy can reveal that someone else's claims exist on a typed-in policy ID,
+    # so it and the intake review built from it stay with the intake/adjuster agents (R9).
+    claimant_tools = set(agent_tools.TOOLS["claimant"])
+    assert not claimant_tools & {"find_claims_for_policy", "get_intake_review"}
+
+
 # --- Harness ----------------------------------------------------------------------------------
 
 MODEL = "fake/model:free"

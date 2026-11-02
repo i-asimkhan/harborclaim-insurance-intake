@@ -860,6 +860,39 @@ def test_time_ago_reads_like_a_person_would_say_it():
     assert ago(days=3) == "3 days ago"
     assert ago(days=30) == (now - timedelta(days=30)).date().isoformat()
     assert app_module.time_ago("not a date") == "not a date"
+    # boundaries
+    assert ago(seconds=59) == "just now"
+    assert ago(seconds=60) == "1 minute ago"
+    assert ago(days=6) == "6 days ago"
+    assert ago(days=7) == (now - timedelta(days=7)).date().isoformat()
+
+
+def test_an_email_still_queued_long_after_is_shown_as_not_confirmed():
+    # A restart between "queued" and the background send would leave the row queued forever;
+    # the page must not keep saying "sending".
+    from datetime import datetime, timedelta, timezone
+    now = datetime.now(timezone.utc)
+
+    def rows(minutes_old):
+        at = (now - timedelta(minutes=minutes_old)).isoformat(timespec="seconds")
+        base = {"claim_id": "CLM-0000AAAA", "message": "Received", "created_at": at, "read_at": None}
+        return [{**base, "channel": "in_app", "delivery": None},
+                {**base, "channel": "email", "delivery": "queued"}]
+
+    assert app_module._group_notifications(rows(1))[0]["email_delivery"] == "queued"
+    old = app_module._group_notifications(rows(app_module.QUEUED_STALE_MINUTES + 1))
+    assert len(old) == 1 and old[0]["email_delivery"] == "unconfirmed"
+
+
+def test_grouping_pairs_adjacent_channel_rows_even_across_a_second_boundary():
+    first = {"claim_id": "CLM-0000AAAA", "message": "Received", "read_at": None}
+    grouped = app_module._group_notifications([
+        {**first, "channel": "in_app", "delivery": None, "created_at": "2026-11-01T10:00:00+00:00"},
+        {**first, "channel": "email", "delivery": "sent", "created_at": "2026-11-01T10:00:01+00:00"},
+        {**first, "channel": "in_app", "delivery": None, "created_at": "2026-11-01T10:05:00+00:00"},
+    ])
+    assert [e["channels"] for e in grouped] == [["in_app", "email"], ["in_app"]]
+    assert grouped[0]["email_delivery"] == "sent"
 
 
 def test_completely_empty_submission_is_rejected_and_nothing_is_stored():

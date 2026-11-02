@@ -38,6 +38,8 @@
                 <span class="channel-tag">📧 Email sent</span>
                 {% elif e.email_delivery == "queued" %}
                 <span class="channel-tag">⏳ Email sending</span>
+                {% elif e.email_delivery == "unconfirmed" %}
+                <span class="channel-tag channel-failed">❔ Email not confirmed</span>
                 {% elif e.email_delivery == "failed" %}
                 <span class="channel-tag channel-failed">⚠ Email failed</span>
                 {% else %}

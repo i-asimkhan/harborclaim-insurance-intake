@@ -274,7 +274,7 @@ documents say. Up to 3 of:
 |---|---|---|
 | `list_amounts()` | Every dollar amount found, each with its source, page and the line it sits on | Lists, never judges: a repair estimate's line items and a police "visual estimate" are not a mismatch by themselves. The model reads the context and decides. |
 | `list_dates()` | Every date found, each with its source, page and line, plus the claimed incident date | Same: a "filed" or "valid through" date is not a conflict. |
-| `find_claims_for_policy()` | Count and filed dates of other claims on the same policy ID; no claimant details, no contents | "None" is a normal, valid result. |
+| `find_claims_for_policy()` | Count and filed dates of other claims on the same policy ID; no claimant details, no contents | "None" is a normal, valid result. Decision: the policy ID is free text, so this reveals that other claims exist on it and when they were filed, possibly someone else's. That is a fair signal for an adjuster, so the intake review (and anything built from it) is adjuster-only and never shown to a claimant (R9); the claimant tools have no policy lookup. |
 
 **Output schema** (the model's part only; quotes below are verbatim from the sample documents).
 
@@ -449,7 +449,7 @@ first line; each one has a hard guardrail behind it.
 | R6 | ≤ 3 model calls and ≤ 3 tool calls per run | Hard | harness | cap tests (sequential and parallel calls) |
 | R7 | Tool arguments validated (filenames, pages, claim ID format, lengths) | Hard | harness `valid_args` | invalid-argument tests |
 | R8 | Scope set by Python: one claim, or one claimant's own claims | Hard | tools receive scope from route/session | another-claimant test returns "not found" |
-| R9 | Claimant never sees documents, facts, findings or traces | Hard | claimant tools return none of them; templates | page and tool tests |
+| R9 | Claimant never sees documents, facts, findings, traces or the intake review (which can mention other claims on the same policy ID) | Hard | claimant tools return none of them; templates | page and tool tests |
 | R10 | Core behavior kept on any AI failure: status, routing, notifications, template draft unchanged | Hard | harness never raises; fallback card | injected timeout, HTTP error, bad JSON, tool exception tests |
 | R11 | Every output checked before display (G1-G8) | Hard | `agent_gate.py` | one pass/fail test per rule |
 | R12 | Decision and coverage questions refused with code-written text | Hard (keyword pre-check, `refused` flag) + Soft (prompt) | routes, harness | refusal tests |

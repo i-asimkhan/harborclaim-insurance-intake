@@ -354,10 +354,13 @@ this repo's `main` branch. To reproduce it:
    imported when `acs` is selected. Each email has a designed HTML version and a link to the
    claim. `EMAIL_ENABLED=false` switches real email off without removing the other settings (handy
    while Azure's sending limit recovers). Email is sent after the response goes out, so the page
-   never waits on Azure; the notifications page shows "Email sending" until it settles. Two more
+   never waits on Azure; the notifications page shows "Email sending" until it settles, and
+   "Email not confirmed" if it never did (for example, the server restarted mid-send). Two more
    optional settings: `APP_BASE_URL` (the site's public address, used for those
    links; set it on the hosted site, locally it is worked out from the request) and
-   `ADJUSTER_NOTIFY_EMAIL` (an inbox that gets an email when a claim is ready for review).
+   `ADJUSTER_NOTIFY_EMAIL` (an inbox that gets an email when a claim is ready for review). The
+   adjuster email is only sent when email is real; with email simulated it is skipped and not
+   recorded anywhere, because notification rows belong to claimants.
    See `email_delivery.py` and `ROADMAP.md` (Phase 3).
 6. **AI agents (Phase 5, in progress; off by default).** No model is ever called unless you
    opt in. Names only: `AI_PROVIDER` (`openrouter` to enable; blank = off), `AI_ENABLED`

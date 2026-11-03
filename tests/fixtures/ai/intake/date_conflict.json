@@ -1,0 +1,31 @@
+{
+ "case": "date_conflict",
+ "prompt_version": "intake-v5",
+ "models": [
+  "nvidia/nemotron-3.5-super-vl:free"
+ ],
+ "recorded_at": "2026-11-02T21:13:27+00:00",
+ "replies": [
+  {
+   "ok": true,
+   "error_type": null,
+   "message": {
+    "role": "assistant",
+    "content": "{\"summary\": [{\"text\": \"The claim form lists Policy ID HC-HLTH-4120, an incident date of 2026-07-02, and claim type Health / injury.\", \"citations\": [{\"source\": \"claim form\", \"page\": 1, \"quote\": \"Policy ID: HC-HLTH-4120\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Incident date: 2026-07-02\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Claim type: Health / injury\"}]}, {\"text\": \"The claimant states they slipped on wet stairs at home and sprained their wrist, then went to urgent care the next day.\", \"citations\": [{\"source\": \"description\", \"page\": 1, \"quote\": \"I slipped on wet stairs at home and sprained my wrist. I went to urgent care the next day.\"}]}, {\"text\": \"Urgent care visit notes show the patient was seen on 2026-07-04 for a sprained left wrist and reports the fall on wet stairs occurred on 2026-07-03.\", \"citations\": [{\"source\": \"date_visit_notes.txt\", \"page\": 1, \"quote\": \"Patient seen on 2026-07-04 for a sprained left wrist.\"}, {\"source\": \"date_visit_notes.txt\", \"page\": 1, \"quote\": \"Patient reports the injury happened in a fall on wet stairs on 2026-07-03.\"}]}], \"worth_checking\": [{\"finding\": \"The claim form incident date of 2026-07-02 differs from the visit notes' reported fall date of 2026-07-03.\", \"kind\": \"date_difference\", \"citations\": [{\"source\": \"claim form\", \"page\": 1, \"quote\": \"Incident date: 2026-07-02\"}, {\"source\": \"date_visit_notes.txt\", \"page\": 1, \"quote\": \"Patient reports the injury happened in a fall on wet stairs on 2026-07-03.\"}]}, {\"finding\": \"The claim form claim type Health / injury does not match the visit notes' incident type Bodily injury.\", \"kind\": \"type_mismatch\", \"citations\": [{\"source\": \"claim form\", \"page\": 1, \"quote\": \"Claim type: Health / injury\"}, {\"source\": \"date_visit_notes.txt\", \"page\": 1, \"quote\": \"incident_type: Bodily injury\"}]}], \"missing_or_unclear\": [\"No treatment notes or medical bill amounts are provided in the sources.\"]}"
+   },
+   "content": "{\"summary\": [{\"text\": \"The claim form lists Policy ID HC-HLTH-4120, an incident date of 2026-07-02, and claim type Health / injury.\", \"citations\": [{\"source\": \"claim form\", \"page\": 1, \"quote\": \"Policy ID: HC-HLTH-4120\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Incident date: 2026-07-02\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Claim type: Health / injury\"}]}, {\"text\": \"The claimant states they slipped on wet stairs at home and sprained their wrist, then went to urgent care the next day.\", \"citations\": [{\"source\": \"description\", \"page\": 1, \"quote\": \"I slipped on wet stairs at home and sprained my wrist. I went to urgent care the next day.\"}]}, {\"text\": \"Urgent care visit notes show the patient was seen on 2026-07-04 for a sprained left wrist and reports the fall on wet stairs occurred on 2026-07-03.\", \"citations\": [{\"source\": \"date_visit_notes.txt\", \"page\": 1, \"quote\": \"Patient seen on 2026-07-04 for a sprained left wrist.\"}, {\"source\": \"date_visit_notes.txt\", \"page\": 1, \"quote\": \"Patient reports the injury happened in a fall on wet stairs on 2026-07-03.\"}]}], \"worth_checking\": [{\"finding\": \"The claim form incident date of 2026-07-02 differs from the visit notes' reported fall date of 2026-07-03.\", \"kind\": \"date_difference\", \"citations\": [{\"source\": \"claim form\", \"page\": 1, \"quote\": \"Incident date: 2026-07-02\"}, {\"source\": \"date_visit_notes.txt\", \"page\": 1, \"quote\": \"Patient reports the injury happened in a fall on wet stairs on 2026-07-03.\"}]}, {\"finding\": \"The claim form claim type Health / injury does not match the visit notes' incident type Bodily injury.\", \"kind\": \"type_mismatch\", \"citations\": [{\"source\": \"claim form\", \"page\": 1, \"quote\": \"Claim type: Health / injury\"}, {\"source\": \"date_visit_notes.txt\", \"page\": 1, \"quote\": \"incident_type: Bodily injury\"}]}], \"missing_or_unclear\": [\"No treatment notes or medical bill amounts are provided in the sources.\"]}",
+   "tool_calls": [],
+   "finish_reason": "stop",
+   "model_served": "nvidia/nemotron-3.5-super-vl:free",
+   "input_tokens": 1244,
+   "output_tokens": 625,
+   "latency_ms": 3906,
+   "attempts": [
+    {
+     "model": "nvidia/nemotron-3.5-super-vl:free",
+     "error_type": null
+    }
+   ]
+  }
+ ]
+}

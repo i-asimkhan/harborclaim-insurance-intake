@@ -1,0 +1,31 @@
+{
+ "case": "type_mismatch",
+ "prompt_version": "intake-v5",
+ "models": [
+  "nvidia/nemotron-3.5-super-vl:free"
+ ],
+ "recorded_at": "2026-11-02T21:13:31+00:00",
+ "replies": [
+  {
+   "ok": true,
+   "error_type": null,
+   "message": {
+    "role": "assistant",
+    "content": "{\"summary\": [{\"text\": \"The claim form lists Policy ID HC-HLTH-4188, an incident date of 2026-06-20, and claim type Health / injury.\", \"citations\": [{\"source\": \"claim form\", \"page\": 1, \"quote\": \"Policy ID: HC-HLTH-4188\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Incident date: 2026-06-20\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Claim type: Health / injury\"}]}, {\"text\": \"The description says the claim is for an accident at Pine Street and 4th Avenue on 2026-06-20.\", \"citations\": [{\"source\": \"description\", \"page\": 1, \"quote\": \"Claim for the accident at Pine Street and 4th Avenue on 2026-06-20.\"}]}, {\"text\": \"The police report says two vehicles collided at Pine Street and 4th Avenue on 2026-06-20, both had front-end damage, and no injuries were reported at the scene.\", \"citations\": [{\"source\": \"type_police_report.txt\", \"page\": 1, \"quote\": \"On 2026-06-20, two vehicles collided at the corner of Pine Street and 4th Avenue.\"}, {\"source\": \"type_police_report.txt\", \"page\": 1, \"quote\": \"Both vehicles had front-end damage. No injuries were reported at the scene.\"}]}], \"worth_checking\": [{\"finding\": \"Claim type is Health / injury but the police report describes a vehicle collision with no injuries reported at the scene.\", \"kind\": \"type_mismatch\", \"citations\": [{\"source\": \"claim form\", \"page\": 1, \"quote\": \"Claim type: Health / injury\"}, {\"source\": \"type_police_report.txt\", \"page\": 1, \"quote\": \"No injuries were reported at the scene.\"}]}], \"missing_or_unclear\": []}"
+   },
+   "content": "{\"summary\": [{\"text\": \"The claim form lists Policy ID HC-HLTH-4188, an incident date of 2026-06-20, and claim type Health / injury.\", \"citations\": [{\"source\": \"claim form\", \"page\": 1, \"quote\": \"Policy ID: HC-HLTH-4188\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Incident date: 2026-06-20\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Claim type: Health / injury\"}]}, {\"text\": \"The description says the claim is for an accident at Pine Street and 4th Avenue on 2026-06-20.\", \"citations\": [{\"source\": \"description\", \"page\": 1, \"quote\": \"Claim for the accident at Pine Street and 4th Avenue on 2026-06-20.\"}]}, {\"text\": \"The police report says two vehicles collided at Pine Street and 4th Avenue on 2026-06-20, both had front-end damage, and no injuries were reported at the scene.\", \"citations\": [{\"source\": \"type_police_report.txt\", \"page\": 1, \"quote\": \"On 2026-06-20, two vehicles collided at the corner of Pine Street and 4th Avenue.\"}, {\"source\": \"type_police_report.txt\", \"page\": 1, \"quote\": \"Both vehicles had front-end damage. No injuries were reported at the scene.\"}]}], \"worth_checking\": [{\"finding\": \"Claim type is Health / injury but the police report describes a vehicle collision with no injuries reported at the scene.\", \"kind\": \"type_mismatch\", \"citations\": [{\"source\": \"claim form\", \"page\": 1, \"quote\": \"Claim type: Health / injury\"}, {\"source\": \"type_police_report.txt\", \"page\": 1, \"quote\": \"No injuries were reported at the scene.\"}]}], \"missing_or_unclear\": []}",
+   "tool_calls": [],
+   "finish_reason": "stop",
+   "model_served": "nvidia/nemotron-3.5-super-vl:free",
+   "input_tokens": 1270,
+   "output_tokens": 476,
+   "latency_ms": 3172,
+   "attempts": [
+    {
+     "model": "nvidia/nemotron-3.5-super-vl:free",
+     "error_type": null
+    }
+   ]
+  }
+ ]
+}

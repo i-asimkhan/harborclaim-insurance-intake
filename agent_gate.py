@@ -300,7 +300,10 @@ def _check_cited(where: str, text: str, citations: list[dict], sources: dict[str
     # Single-digit counts ("3 line items") are allowed; anything bigger must be in the quotes.
     for digits in other_digits_in(text) - quoted_digits - extra_digits - set("123456789"):
         reasons.append(_reason("G4", where, f"the number {digits} is not in the cited quotes"))
-    if UNVERIFIABLE.search(nfkc(text)):
+    # A pattern copied word for word from this sentence's own quotes is verified, not invented:
+    # "4th Avenue" in a street address (golden set, 2026-11-02) is not a date written as "the 4th".
+    quoted_text = " ".join(normalise(c["quote"]) for c in citations)
+    if any(normalise(m.group()) not in quoted_text for m in UNVERIFIABLE.finditer(nfkc(text))):
         reasons.append(_reason("G4", where, "a date or amount is not written as YYYY-MM-DD or $X,XXX.XX"))
     _check_wording(where, text, reasons)
 

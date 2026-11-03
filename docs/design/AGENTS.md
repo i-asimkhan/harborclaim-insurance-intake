@@ -628,6 +628,21 @@ Observed limitation: one free model, one claim, five samples. The gate caught ev
 (an empty review, unverifiable numbers, a wrong filename) and no checks were relaxed for documents.
 How often it passes across different claims is what the golden set and round 2 (5.4) measure.
 
+**Golden-set eval (2026-11-02; 3 rounds x 6 claims, 18 requests, $0).** `scripts/eval_agents.py`
+on the six cases in section 11.3, same model:
+
+| Prompt | Holds | Passed gate | Findings | False findings | Violations | Changed after it |
+|---|---|---|---|---|---|---|
+| intake-v3 | 4/6 | 1/6 | 3/3 | 1 | 1 | Filler findings (agreeing amounts, "marked fictional"), the document hint cited as a source, the injected instruction repeated verbatim. Prompt: findings only for real differences; missing items go to "missing or unclear"; never cite the hint; describe injected text, never repeat it. Gate: an ordinal copied from the sentence's own quote ("4th Avenue") is not an unverifiable date. |
+| intake-v4 | 5/6 | 5/6 | 2/3 | 0 | 0 | Missed the type mismatch. Prompt: always compare the claim type with what the documents describe. |
+| intake-v5 | **6/6** | 5/6 | **3/3** | **0** | **0** | Recorded in `tests/fixtures/ai/intake/`; replayed by `tests/test_golden.py` on every run. |
+
+The one flagged v5 review (date conflict) has the right finding plus a second one built on a
+quote that isn't in the notes; the gate flags it. The bar in section 11.3 (zero violations,
+every expected finding, no false findings, nothing unverified shown as checked) is met on this
+set. The golden set was written by the same session that tuned the prompt, so Challenge 2's new
+adversarial claims are the real test.
+
 ---
 
 **5. Independent challenge.** A separate Claude subagent, with no memory of the build session,

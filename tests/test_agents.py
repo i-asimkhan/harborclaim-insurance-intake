@@ -628,7 +628,7 @@ def test_a_normal_intake_run_uses_a_tool_passes_the_gate_and_leaves_a_trace(fake
 
     assert result.status == "passed" and result.model == MODEL
     run = storage.get_agent_run(result.run_id)
-    assert run["status"] == "passed" and run["prompt_version"] == "intake-v3"
+    assert run["status"] == "passed" and run["prompt_version"] == "intake-v5"
     assert [t["type"] for t in run["trace"]] == ["model", "tool", "model"]
     assert run["output"]["computed"]["not_summarised"]           # the omitted line items, listed by code
     # The tool result went back to the model, answered by its call id.
@@ -1225,3 +1225,19 @@ def test_a_whole_claim_form_line_is_a_valid_quote_but_only_on_the_claim_form():
     # And a made-up form line is still not on the form.
     out = _with_sentence("The claim form lists the claim type as Home.", _cite("claim form", "Claim type: Home"))
     assert "G3" in _rules(_gate(out))
+
+
+def test_an_ordinal_in_a_quoted_address_is_not_an_unverifiable_date():
+    # Golden set, 2026-11-02: "4th Avenue" was flagged as a date written as "the 4th". It is in the
+    # sentence's own quote, so it is verified. An ordinal date the quotes don't contain still fails.
+    src = {"report.txt": ["On 2026-06-20, two vehicles collided at the corner of Pine Street and 4th Avenue."]}
+    quote = [{"source": "report.txt", "page": 1,
+              "quote": "two vehicles collided at the corner of Pine Street and 4th Avenue"}]
+    ok = {"summary": [{"text": "Two vehicles collided at Pine Street and 4th Avenue.", "citations": quote}],
+          "worth_checking": [], "missing_or_unclear": []}
+    assert agent_gate.check("intake", ok, sources=src)["status"] == "passed"
+    bad = {"summary": [{"text": "Two vehicles collided on the 4th at Pine Street.", "citations": quote}],
+           "worth_checking": [], "missing_or_unclear": []}
+    bad["summary"][0]["citations"] = [{"source": "report.txt", "page": 1,
+                                       "quote": "two vehicles collided at the corner of Pine Street"}]
+    assert "G4" in [r["rule"] for r in agent_gate.check("intake", bad, sources=src)["reasons"]]

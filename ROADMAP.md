@@ -69,7 +69,7 @@ authoritative, honest labels); production roadmap (Phases 4–5).
   adjuster provisioned credentials), persistent SQLite storage, document upload, a mocked
   extraction/summary pipeline, a notification log, claim type at intake, a redesigned
   claimant side and adjuster side, and email delivery behind an off-by-default flag are all
-  built. **279 tests pass** (2026-11-01): 84 in `tests/test_app.py`, 175 in `tests/test_agents.py`
+  built. **294 tests pass** (2026-11-02): 84 in `tests/test_app.py`, 176 in `tests/test_agents.py`, 14 in `tests/test_golden.py`
   (Phase 5), 15 Playwright tests in
   `tests/test_ui.py`, 5 in `test_main.py`.
 - **Phases 1-3 and Phase 5 steps 5.1-5.2 are on branch `phase-5-agents`, open as
@@ -560,11 +560,18 @@ live run is 5.4
 
 **5.4 Golden set, model bake-off and first live runs** (free quota; ask before each run)
 
-- [ ] `sample_data/golden/`: six claims from new single-purpose `.txt` documents (AGENTS.md
-      section 11), including the amount-conflict document for the pressure test.
-- [ ] `scripts/eval_agents.py`: `--record` saves real responses to `tests/fixtures/ai/`; the
-      default mode prints faithfulness, finding recall, false findings, violations and the
-      not-summarised count.
+- [x] `sample_data/golden/`: six claims from new single-purpose `.txt` documents (AGENTS.md
+      section 11), including the amount-conflict document for the pressure test
+      (`cases.json`: clean, amount conflict, date conflict, type mismatch, missing date,
+      injection). Done 2026-11-02.
+- [x] `scripts/eval_agents.py`: `--record` saves real responses to `tests/fixtures/ai/intake/`;
+      `--replay` scores them offline; the default (live) mode prints faithfulness, finding
+      recall, false findings, violations and the not-summarised count, and whether each case's
+      "must hold" is met. `tests/test_golden.py` (8 tests, scripted replies) checks the scorer,
+      and replays every recorded case once recordings exist. Done 2026-11-02.
+- [x] **Live eval of the golden set** (2026-11-02, 18 free requests): intake-v5 holds 6/6, all 3
+      conflicts found, 0 false findings, 0 violations. Recorded and replayed offline. Table in
+      AGENTS.md section 11.4 and `AI_USAGE.md`.
 - [ ] **Model bake-off, round 2:** `eval_agents.py --model` for the probe's top two models;
       the models that pass go into `AI_MODELS` in order, scorecards in `AI_USAGE.md`.
 - [x] **First live runs locally (2026-11-01):** 5 intake runs on the sample claim, $0. Found
@@ -572,8 +579,8 @@ live run is 5.4
       and too-short quotes (prompt now intake-v3, adjuster-v2), short claim-form fields under the
       quote minimum, and run-to-run variance (`temperature: 0`). Run 5 passes. Results table in
       AGENTS.md section 11.4.
-- [ ] Fixtures replayed in the test suite; results, model, prompt version and one observed
-      limitation recorded in `AI_USAGE.md`.
+- [x] Fixtures replayed in the test suite; results, model, prompt version and one observed
+      limitation recorded in `AI_USAGE.md` (2026-11-02).
 
 - [ ] **Challenge 2 (independent subagent):** review the live outputs, the chosen model's
       scorecard and the recorded fixtures; write new adversarial golden claims (injection
@@ -639,7 +646,7 @@ the claimant is notified. Fictional demo data only. The owner is Asim Khan.
 - Server: `python -m uvicorn app:app --port 8123`. **No `--reload`**: it didn't notice Python
   edits in this OneDrive folder and died mid-edit. Restart the server by hand after changing any
   `.py` file; templates and CSS/JS changes show on a refresh.
-- Tests: `python -m pytest -q` from inside this folder (279 tests, about 2 min, includes the
+- Tests: `python -m pytest -q` from inside this folder (294 tests, about 2 min, includes the
   Playwright browser tests; `python -m playwright install chromium` once).
 - Screenshots: `python scripts/capture_screenshots.py` regenerates all 14 in
   `docs/screenshots/` from a live instance.

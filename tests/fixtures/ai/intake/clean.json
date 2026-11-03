@@ -1,0 +1,31 @@
+{
+ "case": "clean",
+ "prompt_version": "intake-v5",
+ "models": [
+  "nvidia/nemotron-3.5-super-vl:free"
+ ],
+ "recorded_at": "2026-11-02T21:13:20+00:00",
+ "replies": [
+  {
+   "ok": true,
+   "error_type": null,
+   "message": {
+    "role": "assistant",
+    "content": "{\"summary\": [{\"text\": \"The claimant reports that their car was struck from behind at a red light on Bay Street on 2026-08-14, with a body shop quote of $1,320.00 for rear bumper repairs.\", \"citations\": [{\"source\": \"description\", \"page\": 1, \"quote\": \"My car was hit from behind at a red light on Bay Street on 2026-08-14. The body shop quoted $1,320.00 to repair the rear bumper.\"}]}, {\"text\": \"The Harbor City Police Department report #HPR-30112, filed 2026-08-14, confirms the vehicle was struck from behind while stopped at a red light on Bay Street with damage limited to the rear bumper.\", \"citations\": [{\"source\": \"clean_police_report.txt\", \"page\": 1, \"quote\": \"Report #HPR-30112 filed 2026-08-14\"}]}, {\"text\": \"The Bay Auto Body repair estimate lists rear bumper repair and paint for a total estimate of $1,320.00.\", \"citations\": [{\"source\": \"clean_repair_estimate.txt\", \"page\": 1, \"quote\": \"Rear bumper repair and paint, total estimate $1,320.00\"}]}], \"worth_checking\": [], \"missing_or_unclear\": []}"
+   },
+   "content": "{\"summary\": [{\"text\": \"The claimant reports that their car was struck from behind at a red light on Bay Street on 2026-08-14, with a body shop quote of $1,320.00 for rear bumper repairs.\", \"citations\": [{\"source\": \"description\", \"page\": 1, \"quote\": \"My car was hit from behind at a red light on Bay Street on 2026-08-14. The body shop quoted $1,320.00 to repair the rear bumper.\"}]}, {\"text\": \"The Harbor City Police Department report #HPR-30112, filed 2026-08-14, confirms the vehicle was struck from behind while stopped at a red light on Bay Street with damage limited to the rear bumper.\", \"citations\": [{\"source\": \"clean_police_report.txt\", \"page\": 1, \"quote\": \"Report #HPR-30112 filed 2026-08-14\"}]}, {\"text\": \"The Bay Auto Body repair estimate lists rear bumper repair and paint for a total estimate of $1,320.00.\", \"citations\": [{\"source\": \"clean_repair_estimate.txt\", \"page\": 1, \"quote\": \"Rear bumper repair and paint, total estimate $1,320.00\"}]}], \"worth_checking\": [], \"missing_or_unclear\": []}",
+   "tool_calls": [],
+   "finish_reason": "stop",
+   "model_served": "nvidia/nemotron-3.5-super-vl:free",
+   "input_tokens": 1411,
+   "output_tokens": 333,
+   "latency_ms": 4265,
+   "attempts": [
+    {
+     "model": "nvidia/nemotron-3.5-super-vl:free",
+     "error_type": null
+    }
+   ]
+  }
+ ]
+}

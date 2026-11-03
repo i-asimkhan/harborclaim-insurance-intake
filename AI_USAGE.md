@@ -39,3 +39,28 @@ The assignment's own starter prompt, as given in the take-home build packet:
   human adjuster stay authoritative.
 - Confirmed no real customer data, credentials, or secrets appear anywhere in this
   folder — every claim ID, policy ID, and document name is fictional.
+
+## Phase 5: the AI model inside the app (intake review)
+
+Separate from the build tool above: this is the model HarborClaim itself calls, off by default.
+
+- **Model:** `nvidia/nemotron-3.5-super-vl:free` via OpenRouter (free tier, $0), reasoning off,
+  temperature 0. Chosen by testing (AGENTS.md section 11.4, round 1 probe).
+- **Prompt:** `intake-v5` (`agents.py`). Every output goes through the code gate
+  (`agent_gate.py`, rules G1-G8) before an adjuster sees it.
+- **Golden-set eval, 2026-11-02** (`python scripts/eval_agents.py`; 6 fictional claims in
+  `sample_data/golden/`; replies recorded in `tests/fixtures/ai/intake/` and replayed by the tests):
+
+  | Prompt | Cases hold | Passed gate | Findings found | False findings | Policy violations |
+  |---|---|---|---|---|---|
+  | intake-v3 | 4/6 | 1/6 | 3/3 | 1 | 1 |
+  | intake-v4 | 5/6 | 5/6 | 2/3 | 0 | 0 |
+  | intake-v5 | **6/6** | 5/6 | **3/3** | **0** | **0** |
+
+- **One observed limitation:** the model adds extra findings that the documents don't support
+  (date conflict case: a second "difference" built on a quote that isn't in the notes). The gate
+  catches it and the review is shown as "failed automated checks", so nothing unverified is
+  labelled as checked, but the adjuster sees a flagged review instead of a clean one. It also
+  never called a tool in 23 live runs: the prefetched documents were always enough.
+- **What I verified myself:** each change to the prompt or gate was made from a recorded live
+  reply, with a failing test first; the gate was never loosened for document quotes.

@@ -405,7 +405,11 @@ def ask_adjuster(claim_id: str, username: str, question: str) -> AgentResult | N
     if scope is None:
         return None
     if DECISION_QUESTION.search(question):
-        return AgentResult(status="refused", output={"answer": ADJUSTER_REFUSAL})
+        # Logged like any run, so the page's question history shows it; no model is called.
+        run_id = storage.start_agent_run(claim_id, "adjuster", username, PROMPT_VERSION["adjuster"],
+                                         question=question[:500])
+        storage.finish_agent_run(run_id, "refused", output={"answer": ADJUSTER_REFUSAL})
+        return AgentResult(status="refused", output={"answer": ADJUSTER_REFUSAL}, run_id=run_id)
     result = run_agent(CHARTERS["adjuster"], scope, actor=username, question=question[:500])
     if result.output and result.output.get("refused"):
         result.status, result.output = "refused", {"answer": ADJUSTER_REFUSAL}

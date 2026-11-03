@@ -47,7 +47,7 @@ Separate from the build tool above: this is the model HarborClaim itself calls, 
 - **Model:** `nvidia/nemotron-3.5-super-vl:free` via OpenRouter (free tier, $0), reasoning off,
   temperature 0. Chosen by testing (AGENTS.md section 11.4, round 1 probe).
 - **Prompt:** `intake-v5` (`agents.py`). Every output goes through the code gate
-  (`agent_gate.py`, rules G1-G8) before an adjuster sees it.
+  (`agent_gate.py`, rules G1-G9) before an adjuster sees it.
 - **Golden-set eval, 2026-11-02** (`python scripts/eval_agents.py`; 6 fictional claims in
   `sample_data/golden/`; replies recorded in `tests/fixtures/ai/intake/` and replayed by the tests):
 
@@ -64,3 +64,8 @@ Separate from the build tool above: this is the model HarborClaim itself calls, 
   never called a tool in 23 live runs: the prefetched documents were always enough.
 - **What I verified myself:** each change to the prompt or gate was made from a recorded live
   reply, with a failing test first; the gate was never loosened for document quotes.
+- **Challenge 2, 2026-11-02:** an independent subagent wrote 5 adversarial claims and ran them
+  live. It found 3 gate holes (an obeyed injection, nonsense type mismatches, dates in words),
+  all fixed with tests; details in AGENTS.md section 14. Replay of all 11 cases: 9/11 hold, the 2
+  misses are false type mismatches the gate now flags. Backup models (two Gemma) were
+  rate-limited upstream on every call, so Nemotron is the only model for the demo.

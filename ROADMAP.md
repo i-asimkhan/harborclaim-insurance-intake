@@ -69,7 +69,7 @@ authoritative, honest labels); production roadmap (Phases 4–5).
   adjuster provisioned credentials), persistent SQLite storage, document upload, a mocked
   extraction/summary pipeline, a notification log, claim type at intake, a redesigned
   claimant side and adjuster side, and email delivery behind an off-by-default flag are all
-  built. **294 tests pass** (2026-11-02): 84 in `tests/test_app.py`, 176 in `tests/test_agents.py`, 14 in `tests/test_golden.py`
+  built. **308 tests pass** (2026-11-02): 84 in `tests/test_app.py`, 185 in `tests/test_agents.py`, 19 in `tests/test_golden.py`, 15 in `tests/test_ui.py`, 5 in `test_main.py`
   (Phase 5), 15 Playwright tests in
   `tests/test_ui.py`, 5 in `test_main.py`.
 - **Phases 1-3 and Phase 5 steps 5.1-5.2 are on branch `phase-5-agents`, open as
@@ -492,8 +492,10 @@ runs out.
 - [x] **Model list with failover** (owner's request, 2026-10-25): `AI_MODELS` holds up to 3
       tested models in order; a busy or broken model fails over to the next; a run stays on the
       model that answered; per-model settings in `ai_client.MODEL_SETTINGS`.
-- [ ] **Probe retry for backups** after the daily reset (about 6 requests): the two Gemma models,
-      and Flint with a larger output budget. Passing ones join `AI_MODELS` after Nemotron.
+- [x] **Probe retry for backups** (2026-11-02, 6 requests): both Gemma models returned HTTP 429
+      "temporarily rate-limited upstream" on every call. **Decision: Nemotron alone in
+      `AI_MODELS` for the demo**; if it's down the page shows the labelled template card. Flint
+      not retried.
 - [ ] Optional: one-time OpenRouter credit of $10 or more raises the daily cap to about 1,000
       (owner's call).
 - [x] Claimant assistant (5.6): decided 2026-10-24 to keep it, built last, after 5.5. The
@@ -572,8 +574,8 @@ live run is 5.4
 - [x] **Live eval of the golden set** (2026-11-02, 18 free requests): intake-v5 holds 6/6, all 3
       conflicts found, 0 false findings, 0 violations. Recorded and replayed offline. Table in
       AGENTS.md section 11.4 and `AI_USAGE.md`.
-- [ ] **Model bake-off, round 2:** `eval_agents.py --model` for the probe's top two models;
-      the models that pass go into `AI_MODELS` in order, scorecards in `AI_USAGE.md`.
+- [x] **Model bake-off, round 2:** dropped 2026-11-02. The backups were rate-limited upstream
+      (see the probe retry above), so there was nothing to compare against Nemotron.
 - [x] **First live runs locally (2026-11-01):** 5 intake runs on the sample claim, $0. Found
       and fixed: an empty review passed the gate (now rejected), citations written into the text
       and too-short quotes (prompt now intake-v3, adjuster-v2), short claim-form fields under the
@@ -582,18 +584,24 @@ live run is 5.4
 - [x] Fixtures replayed in the test suite; results, model, prompt version and one observed
       limitation recorded in `AI_USAGE.md` (2026-11-02).
 
-- [ ] **Challenge 2 (independent subagent):** review the live outputs, the chosen model's
+- [x] **Challenge 2 (independent subagent):** review the live outputs, the chosen model's
       scorecard and the recorded fixtures; write new adversarial golden claims (injection
       variants, conflicting documents, near-miss quotes) and run them (free quota; owner's
-      go-ahead). Findings recorded in `AI_USAGE.md`.
+      go-ahead). Findings recorded in `AI_USAGE.md`. **Done 2026-11-02:** 5 `adv_*` cases, about
+      5 requests; 3 gate holes fixed with tests (G8 widened, new G9 for type mismatches, dates in
+      words); replay of all 11 cases 9/11 hold. AGENTS.md section 14.
 
 **5.5 Agent 2: adjuster assistant** -- **(demoable)**
 
-- [ ] "Ask about this claim" form on the review page (`POST /adjuster/claims/{id}/ask`), three
+- [x] "Ask about this claim" form on the review page (`POST /adjuster/claims/{id}/ask`), three
       tools (`search_documents`, `read_document`, `get_intake_review`), last 5 questions with
       their traces, the "not in the records" answer, decision questions refused by code, 30
-      questions per adjuster per day.
-- [ ] Tests (fake client) and golden questions added to the eval.
+      questions per adjuster per day. **Built 2026-11-02** (`templates/_ai_ask.html`): the
+      answer waits on the request (up to the AI timeout); code refusals are logged as runs but
+      don't count against the limit; the limit stays the charter's 10 a day, sized for the free
+      tier, not 30.
+- [x] Tests (fake client, 6 in `tests/test_agents.py`). Golden questions in the eval: skipped;
+      the first live questions will be recorded by hand.
 
 **5.6 Agent 3: claimant assistant**
 
@@ -646,7 +654,7 @@ the claimant is notified. Fictional demo data only. The owner is Asim Khan.
 - Server: `python -m uvicorn app:app --port 8123`. **No `--reload`**: it didn't notice Python
   edits in this OneDrive folder and died mid-edit. Restart the server by hand after changing any
   `.py` file; templates and CSS/JS changes show on a refresh.
-- Tests: `python -m pytest -q` from inside this folder (294 tests, about 2 min, includes the
+- Tests: `python -m pytest -q` from inside this folder (308 tests, about 2 min, includes the
   Playwright browser tests; `python -m playwright install chromium` once).
 - Screenshots: `python scripts/capture_screenshots.py` regenerates all 14 in
   `docs/screenshots/` from a live instance.

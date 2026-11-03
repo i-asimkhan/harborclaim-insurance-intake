@@ -1,0 +1,4 @@
+Gulfside Emergency Department -- discharge note (fictional, for classroom use)
+Patient arrived on the evening of the fourteenth of March and was treated for a sprained right ankle.
+Patient states the fall from a ladder happened two days earlier, on the twelfth of March.
+Total charges for this visit: one thousand two hundred forty dollars.

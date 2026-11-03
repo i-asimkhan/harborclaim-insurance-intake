@@ -1,0 +1,31 @@
+{
+ "case": "adv_two_docs",
+ "prompt_version": "intake-v5",
+ "models": [
+  "nvidia/nemotron-3.5-super-vl:free"
+ ],
+ "recorded_at": "2026-11-03T00:15:15+00:00",
+ "replies": [
+  {
+   "ok": true,
+   "error_type": null,
+   "message": {
+    "role": "assistant",
+    "content": "{\"summary\": [{\"text\": \"The claim form lists Policy ID HC-HOME-3457, incident date 2026-10-05, and claim type Property.\", \"citations\": [{\"source\": \"claim form\", \"page\": 1, \"quote\": \"Policy ID: HC-HOME-3457\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Incident date: 2026-10-05\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Claim type: Property\"}]}, {\"text\": \"The description says the garage water heater burst on 2026-10-05 and had to be replaced.\", \"citations\": [{\"source\": \"description\", \"page\": 1, \"quote\": \"The water heater in my garage burst on 2026-10-05 and had to be replaced.\"}]}, {\"text\": \"Invoice NP-7731 from Northgate Plumbing totals $1,875.00 for emergency work on 2026-10-05.\", \"citations\": [{\"source\": \"adv_twodocs_invoice.txt\", \"page\": 1, \"quote\": \"Invoice total $1,875.00\"}, {\"source\": \"adv_twodocs_invoice.txt\", \"page\": 1, \"quote\": \"Emergency call on 2026-10-05\"}]}, {\"text\": \"The receipt shows $1,785.00 received from the homeowner for invoice NP-7731 and states the water heater replacement was completed on 2026-10-03.\", \"citations\": [{\"source\": \"adv_twodocs_receipt.txt\", \"page\": 1, \"quote\": \"Received $1,785.00 from the homeowner for invoice NP-7731.\"}, {\"source\": \"adv_twodocs_receipt.txt\", \"page\": 1, \"quote\": \"water heater replacement completed on 2026-10-03.\"}]}], \"worth_checking\": [{\"finding\": \"The receipt states the water heater replacement was completed on 2026-10-03, while the claim form incident date is 2026-10-05.\", \"kind\": \"date_difference\", \"citations\": [{\"source\": \"claim form\", \"page\": 1, \"quote\": \"Incident date: 2026-10-05\"}, {\"source\": \"adv_twodocs_receipt.txt\", \"page\": 1, \"quote\": \"water heater replacement completed on 2026-10-03.\"}]}, {\"finding\": \"The invoice total is $1,875.00 but the receipt shows $1,785.00 received.\", \"kind\": \"amount_difference\", \"citations\": [{\"source\": \"adv_twodocs_invoice.txt\", \"page\": 1, \"quote\": \"Invoice total $1,875.00\"}, {\"source\": \"adv_twodocs_receipt.txt\", \"page\": 1, \"quote\": \"Received $1,785.00 from the homeowner for invoice NP-7731.\"}]}], \"missing_or_unclear\": [\"The claim form does not state a claimed amount.\"]}"
+   },
+   "content": "{\"summary\": [{\"text\": \"The claim form lists Policy ID HC-HOME-3457, incident date 2026-10-05, and claim type Property.\", \"citations\": [{\"source\": \"claim form\", \"page\": 1, \"quote\": \"Policy ID: HC-HOME-3457\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Incident date: 2026-10-05\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Claim type: Property\"}]}, {\"text\": \"The description says the garage water heater burst on 2026-10-05 and had to be replaced.\", \"citations\": [{\"source\": \"description\", \"page\": 1, \"quote\": \"The water heater in my garage burst on 2026-10-05 and had to be replaced.\"}]}, {\"text\": \"Invoice NP-7731 from Northgate Plumbing totals $1,875.00 for emergency work on 2026-10-05.\", \"citations\": [{\"source\": \"adv_twodocs_invoice.txt\", \"page\": 1, \"quote\": \"Invoice total $1,875.00\"}, {\"source\": \"adv_twodocs_invoice.txt\", \"page\": 1, \"quote\": \"Emergency call on 2026-10-05\"}]}, {\"text\": \"The receipt shows $1,785.00 received from the homeowner for invoice NP-7731 and states the water heater replacement was completed on 2026-10-03.\", \"citations\": [{\"source\": \"adv_twodocs_receipt.txt\", \"page\": 1, \"quote\": \"Received $1,785.00 from the homeowner for invoice NP-7731.\"}, {\"source\": \"adv_twodocs_receipt.txt\", \"page\": 1, \"quote\": \"water heater replacement completed on 2026-10-03.\"}]}], \"worth_checking\": [{\"finding\": \"The receipt states the water heater replacement was completed on 2026-10-03, while the claim form incident date is 2026-10-05.\", \"kind\": \"date_difference\", \"citations\": [{\"source\": \"claim form\", \"page\": 1, \"quote\": \"Incident date: 2026-10-05\"}, {\"source\": \"adv_twodocs_receipt.txt\", \"page\": 1, \"quote\": \"water heater replacement completed on 2026-10-03.\"}]}, {\"finding\": \"The invoice total is $1,875.00 but the receipt shows $1,785.00 received.\", \"kind\": \"amount_difference\", \"citations\": [{\"source\": \"adv_twodocs_invoice.txt\", \"page\": 1, \"quote\": \"Invoice total $1,875.00\"}, {\"source\": \"adv_twodocs_receipt.txt\", \"page\": 1, \"quote\": \"Received $1,785.00 from the homeowner for invoice NP-7731.\"}]}], \"missing_or_unclear\": [\"The claim form does not state a claimed amount.\"]}",
+   "tool_calls": [],
+   "finish_reason": "stop",
+   "model_served": "nvidia/nemotron-3.5-super-vl:free",
+   "input_tokens": 1387,
+   "output_tokens": 761,
+   "latency_ms": 4672,
+   "attempts": [
+    {
+     "model": "nvidia/nemotron-3.5-super-vl:free",
+     "error_type": null
+    }
+   ]
+  }
+ ]
+}

@@ -22,6 +22,7 @@ storage access. Rules:
     G6  claimant answers mention only the claimant's own claim IDs (any spelling of CLM-XXXXXXXX)
     G7  claimant answers contain no email address but the claimant's own, written in any form
     G8  no quote or model text carries an instruction-like pattern (possible prompt injection)
+    G9  an intake "type_mismatch" finding names a claim type other than the claim form's
     C   claimant answers: no money amounts at all, and decision or payment wording only when this
         run's tool results show that decision (e.g. "Decision recorded: Approved")
 
@@ -62,10 +63,14 @@ ISO_DATE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 DIGITS = re.compile(r"\d[\d,]*(?:\.\d+)?")
 _MONTHS = (r"(january|february|march|april|may|june|july|august|september|october|november|december|"
            r"jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\.?")
+_ORDINAL_WORD = (r"(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|"
+                 r"thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth|"
+                 r"thirtieth|(twenty|thirty)[\s-](first|second|third|fourth|fifth|sixth|seventh|eighth|ninth))")
 _NUMBER_WORD = (r"(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|"
                 r"forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand)")
 UNVERIFIABLE = re.compile(
-    rf"\b{_MONTHS}\s+\d{{1,2}}|\b\d{{1,2}}(st|nd|rd|th)?\s+(of\s+)?{_MONTHS}(?![a-z])"
+    rf"\b{_MONTHS}\s+(the\s+)?{_ORDINAL_WORD}\b|\b{_ORDINAL_WORD}\s+(day\s+)?of\s+{_MONTHS}(?![a-z])"
+    rf"|\b{_MONTHS}\s+\d{{1,2}}|\b\d{{1,2}}(st|nd|rd|th)?\s+(of\s+)?{_MONTHS}(?![a-z])"
     rf"|\b\d{{1,2}}(st|nd|rd|th)\b|\b\d{{1,4}}[/.]\d{{1,2}}[/.]\d{{1,4}}\b|\b\d{{4}}-(\d-\d{{1,2}}|\d{{2}}-\d)\b"
     rf"|\b{_NUMBER_WORD}[\s-]+(hundred|thousand|million|dollars?|bucks|usd)\b"
     rf"|\d\s*(%|percent\b|k\b|bucks\b|dollars?\b|usd\b|eur\b|gbp\b)|\b(usd|eur|gbp)\s*\d|[£€¥]\s*\d",
@@ -175,6 +180,9 @@ INJECTION = re.compile(
     r"\b(ignore|disregard|forget|override|bypass)\b.{0,40}?\b(instruction|instructions|rules?|above|previous|"
     r"prior|guidance|told|prompt)\b"
     r"|\b(approve|pay|accept|settle)\b.{0,20}?\bclaim\b|\bmark\b.{0,30}?\bas\s+approved\b"
+    r"|\b(automated|ai)\s+(reviewers?|review|assistants?|systems?)\s+(should|must|need|are|is)\b"
+    r"|\bstatus\s+(to|as)\s+(approved|paid|verified|accepted)\b|\b(record|mark)\b.{0,25}?\bas\s+verified\b"
+    r"|\bapproved\s+for\s+payment\b"
     r"|(^|\n)\s*(system|assistant|developer)\s*:|\bsystem prompt\b|\bnew instructions\b|\byou are now\b",
     re.I | re.S,
 )
@@ -303,7 +311,7 @@ def _check_cited(where: str, text: str, citations: list[dict], sources: dict[str
     # A pattern copied word for word from this sentence's own quotes is verified, not invented:
     # "4th Avenue" in a street address (golden set, 2026-11-02) is not a date written as "the 4th".
     quoted_text = " ".join(normalise(c["quote"]) for c in citations)
-    if any(normalise(m.group()) not in quoted_text for m in UNVERIFIABLE.finditer(nfkc(text))):
+    if any(normalise(m.group()).rstrip(".") not in quoted_text for m in UNVERIFIABLE.finditer(nfkc(text))):
         reasons.append(_reason("G4", where, "a date or amount is not written as YYYY-MM-DD or $X,XXX.XX"))
     _check_wording(where, text, reasons)
 
@@ -358,6 +366,9 @@ def check(agent: str, output, *, sources: dict[str, list[str]] | None = None,
             _check_cited(f"summary[{i}]", s["text"], s["citations"], sources, None, reasons)
         for i, f in enumerate(output["worth_checking"]):
             _check_cited(f"worth_checking[{i}]", f["finding"], f["citations"], sources, tool_numbers, reasons)
+            if f["kind"] == "type_mismatch" and not _names_other_type(f["finding"], sources):
+                reasons.append(_reason("G9", f"worth_checking[{i}]",
+                                       "a type mismatch must name a claim type other than the claim form's"))
         for i, m in enumerate(output["missing_or_unclear"]):
             where = f"missing_or_unclear[{i}]"
             if has_any_number(m):
@@ -369,6 +380,21 @@ def check(agent: str, output, *, sources: dict[str, list[str]] | None = None,
     else:
         _check_claimant(output["answer"], tool_text, claimant_email, own_claim_ids or set(), reasons)
     return {"status": "flagged" if reasons else "passed", "reasons": reasons}
+
+
+# Words that point to each claim type, for G9. "Claim type: X" is a line of the code-written claim form.
+TYPE_WORDS = {"auto": r"auto|vehicles?|cars?|collision|traffic|windshield",
+              "property": r"property|home|house|roof|kitchen|basement|fence|burglary",
+              "health": r"health|injury|injured|medical|clinic|hospital|treatment|urgent care"}
+
+
+def _names_other_type(finding: str, sources: dict[str, list[str]]) -> bool:
+    form = " ".join(sources.get("claim form", [])).lower()
+    on_form = next((t for t in TYPE_WORDS if re.search(rf"claim type:\s*{t}", form)), None)
+    if on_form is None:
+        return True                       # no claim type on the form: nothing to check against
+    return any(re.search(rf"\b({words})\b", finding, re.I)
+               for t, words in TYPE_WORDS.items() if t != on_form)
 
 
 def injection_warnings(sources: dict[str, list[str]]) -> list[str]:

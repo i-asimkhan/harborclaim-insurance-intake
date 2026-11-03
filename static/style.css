@@ -1156,3 +1156,9 @@ body.adjuster-theme .mock-card .ai-status { color: #e4c874; }
 .ai-trace ol { padding-left: 1.2rem; }
 .ai-trace .hint { word-break: break-word; }
 .ai-rerun { margin-top: var(--space-4); }
+
+/* "Ask about this claim" (Phase 5, step 5.5) */
+.ai-ask-form { display: flex; gap: 0.5rem; margin: 0.5rem 0 0.25rem; }
+.ai-ask-form input { flex: 1; min-width: 0; }
+.ai-qa { border-top: 1px solid var(--line); padding-top: 0.75rem; margin-top: 0.75rem; }
+.ai-question { margin-bottom: 0.25rem; }

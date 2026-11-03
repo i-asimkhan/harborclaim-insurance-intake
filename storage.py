@@ -643,7 +643,7 @@ def mark_notifications_read(claimant_email: str) -> None:
         )
 
 
-AGENT_RUN_STATUSES = ("passed", "flagged", "unavailable")
+AGENT_RUN_STATUSES = ("passed", "flagged", "unavailable", "refused")  # refused: by code, no model call
 _AGENT_RUN_JSON = ("output_json", "gate_json", "trace_json")
 
 
@@ -728,7 +728,8 @@ def agent_run_in_progress(claim_id: str, agent: str, timeout_seconds: int) -> bo
 def agent_runs_today(agent: str, actor: str | None = None) -> int:
     """Runs started since midnight UTC, for one agent (and optionally one person): the daily limits."""
     midnight = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    query = "SELECT COUNT(*) AS n FROM agent_runs WHERE agent = ? AND started_at >= ?"
+    # A question refused by code never reached the model, so it doesn't count against the limit.
+    query = "SELECT COUNT(*) AS n FROM agent_runs WHERE agent = ? AND started_at >= ? AND status != 'refused'"
     params: list = [agent, midnight.isoformat(timespec="seconds")]
     if actor is not None:
         query += " AND actor = ?"

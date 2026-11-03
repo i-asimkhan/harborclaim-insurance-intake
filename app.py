@@ -187,6 +187,30 @@ def _intake_review_view(claim_id: str) -> dict:
     return view
 
 
+def _ask_view(claim_id: str) -> dict:
+    """The adjuster's last 5 questions about this claim, newest first, each with what to show:
+    a cited AI answer, "not found", the fixed refusal, or why there was no answer."""
+    items = []
+    for run in storage.recent_agent_runs(claim_id, "adjuster", limit=5):
+        out = run["output"] or {}
+        if run["status"] == "refused" or out.get("refused"):
+            kind = "refused"
+        elif run["status"] == "running":
+            kind = "running"
+        elif run["status"] in ("passed", "flagged") and out.get("not_found"):
+            kind = "not_found"
+        elif run["status"] in ("passed", "flagged"):
+            kind = "answer"
+        else:
+            kind = "unavailable"
+        items.append({"run": run, "kind": kind,
+                      "reason": AI_UNAVAILABLE_REASONS.get(run["error_type"], "the AI assistant was unavailable"),
+                      "flagged": {r["where"] for r in (run["gate"] or {}).get("reasons", [])}})
+    limit_reached = storage.agent_runs_today("adjuster") >= agents.CHARTERS["adjuster"].daily_limit()
+    return {"ai_on": ai_client.enabled(), "limit_reached": limit_reached, "questions": items,
+            "refusal": agents.ADJUSTER_REFUSAL, "not_found": agents.NOT_FOUND}
+
+
 def _claimant_nav(claimant_email: str) -> dict:
     """Context for the claimant top nav's notification bell (_claimant_header.html).
 
@@ -733,6 +757,7 @@ def adjuster_view_claim(request: Request, claim_id: str, adjuster: dict | None =
             "decisions": DECISIONS,
             "facts_view": _group_facts(record["facts"]),
             "ai_review": _intake_review_view(claim_id),
+            "ai_ask": _ask_view(claim_id),
             **_adjuster_nav(),
             "READY_FOR_REVIEW": READY_FOR_REVIEW,
             "NEEDS_INFORMATION": NEEDS_INFORMATION,
@@ -752,6 +777,21 @@ def rerun_intake_review(claim_id: str, background: BackgroundTasks,
     if not storage.agent_run_in_progress(claim_id, "intake", _intake_stale_seconds()):
         _start_intake_review(claim_id, background)
     return RedirectResponse(url=f"/adjuster/claims/{claim_id}", status_code=303)
+
+
+@app.post("/adjuster/claims/{claim_id}/ask")
+def ask_about_claim(claim_id: str, question: str = Form(""),
+                    adjuster: dict | None = Depends(get_current_adjuster)):
+    """Answer one adjuster question about this claim (waits for the answer, then back to the page).
+    Read-only; decision and coverage questions get the fixed refusal from code, no model call."""
+    if adjuster is None:
+        return RedirectResponse(url="/adjuster/login", status_code=303)
+    if storage.get_claim(claim_id) is None:
+        return RedirectResponse(url="/adjuster", status_code=303)
+    question = question.strip()
+    if question and ai_client.enabled():
+        agents.ask_adjuster(claim_id, adjuster["username"], question)
+    return RedirectResponse(url=f"/adjuster/claims/{claim_id}#ask", status_code=303)
 
 
 @app.post("/adjuster/claims/{claim_id}/decision")

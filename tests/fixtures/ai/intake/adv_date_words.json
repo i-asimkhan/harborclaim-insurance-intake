@@ -1,0 +1,31 @@
+{
+ "case": "adv_date_words",
+ "prompt_version": "intake-v5",
+ "models": [
+  "nvidia/nemotron-3.5-super-vl:free"
+ ],
+ "recorded_at": "2026-11-03T00:15:26+00:00",
+ "replies": [
+  {
+   "ok": true,
+   "error_type": null,
+   "message": {
+    "role": "assistant",
+    "content": "{\"summary\": [{\"text\": \"The claim form lists Policy ID HC-HLTH-4236, an incident date of 2026-03-14, and claim type Health / injury.\", \"citations\": [{\"source\": \"claim form\", \"page\": 1, \"quote\": \"Policy ID: HC-HLTH-4236\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Incident date: 2026-03-14\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Claim type: Health / injury\"}]}, {\"text\": \"The description says the claimant fell from a ladder while cleaning gutters, sprained an ankle, went to the emergency room that evening, and the ER bill was $1,420.00.\", \"citations\": [{\"source\": \"description\", \"page\": 1, \"quote\": \"I fell from a ladder while cleaning gutters and sprained my ankle, and went to the emergency room that evening. The ER bill was $1,420.00.\"}]}, {\"text\": \"The ER discharge note says the patient arrived on the evening of March 14 and was treated for a sprained right ankle, but states the fall from a ladder happened two days earlier, on March 12.\", \"citations\": [{\"source\": \"adv_words_er_note.txt\", \"page\": 1, \"quote\": \"Patient arrived on the evening of the fourteenth of March and was treated for a sprained right ankle.\"}, {\"source\": \"adv_words_er_note.txt\", \"page\": 1, \"quote\": \"Patient states the fall from a ladder happened two days earlier, on the twelfth of March.\"}]}, {\"text\": \"The ER discharge note lists total charges for this visit as $1,240.00.\", \"citations\": [{\"source\": \"adv_words_er_note.txt\", \"page\": 1, \"quote\": \"Total charges for this visit: one thousand two hundred forty dollars.\"}]}], \"worth_checking\": [{\"finding\": \"The claim form incident date is 2026-03-14, while the ER note states the fall occurred on March 12.\", \"kind\": \"date_difference\", \"citations\": [{\"source\": \"claim form\", \"page\": 1, \"quote\": \"Incident date: 2026-03-14\"}, {\"source\": \"adv_words_er_note.txt\", \"page\": 1, \"quote\": \"Patient states the fall from a ladder happened two days earlier, on the twelfth of March.\"}]}, {\"finding\": \"The description states the ER bill was $1,420.00, while the ER discharge note lists total charges of $1,240.00.\", \"kind\": \"amount_difference\", \"citations\": [{\"source\": \"description\", \"page\": 1, \"quote\": \"The ER bill was $1,420.00.\"}, {\"source\": \"adv_words_er_note.txt\", \"page\": 1, \"quote\": \"Total charges for this visit: one thousand two hundred forty dollars.\"}]}], \"missing_or_unclear\": []}"
+   },
+   "content": "{\"summary\": [{\"text\": \"The claim form lists Policy ID HC-HLTH-4236, an incident date of 2026-03-14, and claim type Health / injury.\", \"citations\": [{\"source\": \"claim form\", \"page\": 1, \"quote\": \"Policy ID: HC-HLTH-4236\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Incident date: 2026-03-14\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Claim type: Health / injury\"}]}, {\"text\": \"The description says the claimant fell from a ladder while cleaning gutters, sprained an ankle, went to the emergency room that evening, and the ER bill was $1,420.00.\", \"citations\": [{\"source\": \"description\", \"page\": 1, \"quote\": \"I fell from a ladder while cleaning gutters and sprained my ankle, and went to the emergency room that evening. The ER bill was $1,420.00.\"}]}, {\"text\": \"The ER discharge note says the patient arrived on the evening of March 14 and was treated for a sprained right ankle, but states the fall from a ladder happened two days earlier, on March 12.\", \"citations\": [{\"source\": \"adv_words_er_note.txt\", \"page\": 1, \"quote\": \"Patient arrived on the evening of the fourteenth of March and was treated for a sprained right ankle.\"}, {\"source\": \"adv_words_er_note.txt\", \"page\": 1, \"quote\": \"Patient states the fall from a ladder happened two days earlier, on the twelfth of March.\"}]}, {\"text\": \"The ER discharge note lists total charges for this visit as $1,240.00.\", \"citations\": [{\"source\": \"adv_words_er_note.txt\", \"page\": 1, \"quote\": \"Total charges for this visit: one thousand two hundred forty dollars.\"}]}], \"worth_checking\": [{\"finding\": \"The claim form incident date is 2026-03-14, while the ER note states the fall occurred on March 12.\", \"kind\": \"date_difference\", \"citations\": [{\"source\": \"claim form\", \"page\": 1, \"quote\": \"Incident date: 2026-03-14\"}, {\"source\": \"adv_words_er_note.txt\", \"page\": 1, \"quote\": \"Patient states the fall from a ladder happened two days earlier, on the twelfth of March.\"}]}, {\"finding\": \"The description states the ER bill was $1,420.00, while the ER discharge note lists total charges of $1,240.00.\", \"kind\": \"amount_difference\", \"citations\": [{\"source\": \"description\", \"page\": 1, \"quote\": \"The ER bill was $1,420.00.\"}, {\"source\": \"adv_words_er_note.txt\", \"page\": 1, \"quote\": \"Total charges for this visit: one thousand two hundred forty dollars.\"}]}], \"missing_or_unclear\": []}",
+   "tool_calls": [],
+   "finish_reason": "stop",
+   "model_served": "nvidia/nemotron-3.5-super-vl:free",
+   "input_tokens": 1223,
+   "output_tokens": 714,
+   "latency_ms": 3610,
+   "attempts": [
+    {
+     "model": "nvidia/nemotron-3.5-super-vl:free",
+     "error_type": null
+    }
+   ]
+  }
+ ]
+}

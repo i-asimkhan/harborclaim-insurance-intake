@@ -36,6 +36,7 @@ DEFAULT_MODEL = "nvidia/nemotron-3.5-super-vl:free"
 if __name__ == "__main__":
     # A throwaway data folder, set before storage is imported (storage reads it once, at import).
     os.environ["HARBORCLAIM_DATA_DIR"] = tempfile.mkdtemp(prefix="harborclaim-eval-")
+    os.environ["AI_DAILY_LIMIT_INTAKE"] = "1000"  # the golden set is bigger than the app's daily limit
 sys.path.insert(0, str(ROOT))
 
 import agent_gate  # noqa: E402

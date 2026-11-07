@@ -154,3 +154,68 @@ def test_existing_decisions_survive_the_reason_migration():
     decisions = storage.get_claim(claim_id)["decisions"]
     assert [(d["decision"], d["adjuster_username"], d["reason"]) for d in decisions] == \
         [("NEEDS_MORE_REVIEW", "old.adjuster", None)]
+
+
+# --- 5. Claim data sent to a model: redaction and the data policy ---
+
+import httpx
+
+import agent_tools
+import ai_client
+import privacy
+
+
+def test_redact_removes_contact_and_card_details_but_keeps_claim_facts():
+    text = ("Call Jordan at (813) 555-0142 or 813.555.0199, email jordan.ellis@example.com. "
+            "SSN 123-45-6789. Card 4111 1111 1111 1111. Policy HC-AUTO-1042, claim 1234567812345678, "
+            "incident 2026-09-17, estimate $1,450.00.")
+    out = privacy.redact(text)
+    for gone in ("555-0142", "555.0199", "jordan.ellis@example.com", "123-45-6789", "4111 1111 1111 1111"):
+        assert gone not in out
+    for kept in ("HC-AUTO-1042", "2026-09-17", "$1,450.00", "1234567812345678", "Jordan"):
+        assert kept in out   # a non-card long number, dates, amounts and names stay
+
+
+def test_agent_sources_are_redacted_for_the_model_and_the_gate_alike():
+    claim_id = _file_claim(description="Other driver's number is 813-555-0142; rear-ended on Main St.")
+    scope = agent_tools.claim_scope(claim_id)
+    assert "813-555-0142" not in scope.sources["description"][0]
+    assert "[phone removed]" in scope.sources["description"][0]
+
+
+def _fake_ok(payload, headers, timeout):
+    _fake_ok.payloads.append(payload)
+    return httpx.Response(200, json={"model": payload["model"], "choices": [
+        {"message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}], "usage": {}})
+
+
+def _ai_on(monkeypatch, models, policy):
+    monkeypatch.setenv("AI_PROVIDER", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("AI_MODELS", models)
+    monkeypatch.setenv("AI_DATA_POLICY", policy)
+    _fake_ok.payloads = []
+    monkeypatch.setattr(ai_client, "_post", _fake_ok)
+
+
+def test_production_refuses_free_models_without_calling_out(monkeypatch):
+    _ai_on(monkeypatch, "nvidia/nemotron-3.5-super-vl:free,openrouter/free", "production")
+    result = ai_client.chat([{"role": "user", "content": "hi"}])
+    assert not result.ok and result.error_type == "bad_config"
+    assert _fake_ok.payloads == []
+
+
+def test_production_skips_free_models_and_asks_for_no_data_collection(monkeypatch):
+    _ai_on(monkeypatch, "nvidia/nemotron-3.5-super-vl:free,vendor/paid-model", "production")
+    result = ai_client.chat([{"role": "user", "content": "hi"}])
+    assert result.ok and [p["model"] for p in _fake_ok.payloads] == ["vendor/paid-model"]
+    assert _fake_ok.payloads[0]["provider"] == {"data_collection": "deny"}
+
+
+def test_test_policy_keeps_free_models_and_says_so_on_the_ai_page(monkeypatch):
+    _ai_on(monkeypatch, "nvidia/nemotron-3.5-super-vl:free", "")
+    assert ai_client.chat([{"role": "user", "content": "hi"}]).ok
+    assert "provider" not in _fake_ok.payloads[0]
+    _adjuster()
+    page = client.get("/adjuster/ai").text
+    assert "Data policy: <strong>test</strong>" in page and "fictional claims only" in page

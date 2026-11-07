@@ -50,6 +50,7 @@ import storage
 import agents
 import ai_client
 import email_delivery
+import privacy
 from email_delivery import send_email
 from auth import get_current_adjuster, get_current_user, router as auth_router
 from extraction import extract_facts
@@ -865,7 +866,8 @@ def adjuster_ai_settings(request: Request, adjuster: dict | None = Depends(get_c
         request, "adjuster_ai.html",
         {"adjuster": adjuster, "active": "ai", "ai_on": ai_client.enabled(), "models": agents.model_order(),
          "chosen": storage.get_ai_setting("model"), "usage": agents.usage_today(),
-         "claimant_chat": agents.claimant_chat_enabled(), **_adjuster_nav()},
+         "claimant_chat": agents.claimant_chat_enabled(), "data_policy": privacy.data_policy(),
+         "free_tier": [m for m in agents.model_order() if privacy.is_free_tier(m)], **_adjuster_nav()},
     )
 
 

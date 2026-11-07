@@ -12,6 +12,7 @@ Tools return plain JSON-able values. "Nothing found" is a normal result, not an 
 import re
 from dataclasses import dataclass, field
 
+import privacy
 import storage
 from main import READY_FOR_REVIEW
 from validation import CLAIM_TYPES
@@ -54,7 +55,8 @@ def claim_scope(claim_id: str) -> Scope | None:
     claim = record["claim"]
     scope = Scope(claim_id=claim_id, record=record)
     scope.sources["claim form"] = [claim_form_text(claim)]
-    scope.sources["description"] = [claim["description"] or "(no description given)"]
+    # Sources are redacted once, here: the model and the gate then read the same text (privacy.py).
+    scope.sources["description"] = [privacy.redact(claim["description"]) or "(no description given)"]
     budget = TOTAL_CHARS
     for doc in record["documents"]:
         pages = storage.read_document_pages(claim_id, doc["filename"]) or []
@@ -66,7 +68,7 @@ def claim_scope(claim_id: str) -> Scope | None:
             room = min(PER_DOCUMENT_CHARS - used, budget)
             if room <= 0:
                 break
-            kept.append(page[:room])
+            kept.append(privacy.redact(page[:room]))
             used += len(kept[-1])
             budget -= len(kept[-1])
         if sum(len(p) for p in kept) < sum(len(p) for p in pages):

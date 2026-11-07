@@ -437,18 +437,35 @@ def injection_warnings(sources: dict[str, list[str]]) -> list[str]:
             if INJECTION.search(nfkc(text))]
 
 
-def not_summarised(facts: list[dict], output: dict) -> list[str]:
+CONTEXT_CHARS = 90
+
+
+def _context(value: str, pages: list[str] | None) -> str | None:
+    """The line a value was found on, shortened around it, so a bare date isn't left unexplained."""
+    for page in pages or []:
+        for line in page.splitlines():
+            i = line.find(value)
+            if i >= 0:
+                line = " ".join(line.split())
+                i = line.find(value)
+                start = max(0, i - CONTEXT_CHARS // 2)
+                snippet = line[start:start + CONTEXT_CHARS].strip()
+                return ("…" if start > 0 else "") + snippet + ("…" if start + CONTEXT_CHARS < len(line) else "")
+    return None
+
+
+def not_summarised(facts: list[dict], output: dict, sources: dict[str, list[str]] | None = None) -> list[str]:
     """Regex-extracted amounts and dates that appear in no summary sentence or finding: shown under
-    the summary so an omission is visible (computed by code, not reported by the model)."""
+    the summary so an omission is visible (computed by code, not reported by the model). With the
+    run's sources, each item also quotes the line it was found on."""
     texts = [s["text"] for s in output.get("summary", [])] + [f["finding"] for f in output.get("worth_checking", [])]
     covered_amounts = set().union(*(amounts_in(t) for t in texts)) if texts else set()
     covered_dates = set().union(*(dates_in(t) for t in texts)) if texts else set()
     missing = []
     for fact in facts:
-        if fact["field"] == "mentioned_amount":
-            if not amounts_in(fact["value"]) <= covered_amounts:
-                missing.append(f"{fact['value']} ({fact['source']})")
-        elif fact["field"] == "mentioned_date":
-            if fact["value"] not in covered_dates:
-                missing.append(f"{fact['value']} ({fact['source']})")
+        uncovered = (fact["field"] == "mentioned_amount" and not amounts_in(fact["value"]) <= covered_amounts) or \
+                    (fact["field"] == "mentioned_date" and fact["value"] not in covered_dates)
+        if uncovered:
+            context = _context(fact["value"], (sources or {}).get(fact["source"]))
+            missing.append(f"{fact['value']} ({fact['source']})" + (f': "{context}"' if context else ""))
     return list(dict.fromkeys(missing))

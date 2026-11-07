@@ -61,7 +61,7 @@
 
   {% set computed = out.computed or {} %}
   {% if computed.not_summarised %}
-  <h3>Not summarised <span class="hint">listed by code, not the AI</span></h3>
+  <h3>Dates and amounts the summary doesn't mention <span class="hint">found by the keyword scan and listed by code, not the AI</span></h3>
   <ul class="ai-list compact">{% for item in computed.not_summarised %}<li>{{ item }}</li>{% endfor %}</ul>
   {% endif %}
   {% if computed.not_read %}

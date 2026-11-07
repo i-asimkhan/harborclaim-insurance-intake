@@ -429,7 +429,7 @@ def run_agent(charter: Charter, scope: agent_tools.Scope, *, actor: str, questio
 # --- The three agents -------------------------------------------------------------------------
 
 def _intake_computed(scope: agent_tools.Scope, output: dict) -> dict:
-    return {"not_summarised": agent_gate.not_summarised(scope.record["facts"], output),
+    return {"not_summarised": agent_gate.not_summarised(scope.record["facts"], output, scope.sources),
             "not_read": scope.not_read,
             "possible_instructions": agent_gate.injection_warnings(scope.sources)}
 

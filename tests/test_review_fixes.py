@@ -401,3 +401,29 @@ def test_repeated_citations_collapse_and_link_to_the_source():
     assert f'href="/adjuster/claims/{claim_id}/documents/injury_notes.txt#page=1"' in review
     assert review.count("injury_notes.txt, p. 1") == 1
     assert 'id="basics"' in page
+
+
+# --- 11. "Not summarised" says what it is and where each value was found ---
+
+import agent_gate
+
+
+def test_not_summarised_items_quote_the_line_they_were_found_on():
+    facts = [{"field": "mentioned_date", "value": "2026-09-18", "source": "notes.pdf"},
+             {"field": "mentioned_amount", "value": "$1,450.00", "source": "notes.pdf"}]
+    sources = {"notes.pdf": ["Slip-and-fall on 2026-09-17.\nFollow-up visit booked for 2026-09-18 at the clinic.\n"
+                             "Estimated cost $1,450.00."]}
+    output = {"summary": [{"text": "Treatment cost $1,450.00.", "citations": []}], "worth_checking": []}
+    items = agent_gate.not_summarised(facts, output, sources)
+    assert items == ['2026-09-18 (notes.pdf): "Follow-up visit booked for 2026-09-18 at the clinic."']
+    # Without sources the old, bare form is kept.
+    assert agent_gate.not_summarised(facts, output) == ["2026-09-18 (notes.pdf)"]
+
+
+def test_not_summarised_heading_is_plain_english():
+    claim_id = _file_claim()
+    _record_review(claim_id, {"summary": [], "worth_checking": [], "missing_or_unclear": [],
+                              "computed": {"not_summarised": ["2026-09-18 (notes.pdf)"]}})
+    _adjuster()
+    page = client.get(f"/adjuster/claims/{claim_id}").text
+    assert "Dates and amounts the summary doesn't mention" in page and "Not summarised" not in page

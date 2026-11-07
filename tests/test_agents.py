@@ -1121,7 +1121,7 @@ def test_check_1_normal_a_passed_review_shows_cited_and_labelled(fake_model, adj
     assert "The repair estimate totals $4,240.00." in page
     assert f"{ESTIMATE}, p. 1" in page and 'title="Total estimate $4,240.00"' in page
     assert "amount difference" in page and "No photos of the damage are attached." in page
-    assert "Not summarised" in page                          # computed by code, shown under the summary
+    assert "Dates and amounts the summary doesn't mention" in page   # computed by code, shown under the summary
     assert "AI trace" in page and "Model call 1: fake/model:free" in page
     assert "Re-run AI review" in page
     assert "Automated extraction -- not AI" in page          # the regex facts card keeps its own label

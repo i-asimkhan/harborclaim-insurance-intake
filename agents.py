@@ -33,6 +33,7 @@ from typing import Callable
 import agent_gate
 import agent_tools
 import ai_client
+import consistency
 import storage
 
 MAX_MODEL_CALLS = 3
@@ -136,7 +137,10 @@ REQUEST_PROMPT = (
     "You draft a message from a human insurance adjuster to the claimant, asking for what is still needed "
     "to review their claim. The adjuster reads and edits your draft before anything is sent.\n"
     "You start with only the claim form and the document names. Call get_intake_review and get_completeness "
-    "first to see what the automated review and the completeness check found missing or unclear. You may "
+    "first to see what the automated review and the completeness check found missing or unclear. "
+    "get_completeness also lists consistency_checks, where code found the claim form and the documents "
+    "disagree (claim type, incident date): turn each into a neutral item asking the claimant to confirm, "
+    "e.g. 'Confirmation of the incident date'. You may "
     "call search_documents to check whether something is already in the documents; never ask for something "
     "that is already provided.\n"
     "items: at most 5 short phrases, each one thing the claimant can provide (a document, photos, or a "
@@ -151,7 +155,7 @@ REQUEST_PROMPT = (
     "and nothing else."
 )
 PROMPT_VERSION = {"intake": "intake-v6", "adjuster": "adjuster-v2", "claimant": "claimant-v2",
-                  "request": "request-v1"}
+                  "request": "request-v2"}
 
 # --- Code-written refusals: decision and coverage questions never reach the model -------------
 
@@ -524,11 +528,18 @@ def request_text(output: dict) -> str:
 
 
 def template_request(record: dict) -> str:
-    """The fallback draft, written by code from the completeness check alone (no AI text in it)."""
+    """The fallback draft, written by code (no AI text in it): what the completeness check found
+    missing, then what the consistency checks found, with documents for what the claimant's own
+    documents describe rather than only the claim type's usual list."""
     claim = record["claim"]
     missing = [agent_tools.MISSING_WORDS.get(m, m) for m in record["missing"] if m != "adjuster_request"]
+    checks = consistency.check(record)
+    items = missing + [c["ask"] for c in checks]
+    for c in checks:
+        for fitting in c.get("fits", [])[:1]:
+            items.append(f"Documents for what your notes describe ({agent_tools.CLAIM_TYPES[fitting][1]})")
     hint = agent_tools.CLAIM_TYPES.get(claim["claim_type"], (None, None))[1]
-    items = missing or [f"Any further documents that support your claim{f' ({hint})' if hint else ''}"]
+    items = items or [f"Any further documents that support your claim{f' ({hint})' if hint else ''}"]
     return (f"Hello,\n\nTo continue reviewing claim {claim['claim_id']}, we need a little more from you. "
             "Please open the claim under My claims and use Add documents.\n\nWhat we need:\n"
             + "\n".join(f"- {item}" for item in items))

@@ -47,6 +47,8 @@ def check(record: dict) -> list[dict]:
                 "finding": f"Filed as {_type_label(claim_type)}, but the documents describe: {described}.",
                 "ask": f"Please confirm the claim type. It was filed as {_type_label(claim_type)}, but your "
                        f"documents describe {' and '.join(label.lower() for label in incidents)}.",
+                # The claim types the described incidents do fit, for "which documents help".
+                "fits": sorted(set().union(*(FITS.get(label, set()) for label in incidents))),
             })
 
     incident_date = claim["incident_date"]

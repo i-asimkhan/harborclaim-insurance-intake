@@ -12,6 +12,7 @@ Tools return plain JSON-able values. "Nothing found" is a normal result, not an 
 import re
 from dataclasses import dataclass, field
 
+import consistency
 import privacy
 import storage
 from main import READY_FOR_REVIEW
@@ -199,13 +200,19 @@ MISSING_WORDS = {"policy_id": "policy ID", "incident_date": "incident date",
 
 
 def get_completeness(scope: Scope) -> dict:
-    """What the deterministic completeness check found missing, the documents on file and which
-    documents usually help for this claim type."""
+    """What the deterministic completeness check found missing, what the code's consistency checks
+    found (claim form vs. documents), the documents on file and which documents usually help: for
+    the claim type, and for what the documents describe when that differs."""
     record = scope.record
     claim_type = record["claim"]["claim_type"]
+    checks = consistency.check(record)
+    helps = [CLAIM_TYPES[claim_type][1]] if claim_type in CLAIM_TYPES else []
+    for c in checks:
+        helps += [CLAIM_TYPES[t][1] for t in c.get("fits", [])[:1] if CLAIM_TYPES[t][1] not in helps]
     return {"missing_fields": [MISSING_WORDS.get(m, m) for m in record["missing"] if m != "adjuster_request"],
+            "consistency_checks": [{"kind": c["kind"], "ask": c["ask"]} for c in checks],
             "documents_on_file": record["claim"]["documents"],
-            "documents_that_usually_help": CLAIM_TYPES[claim_type][1] if claim_type in CLAIM_TYPES else None}
+            "documents_that_usually_help": " ".join(helps) or None}
 
 
 # --- Claimant tools ---------------------------------------------------------------------------

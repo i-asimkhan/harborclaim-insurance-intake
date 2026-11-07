@@ -327,3 +327,31 @@ def test_an_auto_claim_mentioning_a_collision_and_an_injury_is_not_a_mismatch():
     notes = b"Rear-end collision on 2026-10-18; the driver reported a neck injury."
     claim_id = _file_typed_claim("auto", "2026-10-18", notes)
     assert consistency.check(storage.get_claim(claim_id)) == []
+
+
+# --- 8. The request drafts ask about what was actually found ---
+
+import agents
+
+
+def test_template_request_asks_to_confirm_type_and_date_and_for_medical_documents():
+    claim_id = _file_typed_claim("auto", "2026-10-18", INJURY_NOTES, policy_id="POL-REQ")
+    draft = agents.template_request(storage.get_claim(claim_id))
+    assert "Please confirm the claim type" in draft and "bodily injury" in draft
+    assert "Please confirm the incident date" in draft and "2026-09-17" in draft
+    assert "treatment notes or a medical bill" in draft
+    assert "police report" not in draft   # the Auto checklist no longer stands in for the findings
+
+
+def test_template_request_falls_back_to_the_type_checklist_when_nothing_is_found():
+    claim_id = _file_typed_claim("auto", "2026-10-18", b"Rear-end collision on 2026-10-18 on Main St.",
+                                 policy_id="POL-REQ-OK")
+    draft = agents.template_request(storage.get_claim(claim_id))
+    assert "police report" in draft and "confirm" not in draft
+
+
+def test_request_agent_tool_offers_the_consistency_checks():
+    claim_id = _file_typed_claim("auto", "2026-10-18", INJURY_NOTES, policy_id="POL-REQ-TOOL")
+    result = agent_tools.get_completeness(agent_tools.claim_scope(claim_id))
+    assert {c["kind"] for c in result["consistency_checks"]} == {"type_mismatch", "date_difference"}
+    assert "medical bill" in result["documents_that_usually_help"]

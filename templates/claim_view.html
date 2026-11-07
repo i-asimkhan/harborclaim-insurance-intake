@@ -21,9 +21,9 @@
       <div class="title-row">
         <h1 class="claim-id">{{ record.claim.claim_id }}</h1>
         {% if ready %}
-          <span class="badge lg ready">&#10003; READY_FOR_REVIEW</span>
+          <span class="badge lg ready">&#10003; Ready for review</span>
         {% else %}
-          <span class="badge lg needs">&#9888; NEEDS_INFORMATION</span>
+          <span class="badge lg needs">&#9888; Needs information</span>
         {% endif %}
       </div>
     </div>
@@ -88,7 +88,7 @@
         <h3>Decision history</h3>
         <ul class="decision-list">
           {% for d in record.decisions %}
-          <li><strong>{{ d.decision }}</strong> by {{ d.adjuster_username }} <span class="hint">&middot; {{ d.decided_at[:16].replace("T", " ") }} UTC</span>{% if d.reason and d.decision in ("APPROVED", "DECLINED") %}<span class="decision-reason" style="display:block; white-space:pre-wrap;">Reason: {{ d.reason }}</span>{% endif %}</li>
+          <li><strong>{{ d.decision | status_label }}</strong> by {{ d.adjuster_username }} <span class="hint">&middot; {{ d.decided_at[:16].replace("T", " ") }} UTC</span>{% if d.reason and d.decision in ("APPROVED", "DECLINED") %}<span class="decision-reason" style="display:block; white-space:pre-wrap;">Reason: {{ d.reason }}</span>{% endif %}</li>
           {% endfor %}
         </ul>
       </div>

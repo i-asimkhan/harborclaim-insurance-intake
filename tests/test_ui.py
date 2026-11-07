@@ -136,7 +136,7 @@ def test_full_claimant_flow_with_a_real_file_upload(page):
     page.click("button.primary")
     page.wait_for_url(f"{BASE}/claims/*")
 
-    assert page.get_by_text("READY_FOR_REVIEW").is_visible()
+    assert page.locator(".title-row .badge").inner_text().strip().endswith("Ready for review")
     assert page.get_by_text("Automated draft -- not AI-generated").is_visible()
     assert page.get_by_text("Automated extraction -- not AI").is_visible()
     # The extraction actually ran, not just the mock label -- a real value
@@ -334,11 +334,11 @@ def test_adjuster_decision_round_trip_is_visible_in_the_browser(page):
     adjuster_page.click("button[value='NEEDS_MORE_REVIEW']")
     adjuster_page.get_by_role("button", name="Confirm decision").click()
     adjuster_page.wait_for_load_state("networkidle")
-    assert adjuster_page.get_by_text("Needs More Review", exact=False).is_visible()
+    assert adjuster_page.locator("#claim_status").inner_text().strip().endswith("Needs more review")
     adjuster_page.close()
 
     page.goto(f"{BASE}/claims/{claim_id}")
-    assert page.get_by_text("NEEDS_MORE_REVIEW").is_visible()
+    assert page.locator(".decision-list").get_by_text("Needs more review").is_visible()
 
 
 def test_notification_bell_opens_a_preview_and_links_to_the_full_page(page):
@@ -427,7 +427,7 @@ def _file_ready_claim(page, policy_id):
     page.goto(BASE)
     page.click("label[for='claim_type_auto']")
     page.fill("#policy_id", policy_id)
-    page.fill("#incident_date", "2026-09-18")
+    page.fill("#incident_date", "2026-09-10")  # the police report's date, so no date finding is open
     page.fill("#description", "Decision dialog test.")
     page.set_input_files("#files", [str(PROJ / "sample_data" / "police_report_sample.pdf")])
     page.click("button.primary")

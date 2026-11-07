@@ -117,8 +117,8 @@ def test_complete_claim_redirects_and_shows_ready_for_review():
 
     result = client.get(claim_url)
     assert result.status_code == 200
-    assert "READY_FOR_REVIEW" in result.text
-    assert "NEEDS_INFORMATION" not in result.text
+    assert "Ready for review" in result.text
+    assert "Needs information" not in result.text
     assert "police_report.pdf" in result.text
     assert CLAIMANT["email"] in result.text
 
@@ -133,7 +133,7 @@ def test_incomplete_claim_names_the_missing_field():
     claim_url = response.headers["location"]
 
     result = client.get(claim_url)
-    assert "NEEDS_INFORMATION" in result.text
+    assert "Needs information" in result.text
     assert "incident_date" in result.text
 
 
@@ -311,11 +311,11 @@ def test_only_a_logged_in_adjuster_can_record_a_decision():
 
     # Shows up on both the claimant's own view and the adjuster's separate one.
     claimant_view = client.get(f"/claims/{claim_id}")
-    assert "APPROVED" in claimant_view.text
+    assert "Approved" in claimant_view.text
     assert "decider" in claimant_view.text
 
     adjuster_view = client.get(f"/adjuster/claims/{claim_id}")
-    assert "APPROVED" in adjuster_view.text
+    assert "Approved" in adjuster_view.text
     assert "decider" in adjuster_view.text
 
 

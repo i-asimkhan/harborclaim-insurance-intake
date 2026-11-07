@@ -518,6 +518,17 @@ def time_ago(iso: str) -> str:
 templates.env.globals["static_url"] = static_url
 templates.env.filters["ago"] = time_ago
 
+# What a person reads for a status or decision code. The codes stay in the data, the forms and
+# the API; pages show these.
+STATUS_LABELS = {
+    "READY_FOR_REVIEW": "Ready for review",
+    "NEEDS_INFORMATION": "Needs information",
+    "NEEDS_MORE_REVIEW": "Needs more review",
+    "APPROVED": "Approved",
+    "DECLINED": "Declined",
+}
+templates.env.filters["status_label"] = lambda code: STATUS_LABELS.get(code, str(code).replace("_", " ").capitalize())
+
 
 @app.exception_handler(Exception)
 async def unhandled_error(request: Request, exc: Exception) -> HTMLResponse:

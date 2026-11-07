@@ -19,7 +19,7 @@
                          "NEEDS_INFORMATION": ("needs", "&#9888;"), "DECLINED": ("needs", "&#10007;"),
                          "NEEDS_MORE_REVIEW": ("neutral", "&#8635;")} %}
         {% set badge = badges.get(display_status, ("neutral", "")) %}
-        <span class="badge lg {{ badge[0] }}" id="claim_status">{{ badge[1] | safe }} {{ display_status }}</span>
+        <span class="badge lg {{ badge[0] }}" id="claim_status">{{ badge[1] | safe }} {{ display_status | status_label }}</span>
       </div>
     </div>
 
@@ -150,7 +150,7 @@
           <h2>Decisions recorded</h2>
           <ul class="decision-list">
             {% for d in record.decisions %}
-            <li><strong>{{ d.decision }}</strong> by {{ d.adjuster_username }}<span class="hint" style="display:block;" title="{{ d.decided_at }}">{{ d.decided_at[:16].replace("T", " ") }} UTC &middot; {{ d.decided_at | ago }}</span>{% if d.reason %}<span class="decision-reason" style="display:block; white-space:pre-wrap;">{{ d.reason }}</span>{% endif %}{% if d.open_findings %}<span class="hint" style="display:block;">{{ d.open_findings }} open finding{{ "" if d.open_findings == 1 else "s" }} at the time{% if d.decision == "APPROVED" %}, acknowledged{% endif %}</span>{% endif %}</li>
+            <li><strong>{{ d.decision | status_label }}</strong> by {{ d.adjuster_username }}<span class="hint" style="display:block;" title="{{ d.decided_at }}">{{ d.decided_at[:16].replace("T", " ") }} UTC &middot; {{ d.decided_at | ago }}</span>{% if d.reason %}<span class="decision-reason" style="display:block; white-space:pre-wrap;">{{ d.reason }}</span>{% endif %}{% if d.open_findings %}<span class="hint" style="display:block;">{{ d.open_findings }} open finding{{ "" if d.open_findings == 1 else "s" }} at the time{% if d.decision == "APPROVED" %}, acknowledged{% endif %}</span>{% endif %}</li>
             {% endfor %}
           </ul>
         </div>

@@ -53,9 +53,9 @@
             <td><span class="truncate mono" title="{{ record.claim.policy_id or '' }}">{{ record.claim.policy_id or "—" }}</span></td>
             <td>
               {% if record.status == READY_FOR_REVIEW %}
-                <span class="badge ready">READY_FOR_REVIEW</span>
+                <span class="badge ready">Ready for review</span>
               {% else %}
-                <span class="badge needs">NEEDS_INFORMATION</span>
+                <span class="badge needs">Needs information</span>
               {% endif %}
             </td>
             <td>

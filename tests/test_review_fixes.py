@@ -38,14 +38,14 @@ def _badge(html):
 def test_badge_shows_intake_status_until_a_decision_then_the_latest_decision():
     claim_id = _file_claim()
     _adjuster()
-    assert "READY_FOR_REVIEW" in _badge(client.get(f"/adjuster/claims/{claim_id}").text)
+    assert "Ready for review" in _badge(client.get(f"/adjuster/claims/{claim_id}").text)
 
     _decide(claim_id, "NEEDS_MORE_REVIEW")
     badge = _badge(client.get(f"/adjuster/claims/{claim_id}").text)
-    assert "NEEDS_MORE_REVIEW" in badge and "READY_FOR_REVIEW" not in badge
+    assert "Needs more review" in badge and "Ready for review" not in badge
 
     _decide(claim_id, "APPROVED")
-    assert "APPROVED" in _badge(client.get(f"/adjuster/claims/{claim_id}").text)
+    assert "Approved" in _badge(client.get(f"/adjuster/claims/{claim_id}").text)
     # The intake status underneath is untouched: the queue and the bell still filter on it.
     assert storage.get_claim(claim_id)["status"] == "READY_FOR_REVIEW"
 
@@ -427,3 +427,22 @@ def test_not_summarised_heading_is_plain_english():
     _adjuster()
     page = client.get(f"/adjuster/claims/{claim_id}").text
     assert "Dates and amounts the summary doesn't mention" in page and "Not summarised" not in page
+
+
+# --- 12. Pages show readable statuses, not codes ---
+
+def test_pages_show_status_labels_not_codes():
+    claim_id = _file_claim()
+    _adjuster()
+    _decide(claim_id, "NEEDS_MORE_REVIEW")
+    adjuster = client.get(f"/adjuster/claims/{claim_id}").text
+    queue = client.get("/adjuster").text
+    login_as_claimant(CLAIMANT)
+    claimant = client.get(f"/claims/{claim_id}").text
+    mine = client.get("/claims").text
+    for html in (adjuster, queue, claimant, mine):
+        visible = re.sub(r'(value|data-[a-z-]+)="[^"]*"', "", html)   # codes may stay in form values
+        visible = re.sub(r"<script.*?</script>", "", visible, flags=re.S)
+        for code in ("READY_FOR_REVIEW", "NEEDS_INFORMATION", "NEEDS_MORE_REVIEW"):
+            assert code not in visible, code
+    assert "<strong>Needs more review</strong>" in adjuster

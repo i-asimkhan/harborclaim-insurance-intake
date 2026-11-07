@@ -99,8 +99,8 @@
           <p class="rail-flag">Marked for more review. It stays on your list until you record a final decision.</p>
           {% endif %}
           <p class="hint">
-            A human judgment call, not an automated one. It's recorded under your name and the
-            claimant is told straight away.
+            A human judgment call, not an automated one. It's recorded under your name. Approved or
+            Declined is sent to the claimant straight away; Needs more review stays internal.
           </p>
           <form method="post" id="decision_form" data-claim-id="{{ record.claim.claim_id }}"
                 action="/adjuster/claims/{{ record.claim.claim_id }}/decision" class="stack" style="margin-top:var(--space-4);">

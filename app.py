@@ -922,14 +922,17 @@ def record_decision(request: Request, background: BackgroundTasks, claim_id: str
         return _bad_request([f"The reason can be at most {DECISION_REASON_MAX_LENGTH:,} characters."])
 
     storage.add_decision(claim_id, decision, adjuster["username"], reason)
-    _notify(
-        claim_id,
-        record["claim"]["claimant_email"],
-        f"An adjuster has recorded a decision on your claim: {decision.replace('_', ' ').title()}."
-        + (f" Reason: {reason}" if decision in FINAL_DECISIONS and reason else ""),
-        _base_url(request),
-        background,
-    )
+    # Only a final decision goes to the claimant. "Needs more review" is the adjuster's own marker
+    # for a closer look; emailing it would tell the claimant nothing they can act on.
+    if decision in FINAL_DECISIONS:
+        _notify(
+            claim_id,
+            record["claim"]["claimant_email"],
+            f"An adjuster has recorded a decision on your claim: {decision.replace('_', ' ').title()}."
+            + (f" Reason: {reason}" if reason else ""),
+            _base_url(request),
+            background,
+        )
     return RedirectResponse(url=f"/adjuster/claims/{claim_id}", status_code=303)
 
 

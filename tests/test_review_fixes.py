@@ -219,3 +219,19 @@ def test_test_policy_keeps_free_models_and_says_so_on_the_ai_page(monkeypatch):
     _adjuster()
     page = client.get("/adjuster/ai").text
     assert "Data policy: <strong>test</strong>" in page and "fictional claims only" in page
+
+
+# --- 6. Only a final decision notifies the claimant ---
+
+def test_needs_more_review_sends_the_claimant_nothing_but_a_final_decision_does():
+    claim_id = _file_claim()
+    _adjuster()
+
+    def decision_notices():
+        return [n for n in storage.list_notifications_for(CLAIMANT["email"]) if "decision" in n["message"]]
+
+    _decide(claim_id, "NEEDS_MORE_REVIEW", reason="Compare the dates.")
+    assert decision_notices() == []
+    _decide(claim_id, "APPROVED")
+    assert {n["channel"] for n in decision_notices()} == {"in_app", "email"}
+    assert all("Approved" in n["message"] for n in decision_notices())

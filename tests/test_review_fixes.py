@@ -446,3 +446,26 @@ def test_pages_show_status_labels_not_codes():
         for code in ("READY_FOR_REVIEW", "NEEDS_INFORMATION", "NEEDS_MORE_REVIEW"):
             assert code not in visible, code
     assert "<strong>Needs more review</strong>" in adjuster
+
+
+# --- 13. Intake refuses a description with no real words ---
+
+import validation
+
+
+def test_keyboard_mash_description_is_refused_at_intake():
+    login_as_claimant(CLAIMANT)
+    claims_before = len(storage.list_claims())
+    response = submit(policy_id="POL-123", incident_date="2026-10-18", description="ggregrrg3wt3g3",
+                      files=[("a.pdf", b"x")])
+    assert response.status_code in (400, 200) and "Describe what happened in words" in response.text
+    assert len(storage.list_claims()) == claims_before
+
+
+def test_readable_descriptions_pass_and_a_blank_one_is_left_to_the_completeness_check():
+    for good in ("Pipe burst in the kitchen.", "I was rear-ended.",
+                 "Hit on 2026-09-10 at 5pm, damage $1,850.00 to the bumper."):
+        assert validation.description_is_readable(good), good
+    for junk in ("ggregrrg3wt3g3", "asdf qwer zxcv", "x", "!!!! ???? ...."):
+        assert not validation.description_is_readable(junk), junk
+    assert validation.validate_claim_fields("POL-1", "", "") == []   # blank: check_claim reports it missing

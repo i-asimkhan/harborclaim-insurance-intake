@@ -10,6 +10,7 @@ rejected request. Keeping them separate means check_claim() -- the graded minimu
 never has to know about file types or string-length limits.
 """
 
+import re
 from datetime import date, datetime
 
 POLICY_ID_MAX_LENGTH = 40
@@ -68,8 +69,27 @@ def validate_claim_fields(policy_id: str, incident_date: str, description: str) 
 
     if len(description) > DESCRIPTION_MAX_LENGTH:
         errors.append(f"Description is too long (max {DESCRIPTION_MAX_LENGTH} characters).")
+    elif description.strip() and not description_is_readable(description):
+        errors.append(f"Describe what happened in words (at least {DESCRIPTION_MIN_WORDS}), "
+                      "for example \"Rear-ended at a red light on Main St.\"")
 
     return errors
+
+
+DESCRIPTION_MIN_WORDS = 3
+_WORD = re.compile(r"[A-Za-z]+(?:['’-][A-Za-z]+)*")
+_VOWEL = re.compile(r"[aeiouyAEIOUY]")
+
+
+def description_is_readable(description: str) -> bool:
+    """At least DESCRIPTION_MIN_WORDS real-looking words, and at least half of what was typed is
+    words. A real-looking word is letters only (with ' or -) and has a vowel, so a keyboard mash
+    like "ggregrrg3wt3g3" fails while "Pipe burst in the kitchen." passes. A heuristic: it stops
+    obvious junk at intake; it doesn't judge whether a description is true or complete."""
+    tokens = description.split()
+    words = [t for t in (token.strip(".,;:!?()\"'") for token in tokens)
+             if _WORD.fullmatch(t) and _VOWEL.search(t)]
+    return len(words) >= DESCRIPTION_MIN_WORDS and len(words) * 2 >= len(tokens)
 
 
 def validate_not_empty(policy_id: str, incident_date: str, description: str, file_count: int) -> list[str]:

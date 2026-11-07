@@ -14,11 +14,12 @@
       <span class="eyebrow">Claim review</span>
       <div class="title-row">
         <h1 class="claim-id">{{ record.claim.claim_id }}</h1>
-        {% if record.status == READY_FOR_REVIEW %}
-          <span class="badge lg ready">&#10003; READY_FOR_REVIEW</span>
-        {% else %}
-          <span class="badge lg needs">&#9888; NEEDS_INFORMATION</span>
-        {% endif %}
+        {# The latest decision once there is one, otherwise the intake status (app._display_status). #}
+        {% set badges = {"READY_FOR_REVIEW": ("ready", "&#10003;"), "APPROVED": ("ready", "&#10003;"),
+                         "NEEDS_INFORMATION": ("needs", "&#9888;"), "DECLINED": ("needs", "&#10007;"),
+                         "NEEDS_MORE_REVIEW": ("neutral", "&#8635;")} %}
+        {% set badge = badges.get(display_status, ("neutral", "")) %}
+        <span class="badge lg {{ badge[0] }}" id="claim_status">{{ badge[1] | safe }} {{ display_status }}</span>
       </div>
     </div>
 

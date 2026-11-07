@@ -345,6 +345,14 @@ QUEUE_VIEWS = {
 }
 
 
+def _display_status(record: dict) -> str:
+    """The one status a person should see for a claim: its latest decision once there is one,
+    otherwise its intake status. claims.status stays the intake (completeness) status, which the
+    queue and the bell filter on, so decisions are layered on top here instead of written into it.
+    """
+    return record["decisions"][-1]["decision"] if record["decisions"] else record["status"]
+
+
 def _queue_category(record: dict) -> str:
     """Where a claim sits in the queue, by its *latest* decision: Approved or Declined
     finishes it, but "Needs more review" means the adjuster still has to act, so it stays
@@ -805,6 +813,7 @@ def adjuster_view_claim(request: Request, claim_id: str, adjuster: dict | None =
             "record": record,
             "adjuster": adjuster,
             "decisions": DECISIONS,
+            "display_status": _display_status(record),
             "facts_view": _group_facts(record["facts"]),
             "ai_review": _intake_review_view(claim_id),
             "ai_ask": _ask_view(claim_id),

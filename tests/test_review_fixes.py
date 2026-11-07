@@ -285,3 +285,45 @@ def test_no_findings_means_no_box_and_a_plain_approval():
     _adjuster()
     assert 'name="acknowledge"' not in client.get(f"/adjuster/claims/{claim_id}").text
     assert _decide(claim_id, "APPROVED").status_code == 303
+
+
+# --- 14. Consistency checks by code, independent of the AI ---
+
+import consistency
+
+INJURY_NOTES = b"Slip-and-fall on the insured premises on 2026-09-17. Minor wrist injury, treated 2026-09-18."
+
+
+def _file_typed_claim(claim_type, incident_date, notes, policy_id="POL-CHECK"):
+    login_as_claimant(CLAIMANT)
+    response = submit(policy_id=policy_id, incident_date=incident_date, claim_type=claim_type,
+                      description="Filed for the review test, with notes attached.",
+                      files=[("injury_notes.txt", notes)])
+    assert response.status_code == 303, response.text
+    return response.headers["location"].rsplit("/", 1)[-1]
+
+
+def test_auto_claim_with_injury_notes_and_another_date_is_flagged_by_code():
+    claim_id = _file_typed_claim("auto", "2026-10-18", INJURY_NOTES)
+    kinds = {c["kind"]: c for c in consistency.check(storage.get_claim(claim_id))}
+    assert set(kinds) == {"type_mismatch", "date_difference"}
+    assert "Filed as Auto" in kinds["type_mismatch"]["finding"] and "bodily injury" in kinds["type_mismatch"]["finding"]
+    assert "2026-10-18" in kinds["date_difference"]["finding"] and "2026-09-17" in kinds["date_difference"]["finding"]
+
+    _adjuster()
+    page = client.get(f"/adjuster/claims/{claim_id}").text
+    assert 'id="code_checks"' in page and "By code -- not AI" in page
+    # They count as open findings, so approval needs the acknowledgement even with AI off.
+    assert 'data-open-findings="2"' in page
+    assert _decide(claim_id, "APPROVED").status_code == 400
+
+
+def test_matching_type_and_date_raise_nothing():
+    claim_id = _file_typed_claim("health", "2026-09-17", INJURY_NOTES)
+    assert consistency.check(storage.get_claim(claim_id)) == []
+
+
+def test_an_auto_claim_mentioning_a_collision_and_an_injury_is_not_a_mismatch():
+    notes = b"Rear-end collision on 2026-10-18; the driver reported a neck injury."
+    claim_id = _file_typed_claim("auto", "2026-10-18", notes)
+    assert consistency.check(storage.get_claim(claim_id)) == []

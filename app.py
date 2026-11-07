@@ -50,6 +50,7 @@ from starlette.middleware.sessions import SessionMiddleware
 import storage
 import agents
 import ai_client
+import consistency
 import email_delivery
 import privacy
 from email_delivery import send_email
@@ -375,15 +376,16 @@ QUEUE_VIEWS = {
 }
 
 
-def _open_findings(claim_id: str) -> list[str]:
-    """What the review still has open: the latest finished AI intake review's "worth checking" and
-    "missing or unclear" items. Approving over any of them needs an explicit acknowledgement."""
-    run = storage.latest_finished_agent_run(claim_id, "intake")
+def _open_findings(record: dict) -> list[str]:
+    """What the review still has open: the code's consistency checks, plus the latest finished AI
+    intake review's "worth checking" and "missing or unclear" items. Approving over any of them
+    needs an explicit acknowledgement. The code checks count even when the AI is off."""
+    findings = [c["finding"] for c in consistency.check(record)]
+    run = storage.latest_finished_agent_run(record["claim"]["claim_id"], "intake")
     output = (run or {}).get("output") or {}
-    if (run or {}).get("status") not in ("passed", "flagged"):
-        return []
-    findings = [f.get("finding", "") for f in output.get("worth_checking") or [] if isinstance(f, dict)]
-    findings += [m for m in output.get("missing_or_unclear") or [] if isinstance(m, str)]
+    if (run or {}).get("status") in ("passed", "flagged"):
+        findings += [f.get("finding", "") for f in output.get("worth_checking") or [] if isinstance(f, dict)]
+        findings += [m for m in output.get("missing_or_unclear") or [] if isinstance(m, str)]
     return [f for f in findings if f.strip()]
 
 
@@ -931,7 +933,8 @@ def adjuster_view_claim(request: Request, claim_id: str, adjuster: dict | None =
             "adjuster": adjuster,
             "decisions": DECISIONS,
             "display_status": _display_status(record),
-            "open_findings": _open_findings(claim_id),
+            "open_findings": _open_findings(record),
+            "code_checks": consistency.check(record),
             "facts_view": _group_facts(record["facts"]),
             "ai_review": _intake_review_view(claim_id),
             "ai_ask": _ask_view(claim_id),
@@ -1086,7 +1089,7 @@ def record_decision(request: Request, background: BackgroundTasks, claim_id: str
     if len(reason) > DECISION_REASON_MAX_LENGTH:
         return _bad_request([f"The reason can be at most {DECISION_REASON_MAX_LENGTH:,} characters."])
 
-    open_findings = _open_findings(claim_id)
+    open_findings = _open_findings(record)
     if decision == "APPROVED" and open_findings and acknowledge != "yes":
         count = len(open_findings)
         return _bad_request([f"{count} review finding{'s are' if count != 1 else ' is'} still open. Tick "

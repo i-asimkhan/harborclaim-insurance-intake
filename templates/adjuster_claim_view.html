@@ -63,6 +63,16 @@
           </dl>
         </div>
 
+        {% if code_checks %}
+        <div class="card mock-card" id="code_checks">
+          <h2>Consistency checks <span class="mock-tag">By code -- not AI</span></h2>
+          <p class="hint">The claim form compared with what the keyword scan found in the documents. Flags only; check the originals.</p>
+          <ul class="ai-list">
+            {% for c in code_checks %}<li><span class="ai-kind">{{ c.kind.replace("_", " ") }}</span> {{ c.finding }}</li>{% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
         {% include "_ai_review.html" %}
         {% include "_ai_ask.html" %}
         {% include "_ai_request.html" %}

@@ -152,6 +152,14 @@ CREATE TABLE IF NOT EXISTS agent_runs (
     started_at TEXT NOT NULL,
     finished_at TEXT
 );
+
+-- Settings an adjuster changes from the app (today only "model": which AI_MODELS entry goes first).
+CREATE TABLE IF NOT EXISTS ai_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_by TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """
 
 # A fresh checkout (or a DB created before accounts existed) may already have
@@ -232,6 +240,7 @@ def reset() -> None:
         conn.execute("DELETE FROM users")
         conn.execute("DELETE FROM adjusters")
         conn.execute("DELETE FROM login_events")
+        conn.execute("DELETE FROM ai_settings")
 
 
 def _now() -> str:
@@ -703,6 +712,16 @@ def latest_finished_agent_run(claim_id: str, agent: str) -> dict | None:
         return _agent_run(row) if row else None
 
 
+def recent_agent_runs_by(actor: str, agent: str, limit: int = 5) -> list[dict]:
+    """One person's newest runs of one agent (the claimant assistant has no single claim)."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM agent_runs WHERE actor = ? AND agent = ? ORDER BY id DESC LIMIT ?",
+            (actor, agent, limit),
+        ).fetchall()
+        return [_agent_run(row) for row in rows]
+
+
 def recent_agent_runs(claim_id: str, agent: str, limit: int = 5) -> list[dict]:
     with _connect() as conn:
         rows = conn.execute(
@@ -736,6 +755,39 @@ def agent_runs_today(agent: str, actor: str | None = None) -> int:
         params.append(actor)
     with _connect() as conn:
         return conn.execute(query, params).fetchone()["n"]
+
+
+def model_requests_today() -> int:
+    """OpenRouter requests the app sent since midnight UTC: every model attempt in today's traces,
+    failovers included. Requests made with the same key outside the app aren't counted."""
+    midnight = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    with _connect() as conn:
+        rows = conn.execute("SELECT trace_json FROM agent_runs WHERE started_at >= ?",
+                            (midnight.isoformat(timespec="seconds"),)).fetchall()
+    total = 0
+    for row in rows:
+        try:
+            steps = json.loads(row["trace_json"] or "[]")
+        except ValueError:
+            continue
+        total += sum(len(s.get("attempts") or []) for s in steps if isinstance(s, dict) and s.get("type") == "model")
+    return total
+
+
+def get_ai_setting(key: str) -> dict | None:
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM ai_settings WHERE key = ?", (key,)).fetchone()
+        return dict(row) if row else None
+
+
+def set_ai_setting(key: str, value: str, updated_by: str) -> None:
+    with _connect() as conn:
+        conn.execute(
+            """INSERT INTO ai_settings (key, value, updated_by, updated_at) VALUES (?, ?, ?, ?)
+               ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_by = excluded.updated_by,
+               updated_at = excluded.updated_at""",
+            (key, value, updated_by, datetime.now(timezone.utc).isoformat(timespec="seconds")),
+        )
 
 
 def claims_needing_adjuster_attention() -> list[dict]:

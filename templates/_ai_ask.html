@@ -19,9 +19,9 @@
   {% endif %}
 
   {% for item in ask.questions %}{% set run = item.run %}
-  <div class="ai-qa">
-    <p class="ai-question"><strong>Q:</strong> {{ run.question }}
-      <span class="hint">{{ run.actor }} &middot; <span title="{{ run.started_at }}">{{ run.started_at | ago }}</span></span></p>
+  <details class="ai-qa"{% if loop.first %} open{% endif %}>
+    <summary class="ai-question"><strong>Q:</strong> {{ run.question }}
+      <span class="hint">{{ run.actor }} &middot; <span title="{{ run.started_at }}">{{ run.started_at | ago }}</span></span></summary>
     {% if item.kind == "refused" %}
     <p><span class="mock-tag">Fixed reply -- not AI-generated</span> {{ ask.refusal }}</p>
     {% elif item.kind == "running" %}
@@ -62,7 +62,7 @@
       <p class="hint">Prompt {{ run.prompt_version }} &middot; {{ ((run.latency_ms or 0) / 1000) | round(1) }} s</p>
     </details>
     {% endif %}
-  </div>
+  </details>
   {% endfor %}
 </div>
 {% endif %}

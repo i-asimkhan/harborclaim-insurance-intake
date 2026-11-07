@@ -221,7 +221,32 @@ def _claimant_nav(claimant_email: str) -> dict:
     return {
         "unread_count": sum(1 for n in in_app if not n["read_at"]),
         "notification_preview": in_app[:5],
+        "help_on": _claimant_help_on(),
     }
+
+
+def _claimant_help_on() -> bool:
+    """The claimant assistant needs both switches: AI on, and AI_CLAIMANT_CHAT=true."""
+    return ai_client.enabled() and agents.claimant_chat_enabled()
+
+
+def _help_view(claimant_email: str) -> list[dict]:
+    """The claimant's last 5 questions. Only an answer that passed the gate is shown; anything
+    flagged or refused shows the fixed reply. No trace, gate reason or finding ever reaches here."""
+    items = []
+    for run in storage.recent_agent_runs_by(claimant_email, "claimant", limit=5):
+        out = run["output"] or {}
+        if run["status"] == "passed" and not out.get("refused") and isinstance(out.get("answer"), str):
+            kind, text = "answer", out["answer"]
+        elif run["status"] in ("refused", "flagged", "passed"):
+            kind, text = "refused", agents.CLAIMANT_REFUSAL
+        elif run["status"] == "running":
+            kind, text = "running", "Answer in progress -- reload to see it."
+        else:
+            kind, text = "unavailable", "The assistant couldn't answer just now. Please try again later."
+        items.append({"question": run["question"], "at": run["started_at"], "kind": kind, "text": text,
+                      "model": run["model"]})
+    return items
 
 
 # Claimant view of extracted facts: one row per kind of fact, each distinct value
@@ -690,6 +715,31 @@ def notifications(request: Request, user: dict | None = Depends(get_current_user
     )
 
 
+@app.get("/help")
+def claimant_help(request: Request, user: dict | None = Depends(get_current_user)):
+    """The claimant assistant: questions about the signed-in claimant's own claims only."""
+    if user is None:
+        return RedirectResponse(url="/auth/login", status_code=303)
+    if not _claimant_help_on():
+        return RedirectResponse(url="/claims", status_code=303)
+    left = agents.claimant_questions_left(user["email"])
+    return templates.TemplateResponse(
+        request, "help.html",
+        {"user": user, "questions": _help_view(user["email"]), "limit_reached": left == 0,
+         "questions_left": left, "active": "help", **_claimant_nav(user["email"])},
+    )
+
+
+@app.post("/help")
+def claimant_ask(question: str = Form(""), user: dict | None = Depends(get_current_user)):
+    if user is None:
+        return RedirectResponse(url="/auth/login", status_code=303)
+    question = question.strip()
+    if question and _claimant_help_on():
+        agents.ask_claimant(user["email"], question)
+    return RedirectResponse(url="/help", status_code=303)
+
+
 # ---------------------------------------------------------------------------
 # Adjuster-facing routes -- everything under /adjuster/... None of these
 # ever accept a claimant session as sufficient access, even for a claim that
@@ -792,6 +842,29 @@ def ask_about_claim(claim_id: str, question: str = Form(""),
     if question and ai_client.enabled():
         agents.ask_adjuster(claim_id, adjuster["username"], question)
     return RedirectResponse(url=f"/adjuster/claims/{claim_id}#ask", status_code=303)
+
+
+@app.get("/adjuster/ai")
+def adjuster_ai_settings(request: Request, adjuster: dict | None = Depends(get_current_adjuster)):
+    """Which approved model answers first, and today's AI usage against the daily limits."""
+    if adjuster is None:
+        return RedirectResponse(url="/adjuster/login", status_code=303)
+    return templates.TemplateResponse(
+        request, "adjuster_ai.html",
+        {"adjuster": adjuster, "active": "ai", "ai_on": ai_client.enabled(), "models": agents.model_order(),
+         "chosen": storage.get_ai_setting("model"), "usage": agents.usage_today(),
+         "claimant_chat": agents.claimant_chat_enabled(), **_adjuster_nav()},
+    )
+
+
+@app.post("/adjuster/ai/model")
+def adjuster_choose_model(model: str = Form(""), adjuster: dict | None = Depends(get_current_adjuster)):
+    if adjuster is None:
+        return RedirectResponse(url="/adjuster/login", status_code=303)
+    if model not in ai_client.configured_models():
+        return _forbidden("That model isn't on the approved list (AI_MODELS).")
+    storage.set_ai_setting("model", model, adjuster["username"])
+    return RedirectResponse(url="/adjuster/ai", status_code=303)
 
 
 @app.post("/adjuster/claims/{claim_id}/decision")

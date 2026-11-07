@@ -628,7 +628,7 @@ def test_a_normal_intake_run_uses_a_tool_passes_the_gate_and_leaves_a_trace(fake
 
     assert result.status == "passed" and result.model == MODEL
     run = storage.get_agent_run(result.run_id)
-    assert run["status"] == "passed" and run["prompt_version"] == "intake-v5"
+    assert run["status"] == "passed" and run["prompt_version"] == agents.PROMPT_VERSION["intake"]
     assert [t["type"] for t in run["trace"]] == ["model", "tool", "model"]
     assert run["output"]["computed"]["not_summarised"]           # the omitted line items, listed by code
     # The tool result went back to the model, answered by its call id.
@@ -788,6 +788,23 @@ def test_c1_claimant_answers_never_promise_approval_or_money(answer):
     assert _claimant_gate(answer)["status"] == "flagged"
 
 
+@pytest.mark.parametrize("answer", [
+    "Your check will be mailed soon.", "We'll send you a check next week.", "A check is on its way.",
+])
+def test_claimant_answers_never_mention_a_payment_check(answer):
+    assert _claimant_gate(answer)["status"] == "flagged"
+
+
+@pytest.mark.parametrize("answer", [
+    # Both seen live on 2026-11-04 and wrongly replaced by the fixed reply.
+    "Hi there! I can help you check your claims and see what documents you might need.",
+    "I can help you check your existing claims and what's missing.",
+    "Let me check the status of CLM-0000AAAA for you.",
+])
+def test_claimant_may_use_check_as_a_verb(answer):
+    assert _claimant_gate(answer)["status"] == "passed"
+
+
 def test_c1_a_claimant_may_hear_a_decision_that_is_on_record():
     on_record = '{"found": true, "progress": "Decision recorded: Approved"}'
     assert _claimant_gate("Your claim was approved by your adjuster.", on_record)["status"] == "passed"
@@ -889,7 +906,8 @@ READ_ONLY = {"get_claim", "read_document_pages", "claims_for_policy", "list_clai
 
 def test_c1_agent_code_uses_only_allowlisted_storage_functions():
     allowed = {"agent_tools.py": READ_ONLY,
-               "agents.py": READ_ONLY | {"agent_runs_today", "start_agent_run", "finish_agent_run"},
+               "agents.py": READ_ONLY | {"agent_runs_today", "start_agent_run", "finish_agent_run",
+                                            "get_ai_setting", "model_requests_today"},
                "agent_gate.py": set()}
     for name, allow in allowed.items():
         used, banned = _module_storage_uses(name)
@@ -900,7 +918,7 @@ def test_c1_agent_code_uses_only_allowlisted_storage_functions():
 def test_c1_a_hostile_run_works_with_every_other_storage_function_disabled(fake_model, monkeypatch):
     script, _ = fake_model
     _sample_claim()
-    allowed = READ_ONLY | {"agent_runs_today", "start_agent_run", "finish_agent_run", "get_document_path",
+    allowed = READ_ONLY | {"agent_runs_today", "start_agent_run", "finish_agent_run", "get_document_path", "get_ai_setting",
                            "_connect", "_now", "_row_to_record", "_agent_run"}
     for attr in dir(storage):
         if callable(getattr(storage, attr)) and not attr.startswith("__") and attr not in allowed \
@@ -1362,3 +1380,176 @@ def test_c2_a_date_in_words_must_match_its_quote():
     assert agent_gate.check("intake", ok, sources=src)["status"] == "passed"
     ok["summary"][0]["text"] = "The patient was seen on the thirteenth of March."
     assert "G4" in [r["rule"] for r in agent_gate.check("intake", ok, sources=src)["reasons"]]
+
+
+def test_a_short_labelled_field_from_a_document_is_a_valid_quote():
+    # First demo claim (2026-11-02): "Driver: Jordan Ellis" is verbatim in the police report but was
+    # 3 words, under the 4-word minimum. A "Label: value" field of 3+ words now counts.
+    src = {"report.pdf": ["Driver: Jordan Ellis    Policy on file: HC-AUTO-5318\nNarrative text here."]}
+    def gate(quote):
+        out = {"summary": [{"text": "Jordan Ellis drove Vehicle 1.",
+                            "citations": [{"source": "report.pdf", "page": 1, "quote": quote}]}],
+               "worth_checking": [], "missing_or_unclear": []}
+        return [r["rule"] for r in agent_gate.check("intake", out, sources=src)["reasons"]]
+    assert "G3" not in gate("Driver: Jordan Ellis")
+    assert "G3" in gate("Driver: Jordan Smith")         # not in the document
+    assert "G3" in gate("Driver: Jordan")               # 2 words: still too short
+    assert "G3" in gate("Jordan Ellis")                 # no label: still too short
+
+
+def test_a_part_called_a_cover_is_not_coverage_wording():
+    # First demo claim (2026-11-02): "damage to the rear bumper cover" was flagged by G5.
+    assert agent_gate.policy_violations("Damage to the rear bumper cover and trunk lid.") == []
+    assert agent_gate.policy_violations("The policy will cover the bumper.") != []
+
+
+# --- Step 5.6: the claimant assistant at /help -------------------------------------------------
+
+CLAIMANT = {"id": 1, "email": "claimant@example.com", "name": "Casey"}
+
+
+@pytest.fixture
+def claimant_web(monkeypatch):
+    storage.get_or_create_user(CLAIMANT["email"], CLAIMANT["name"])
+    monkeypatch.setitem(app_module.app.dependency_overrides, get_current_user, lambda: CLAIMANT)
+    yield web
+
+
+def _help_ask(question):
+    return web.post("/help", data={"question": question}, follow_redirects=False)
+
+
+def test_help_is_hidden_unless_both_switches_are_on(fake_model, claimant_web, monkeypatch):
+    _sample_claim()
+    assert 'href="/help"' not in web.get("/claims").text        # AI on, AI_CLAIMANT_CHAT off
+    r = web.get("/help", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/claims"
+    _help_ask("Where is my claim?")
+    assert storage.recent_agent_runs_by(CLAIMANT["email"], "claimant") == []
+    monkeypatch.setenv("AI_CLAIMANT_CHAT", "true")
+    assert 'href="/help"' in web.get("/claims").text
+
+
+def test_a_claimant_question_gets_a_labelled_answer_and_changes_nothing(fake_model, claimant_web, monkeypatch):
+    script, _ = fake_model
+    monkeypatch.setenv("AI_CLAIMANT_CHAT", "true")
+    _sample_claim()
+    before = _state("CLM-5A5A5A5A")
+    script.append(_json_reply({"answer": "Your claim CLM-5A5A5A5A is with an adjuster for review.", "refused": False}))
+    r = _help_ask("Where is my claim?")
+    assert r.status_code == 303 and r.headers["location"] == "/help"
+    page = web.get("/help").text
+    assert "Where is my claim?" in page and "Your claim CLM-5A5A5A5A is with an adjuster for review." in page
+    assert f"AI answer ({MODEL} via OpenRouter)" in page
+    assert _state("CLM-5A5A5A5A") == before
+
+
+def test_another_claimants_claim_never_appears_and_shows_the_fixed_reply(fake_model, claimant_web, monkeypatch):
+    script, _ = fake_model
+    monkeypatch.setenv("AI_CLAIMANT_CHAT", "true")
+    _sample_claim("CLM-5A5A5A5A", email=CLAIMANT["email"])
+    _sample_claim("CLM-7C7C7C7C", email="other@example.com")
+    script.append(_json_reply({"answer": "CLM-7C7C7C7C is also in review.", "refused": False}))
+    _help_ask("What about CLM-7C7C7C7C?")
+    page = web.get("/help").text
+    assert "CLM-7C7C7C7C is also in review." not in page and "Fixed reply -- not AI-generated" in page
+    assert "G6" not in page and "AI trace" not in page                 # no gate detail for claimants
+
+
+def test_a_claimant_decision_question_is_refused_by_code_and_not_counted(fake_model, claimant_web, monkeypatch):
+    _, calls = fake_model
+    monkeypatch.setenv("AI_CLAIMANT_CHAT", "true")
+    _sample_claim()
+    _help_ask("Will my claim be approved?")
+    page = web.get("/help").text
+    assert calls == [] and "Will my claim be approved?" in page and agents.CLAIMANT_REFUSAL.replace("'", "&#39;") in page
+    assert storage.agent_runs_today("claimant", actor=CLAIMANT["email"]) == 0
+
+
+def test_a_claimant_is_limited_per_day_before_any_model_call(fake_model, claimant_web, monkeypatch):
+    _, calls = fake_model
+    monkeypatch.setenv("AI_CLAIMANT_CHAT", "true")
+    monkeypatch.setenv("AI_DAILY_LIMIT_CLAIMANT", "100")
+    _sample_claim()
+    for _ in range(agents.CLAIMANT_PER_PERSON_DAILY):
+        run_id = storage.start_agent_run(None, "claimant", CLAIMANT["email"], "claimant-v1", question="q")
+        storage.finish_agent_run(run_id, "passed", output={"answer": "ok", "refused": False})
+    assert agents.ask_claimant(CLAIMANT["email"], "Where is my claim?").error_type == "limit"
+    assert calls == [] and "today's question limit" in web.get("/help").text
+
+
+def test_the_help_page_never_shows_the_adjusters_ai_review(fake_model, claimant_web, monkeypatch):
+    script, _ = fake_model
+    monkeypatch.setenv("AI_CLAIMANT_CHAT", "true")
+    _reviewed_claim(script, GOOD_INTAKE)
+    page = web.get("/help").text
+    assert GOOD_INTAKE["summary"][0]["text"] not in page and "AI review" not in page
+    assert "amount difference" not in page
+
+
+def test_help_needs_a_claimant_session(monkeypatch):
+    monkeypatch.setenv("AI_CLAIMANT_CHAT", "true")
+    web.cookies.clear()
+    r = web.get("/help", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/auth/login"
+
+
+# =============================================================================================
+# History folding, model choice and today's usage (2026-11-04, owner's request)
+# =============================================================================================
+
+def test_only_the_newest_claimant_question_is_open(fake_model, claimant_web, monkeypatch):
+    script, _ = fake_model
+    monkeypatch.setenv("AI_CLAIMANT_CHAT", "true")
+    _sample_claim()
+    for text in ("First answer.", "Second answer."):
+        script.append(_json_reply({"answer": text, "refused": False}))
+        _help_ask("Where is my claim?")
+    page = web.get("/help").text
+    assert page.count('<details class="ai-qa" open>') == 1 and page.count('<details class="ai-qa">') == 1
+    assert page.index("Second answer.") < page.index("First answer.")
+    assert "3 questions left today" in page              # global claimant limit 5, 2 used
+
+
+def test_the_chosen_model_answers_first_and_the_rest_stay_as_failover(fake_model, monkeypatch):
+    script, calls = fake_model
+    monkeypatch.setenv("AI_MODELS", "a:free,b:free,c:free")
+    assert agents.model_order() == ["a:free", "b:free", "c:free"]
+    storage.set_ai_setting("model", "b:free", "adj.review")
+    assert agents.model_order() == ["b:free", "a:free", "c:free"]
+    _sample_claim()
+    script.append(_json_reply(GOOD_INTAKE))
+    agents.run_intake_review("CLM-5A5A5A5A")
+    assert calls[0]["models"] == ["b:free", "a:free", "c:free"]
+    monkeypatch.setenv("AI_MODELS", "a:free,c:free")    # a choice taken off the list is ignored
+    assert agents.model_order() == ["a:free", "c:free"]
+
+
+def test_an_adjuster_can_pick_only_an_approved_model(adjuster_web, monkeypatch):
+    monkeypatch.setattr(ai_client, "enabled", lambda: True)
+    monkeypatch.setenv("AI_MODELS", "a:free,b:free")
+    assert web.post("/adjuster/ai/model", data={"model": "openai/gpt-paid"}).status_code == 403
+    assert storage.get_ai_setting("model") is None
+    r = web.post("/adjuster/ai/model", data={"model": "b:free"}, follow_redirects=False)
+    assert r.status_code == 303 and storage.get_ai_setting("model")["updated_by"] == "adj.review"
+    page = web.get("/adjuster/ai").text
+    assert '<option value="b:free" selected>' in page and "Model requests the app sent" in page
+
+
+def test_model_requests_today_counts_every_attempt_including_failovers(fake_model):
+    script, _ = fake_model
+    _sample_claim()
+    first = _json_reply(GOOD_INTAKE)
+    first.attempts = [{"model": "busy:free", "error_type": "rate_limited"}, {"model": MODEL, "error_type": None}]
+    script.append(first)
+    agents.run_intake_review("CLM-5A5A5A5A")
+    assert storage.model_requests_today() == 2
+    assert {"name": "intake", "used": 1, "limit": 10} in agents.usage_today()["agents"]
+
+
+def test_the_ai_usage_page_needs_an_adjuster(claimant_web):
+    web.cookies.clear()
+    for r in (web.get("/adjuster/ai", follow_redirects=False),
+              web.post("/adjuster/ai/model", data={"model": "a:free"}, follow_redirects=False)):
+        assert r.status_code == 303 and r.headers["location"] == "/adjuster/login"
+    assert storage.get_ai_setting("model") is None

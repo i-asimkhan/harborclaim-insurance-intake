@@ -121,6 +121,9 @@ def _word_find(haystack: str, needle: str, start: int) -> int:
     return -1
 
 
+FIELD_QUOTE = re.compile(r"[A-Za-z][A-Za-z ]{0,24}:\s+\S+(\s+\S+)+\.?")
+
+
 def quote_ok(quote: str, page_text: str) -> bool:
     pieces = [normalise(p).strip(" .,;:\"'") for p in re.split(r"\.\.\.|…", nfkc(quote))]
     pieces = [p for p in pieces if p]
@@ -173,7 +176,9 @@ ACCUSATION_STEMS = re.compile(
 # Everyday uses of the stems above that say nothing about a decision.
 EXEMPT = re.compile(
     r"\bdeclined\s+(medical\s+|any\s+|further\s+)?(treatment|care|transport|an?\s+ambulance|to\s+\w+)"
-    r"|\bcovered\s+(with|in)\b|\bsettled\s+(near|on|in|at|into|under|around|over)\b",
+    r"|\bcovered\s+(with|in)\b|\bsettled\s+(near|on|in|at|into|under|around|over)\b"
+    # Car and building parts (first demo claim: "rear bumper cover").
+    r"|\b(bumper|engine|seat|wheel|mirror|drain|vent|roof|floor|pool)\s+covers?\b",
     re.I,
 )
 INJECTION = re.compile(
@@ -292,8 +297,16 @@ def _check_cited(where: str, text: str, citations: list[dict], sources: dict[str
         # line of it is a precise quote even under the word minimum. Documents get no such exception.
         whole_form_line = c["source"] == "claim form" and normalise(c["quote"]).strip(" .") in {
             normalise(line) for line in page.splitlines() if line.strip()}
-        if not (whole_form_line or quote_ok(c["quote"], page)):
-            reasons.append(_reason("G3", where, f"quote not found verbatim in {c['source']}"))
+        # A short labelled field from a document ("Driver: Jordan Ellis", first demo claim) is
+        # evidence too: "Label: value", 3 words or more, found verbatim on word boundaries.
+        field_quote = bool(FIELD_QUOTE.fullmatch(nfkc(c["quote"]).strip())) and \
+            _word_find(normalise(page), normalise(c["quote"]).strip(" ."), 0) >= 0
+        if not (whole_form_line or field_quote or quote_ok(c["quote"], page)):
+            # Say which: a verbatim but short quote ("Driver: Jordan Ellis", first demo claim) is
+            # not the same failure as an invented one.
+            found = normalise(c["quote"]).strip(" .,;:\"'") in normalise(page)
+            detail = "quote is too short to count as evidence" if found else "quote not found verbatim"
+            reasons.append(_reason("G3", where, f"{detail} in {c['source']}: {c['quote'][:80]!r}"))
         if INJECTION.search(nfkc(c["quote"])):
             reasons.append(_reason("G8", where, "quote looks like an injected instruction"))
         quoted_amounts |= amounts_in(c["quote"])
@@ -321,7 +334,11 @@ CLAIMANT_DECISION_WORDS = {
     "declined": re.compile(r"\bdeclin\w*|\bden(y|ies|ied|ial)\b|\breject\w*", re.I),
 }
 CLAIMANT_MONEY = re.compile(r"\breimburs\w*|\bpa(y|id|ying|yment|yments|yout|youts)\b|\bsettl\w*|\bcompensat\w*"
-                            r"|\bchecks?\b|\bcheques?\b|\bcover(s|ed|age)?\b|\bincluded\s+in\s+your\s+policy\b"
+                            # "check" only as a payment ("your check", "mail a check"); the verb
+                            # ("I can check your claims") was blocking every greeting in the first live try.
+                            r"|\b(a|your)\s+checks?\b|\bchecks?\s+(will|is|was|has|in\s+the\s+mail)\b"
+                            r"|\b(mail|send|sent|issu|cut)\w*\s+(you\s+)?(a\s+)?checks?\b"
+                            r"|\bcheques?\b|\bcover(s|ed|age)?\b|\bincluded\s+in\s+your\s+policy\b"
                             r"|\bentitle\w*|\beligib\w*", re.I)
 
 

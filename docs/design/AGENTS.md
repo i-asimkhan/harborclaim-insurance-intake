@@ -607,6 +607,24 @@ quota, each run only with the owner's go-ahead:
 | `xingchen-agi/xing4.0-29b-a4b:free` | rate-limited upstream | -- | -- | Retry |
 | `nvidia/nemotron-3-super-120b-a12b:free` | 404, 0% uptime | -- | -- | Out |
 
+**Round 3 (2026-11-06; 18 probe requests plus 11 for the golden set, $0).** Four of the twelve
+free models on OpenRouter that day were new or untested with reasoning off.
+
+| Model | Tool call | Cited JSON | Refusal | Verdict |
+|---|---|---|---|---|
+| `nvidia/nemotron-3-ultra-550b-a55b:free` (reasoning off) | pass, 1.0 s | 9 quotes; the 1 the probe failed is a quote across line breaks, which the gate allows | pass: "I cannot approve or decline claims" | **Golden set 8/11 on intake-v6** (3 flagged by the gate: payment wording, a repeated injected note, number mismatches). **Second in `AI_MODELS`** |
+| `nvidia/nemotron-3.5-lightning:free` (reasoning off) | pass, 0.4 s | 11 quotes; the 1 failed contains a long dash | no decision, but no explicit refusal either | **Golden set 5/11 on intake-v6: out.** Found 2 of 9 conflicts; most misses passed the gate (an omitted finding isn't a wrong statement) |
+| `google/gemma-4-31b-it:free` | HTTP 429 again | -- | -- | Out for the demo |
+| `xingchen-agi/xing4.0-29b-a4b:free` | pass (6 calls) | 2 of 7 quotes not verbatim | its reasoning leaked into the answer | Out |
+
+With reasoning on, both new Nemotron models returned empty text: the same lesson as round 1.
+
+Bar for a model in `AI_MODELS`: at least 7 of the 11 golden cases hold, and every miss is one the
+gate flags. Lightning's silent misses are the case the gate can't catch, which is why the golden
+set (recall), not the gate alone, decides. The search ends here: the other free models that day
+were too small (Liquid 1.7B/2.6B), lacked JSON output (Cohere north-mini-code, Nemotron Nano Omni)
+or had failed earlier rounds.
+
 What the probe taught the design: switch reasoning off per model (`MODEL_SETTINGS`); keep a model
 list with failover (`AI_MODELS`); allow short quotes that contain a number (G3); catch passive
 decision phrases (G5); and never trust a keyword refusal check alone (the refusal is written by
@@ -775,3 +793,15 @@ that fail are real model mistakes (a false type mismatch) that G9 now shows as "
 checks". **Accepted as a known limit:** non-numeric content is not checked against its quote (a
 sentence about bumper damage citing only "Report #HPR-30112 filed 2026-08-14" passes when the
 report says so elsewhere); the adjuster sees the quote on hover.
+
+### First demo claim (2026-11-02): a realistic auto claim, run live
+
+`sample_data/demo/` (fictional police report and repair estimate, description $3,250.00 vs
+estimate $3,486.40). Run 1 (intake-v5) found the amount difference but was flagged for three
+reasons, each fixed with a test: a nonsense type mismatch (caught by G9; the prompt, now
+**intake-v6**, names the three claim kinds and says vehicle damage on an Auto claim is not a
+mismatch); short labelled fields like "Driver: Jordan Ellis" rejected as under 4 words (a
+"Label: value" quote of 3+ words, verbatim on word boundaries, now counts; the G3 message now
+says "too short" rather than "not found"); and "rear bumper cover" flagged by G5 (car and
+building parts called a "cover" are now exempt). Run 2 (v6): no type mismatch, amount difference
+found; it passes the gate after the G5 fix. The golden set has not been re-run live on v6 yet.

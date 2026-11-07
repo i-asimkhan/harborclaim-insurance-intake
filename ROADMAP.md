@@ -69,10 +69,8 @@ authoritative, honest labels); production roadmap (Phases 4–5).
   adjuster provisioned credentials), persistent SQLite storage, document upload, a mocked
   extraction/summary pipeline, a notification log, claim type at intake, a redesigned
   claimant side and adjuster side, and email delivery behind an off-by-default flag are all
-  built. **308 tests pass** (2026-11-02): 84 in `tests/test_app.py`, 185 in `tests/test_agents.py`, 19 in `tests/test_golden.py`, 15 in `tests/test_ui.py`, 5 in `test_main.py`
-  (Phase 5), 15 Playwright tests in
-  `tests/test_ui.py`, 5 in `test_main.py`.
-- **Phases 1-3 and Phase 5 steps 5.1-5.2 are on branch `phase-5-agents`, open as
+  built. **318 tests pass** (2026-11-02): 84 in `tests/test_app.py`, 194 in `tests/test_agents.py`, 19 in `tests/test_golden.py`, 16 Playwright tests in `tests/test_ui.py`, 5 in `test_main.py`.
+- **Phases 1-3 and Phase 5 steps 5.1-5.5 are on branch `phase-5-agents`, open as
   [PR #1](https://github.com/i-asimkhan/harborclaim-insurance-intake/pull/1) into `main`**
   (2026-10-26); not merged, not deployed. The live Azure site still runs the older build. Merging
   and the Azure Sync are the owner's call.
@@ -428,7 +426,7 @@ backend, not redesigning the data model.
 
 ---
 
-## Phase 5 -- The agentic layer (real AI) [ ] planned, awaiting approval
+## Phase 5 -- The agentic layer (real AI) [~] 5.1-5.6 built; 5.7-5.8 left
 
 Goal: three AI agents on one shared harness, each a draft-and-explain helper for a human,
 none able to decide, pay or change a claim. **Full build reference:
@@ -496,10 +494,23 @@ runs out.
       "temporarily rate-limited upstream" on every call. **Decision: Nemotron alone in
       `AI_MODELS` for the demo**; if it's down the page shows the labelled template card. Flint
       not retried.
+- [x] **Probe round 3** (2026-11-06, owner asked for more tested free models; AGENTS.md
+      section 11.4): `nemotron-3-ultra-550b-a55b:free` passed the probe and held 8/11 on the golden
+      set, so it is **second in `AI_MODELS`** (the AI usage page can put it first).
+      `nemotron-3.5-lightning:free` out (below); Gemma still rate-limited; XingChen out.
+- [x] Golden set for `nemotron-3.5-lightning:free` (2026-11-06): 5/11, found 2 of 9 conflicts. **Out.** Model search closed: two models in `AI_MODELS`.
 - [ ] Optional: one-time OpenRouter credit of $10 or more raises the daily cap to about 1,000
       (owner's call).
 - [x] Claimant assistant (5.6): decided 2026-10-24 to keep it, built last, after 5.5. The
       design review had recommended cutting it; it's the first thing dropped if time runs out.
+- [x] **First live try of /help** (2026-11-04): two plain questions got the fixed reply because
+      gate rule C treated the verb "check" as a payment check. Narrowed to payment wording ("your
+      check", "mail a check"); prompt `claimant-v2` says New claim files a claim.
+- [x] **AI usage page and folding** (2026-11-04, owner's request): `/adjuster/ai` lets an
+      adjuster pick which `AI_MODELS` entry answers first (stored in `ai_settings`; a model not on
+      the list is refused) and shows today's runs per helper against its limit plus the OpenRouter
+      requests the app sent. /help shows questions left today. Older questions fold on /help and
+      in Ask about this claim. No "clear": `agent_runs` stays append-only for audit.
 
 **5.1 Groundwork** (no model call anywhere yet) -- done 2026-10-25
 
@@ -584,6 +595,10 @@ live run is 5.4
 - [x] Fixtures replayed in the test suite; results, model, prompt version and one observed
       limitation recorded in `AI_USAGE.md` (2026-11-02).
 
+- [x] **First demo claim, live (2026-11-02):** `sample_data/demo/`, a realistic fictional auto
+      claim. Fixed: G3 accepts short "Label: value" fields, G5 exempts "bumper cover", prompt
+      intake-v6 for type mismatches. AGENTS.md section 14.
+- [ ] **Golden set live on intake-v6** after the daily reset (about 11 requests); re-record.
 - [x] **Challenge 2 (independent subagent):** review the live outputs, the chosen model's
       scorecard and the recorded fixtures; write new adversarial golden claims (injection
       variants, conflicting documents, near-miss quotes) and run them (free quota; owner's
@@ -605,10 +620,16 @@ live run is 5.4
 
 **5.6 Agent 3: claimant assistant**
 
-- [ ] `/help` page behind `AI_CLAIMANT_CHAT`, 20 questions per claimant per day, tools bound to
+- [x] `/help` page behind `AI_CLAIMANT_CHAT`, 20 questions per claimant per day, tools bound to
       the session email, fixed refusals for coverage/payout/decision questions.
-- [ ] Tests: another claimant's claim ID returns "not found"; no facts, findings or traces ever
+- [x] Tests: another claimant's claim ID returns "not found"; no facts, findings or traces ever
       appear; refusals.
+
+      **Built 2026-11-03** (`templates/help.html`, "Ask a question" in the claimant nav): shown
+      only when AI is on and `AI_CLAIMANT_CHAT=true`; the claimant sees answer text only, never
+      a trace or gate reason; anything flagged or refused shows the fixed reply; code refusals
+      are logged but not counted; 20 a claimant a day inside the charter's overall 5 a day
+      (free tier). 7 tests in `tests/test_agents.py`. Not tried live yet.
 
 **5.7 Documentation and screenshots**
 
@@ -654,7 +675,7 @@ the claimant is notified. Fictional demo data only. The owner is Asim Khan.
 - Server: `python -m uvicorn app:app --port 8123`. **No `--reload`**: it didn't notice Python
   edits in this OneDrive folder and died mid-edit. Restart the server by hand after changing any
   `.py` file; templates and CSS/JS changes show on a refresh.
-- Tests: `python -m pytest -q` from inside this folder (308 tests, about 2 min, includes the
+- Tests: `python -m pytest -q` from inside this folder (318 tests, about 2 min, includes the
   Playwright browser tests; `python -m playwright install chromium` once).
 - Screenshots: `python scripts/capture_screenshots.py` regenerates all 14 in
   `docs/screenshots/` from a live instance.

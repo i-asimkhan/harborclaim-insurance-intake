@@ -1162,3 +1162,9 @@ body.adjuster-theme .mock-card .ai-status { color: #e4c874; }
 .ai-ask-form input { flex: 1; min-width: 0; }
 .ai-qa { border-top: 1px solid var(--line); padding-top: 0.75rem; margin-top: 0.75rem; }
 .ai-question { margin-bottom: 0.25rem; }
+summary.ai-question { cursor: pointer; }
+details.ai-qa:not([open]) > summary.ai-question { margin-bottom: 0; }
+
+/* "Remove" next to a chosen file on the claim form */
+.link-button { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; font: inherit; font-size: 0.9em; }
+.link-button:hover { color: var(--accent-hover); }

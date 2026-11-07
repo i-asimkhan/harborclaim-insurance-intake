@@ -392,8 +392,20 @@ def test_submit_button_stays_off_until_every_part_of_the_claim_is_in(page):
     page.fill("#policy_id", "")
     assert button.is_disabled()
     page.fill("#policy_id", "POL-UI-READY")
-    page.set_input_files("#files", [])
+    page.locator("#file_list button", has_text="Remove").click()
     assert button.is_disabled()
+
+
+def test_a_second_pick_adds_files_instead_of_replacing_them(page):
+    page.context.add_cookies([_claimant_cookie_header()])
+    page.goto(BASE)
+    page.set_input_files("#files", [str(PROJ / "sample_data" / "police_report_sample.pdf")])
+    page.set_input_files("#files", [str(PROJ / "sample_data" / "repair_estimate_sample.pdf")])
+    assert page.evaluate("document.getElementById('files').files.length") == 2
+    assert page.locator("#file_list li").count() == 2
+    page.locator("#file_list li", has_text="police_report").locator("button").click()
+    assert page.evaluate("document.getElementById('files').files.length") == 1
+    assert page.locator("#file_list li", has_text="repair_estimate").is_visible()
 
 
 def test_double_clicking_submit_files_one_claim(page):

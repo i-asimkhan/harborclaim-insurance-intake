@@ -36,9 +36,21 @@
     });
 
     list.innerHTML = "";
-    chosen.forEach(function (f) {
+    chosen.forEach(function (f, i) {
       var li = document.createElement("li");
-      li.textContent = f.name + " (" + (f.size / 1024).toFixed(1) + " KB)";
+      li.textContent = f.name + " (" + (f.size / 1024).toFixed(1) + " KB) ";
+      if (kept) {
+        var remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "link-button";
+        remove.textContent = "Remove";
+        remove.addEventListener("click", function () {
+          kept.items.remove(i);
+          files.files = kept.files;
+          files.dispatchEvent(new Event("change"));
+        });
+        li.appendChild(remove);
+      }
       list.appendChild(li);
     });
 
@@ -56,7 +68,23 @@
     // Blocks submission natively until the selection is fixed.
     files.setCustomValidity(problems.length ? problems[0] : "");
   }
-  files.addEventListener("change", check);
+  // A second pick adds to the first instead of replacing it (the browser default). Browsers
+  // without DataTransfer keep the default: pick every file at once.
+  var kept = null;
+  try { kept = new DataTransfer(); } catch (e) { kept = null; }
+  var syncing = false;
+  files.addEventListener("change", function () {
+    if (kept && !syncing) {
+      Array.prototype.forEach.call(files.files, function (f) {
+        var dup = Array.prototype.some.call(kept.files, function (k) { return k.name === f.name && k.size === f.size; });
+        if (!dup) kept.items.add(f);
+      });
+      syncing = true;
+      files.files = kept.files;
+      syncing = false;
+    }
+    check();
+  });
 
   // Readiness: the button stays off until every part of the claim is in -- claim
   // type, policy ID, a valid incident date, a description and at least one

@@ -46,7 +46,7 @@ Separate from the build tool above: this is the model HarborClaim itself calls, 
 
 - **Model:** `nvidia/nemotron-3.5-super-vl:free` via OpenRouter (free tier, $0), reasoning off,
   temperature 0. Chosen by testing (AGENTS.md section 11.4, round 1 probe).
-- **Prompt:** `intake-v5` (`agents.py`). Every output goes through the code gate
+- **Prompt:** `intake-v6` (`agents.py`; v5 for the golden-set table below). Every output goes through the code gate
   (`agent_gate.py`, rules G1-G9) before an adjuster sees it.
 - **Golden-set eval, 2026-11-02** (`python scripts/eval_agents.py`; 6 fictional claims in
   `sample_data/golden/`; replies recorded in `tests/fixtures/ai/intake/` and replayed by the tests):

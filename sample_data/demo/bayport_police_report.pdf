@@ -1,0 +1,59 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 1556 >>
+stream
+BT
+/F2 13 Tf 1 0 0 1 60 760 Tm (CITY OF BAYPORT POLICE DEPARTMENT \(fictional, for classroom use\)) Tj
+/F2 13 Tf 1 0 0 1 60 740 Tm (Traffic Crash Report) Tj
+/F1 11 Tf 1 0 0 1 60 720 Tm () Tj
+/F1 11 Tf 1 0 0 1 60 704 Tm (Report number: BPD-2026-118407) Tj
+/F1 11 Tf 1 0 0 1 60 688 Tm (Date of crash: 2026-10-27        Time: 5:42 PM) Tj
+/F1 11 Tf 1 0 0 1 60 672 Tm (Location: Harbor Avenue at Palm Street, Bayport) Tj
+/F1 11 Tf 1 0 0 1 60 656 Tm (Reporting officer: Ofc. R. Delgado, Badge 4471) Tj
+/F1 11 Tf 1 0 0 1 60 640 Tm () Tj
+/F2 13 Tf 1 0 0 1 60 624 Tm (Vehicle 1 \(struck\)) Tj
+/F1 11 Tf 1 0 0 1 60 604 Tm (Driver: Jordan Ellis    Policy on file: HC-AUTO-5318) Tj
+/F1 11 Tf 1 0 0 1 60 588 Tm (2021 Honda Civic, silver, plate JXR-4417) Tj
+/F1 11 Tf 1 0 0 1 60 572 Tm (Damage: rear bumper cover, trunk lid, left tail lamp) Tj
+/F1 11 Tf 1 0 0 1 60 556 Tm () Tj
+/F2 13 Tf 1 0 0 1 60 540 Tm (Vehicle 2 \(striking\)) Tj
+/F1 11 Tf 1 0 0 1 60 520 Tm (Driver: Sam Ortiz    2018 Ford F-150, blue, plate KLT-9023) Tj
+/F1 11 Tf 1 0 0 1 60 504 Tm (Damage: front bumper, minor) Tj
+/F1 11 Tf 1 0 0 1 60 488 Tm () Tj
+/F2 13 Tf 1 0 0 1 60 472 Tm (Narrative) Tj
+/F1 11 Tf 1 0 0 1 60 452 Tm (Vehicle 1 was stopped at a red light on Harbor Avenue when Vehicle 2 failed) Tj
+/F1 11 Tf 1 0 0 1 60 436 Tm (to stop and struck it from behind. No injuries were reported at the scene.) Tj
+/F1 11 Tf 1 0 0 1 60 420 Tm (Both vehicles were drivable. Driver 2 was issued a citation for following) Tj
+/F1 11 Tf 1 0 0 1 60 404 Tm (too closely. Photos were taken by the officer.) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000251 00000 n 
+0000001859 00000 n 
+0000001929 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+2004
+%%EOF

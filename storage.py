@@ -94,7 +94,8 @@ CREATE TABLE IF NOT EXISTS adjuster_decisions (
     decision TEXT NOT NULL,
     adjuster_username TEXT NOT NULL,
     decided_at TEXT NOT NULL,
-    reason TEXT
+    reason TEXT,
+    open_findings INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS login_events (
@@ -183,6 +184,7 @@ _NOTIFICATION_MIGRATIONS = [
 # Decisions recorded before reasons existed keep their rows; their reason is just empty.
 _DECISION_MIGRATIONS = [
     ("reason", "ALTER TABLE adjuster_decisions ADD COLUMN reason TEXT"),
+    ("open_findings", "ALTER TABLE adjuster_decisions ADD COLUMN open_findings INTEGER"),
 ]
 
 # The `adjusters` and `adjuster_decisions` tables changed shape (Google-email
@@ -428,12 +430,16 @@ def create_claim(
         )
 
 
-def add_decision(claim_id: str, decision: str, adjuster_username: str, reason: str | None = None) -> None:
+def add_decision(claim_id: str, decision: str, adjuster_username: str, reason: str | None = None,
+                 open_findings: int | None = None) -> None:
+    """open_findings: how many review findings were still open when the decision was made, so an
+    approval over open findings is on the record as a deliberate, acknowledged choice."""
     with _connect() as conn:
         conn.execute(
-            """INSERT INTO adjuster_decisions (claim_id, decision, adjuster_username, decided_at, reason)
-               VALUES (?, ?, ?, ?, ?)""",
-            (claim_id, decision, adjuster_username, _now(), reason or None),
+            """INSERT INTO adjuster_decisions
+                   (claim_id, decision, adjuster_username, decided_at, reason, open_findings)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (claim_id, decision, adjuster_username, _now(), reason or None, open_findings),
         )
 
 
@@ -464,7 +470,7 @@ def _row_to_record(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         (row["claim_id"],),
     ).fetchall()
     decisions = conn.execute(
-        "SELECT decision, adjuster_username, decided_at, reason FROM adjuster_decisions "
+        "SELECT decision, adjuster_username, decided_at, reason, open_findings FROM adjuster_decisions "
         "WHERE claim_id = ? ORDER BY id",
         (row["claim_id"],),
     ).fetchall()

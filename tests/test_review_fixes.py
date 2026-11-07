@@ -235,3 +235,53 @@ def test_needs_more_review_sends_the_claimant_nothing_but_a_final_decision_does(
     _decide(claim_id, "APPROVED")
     assert {n["channel"] for n in decision_notices()} == {"in_app", "email"}
     assert all("Approved" in n["message"] for n in decision_notices())
+
+
+# --- 7. Approving over open review findings needs an acknowledgement ---
+
+REVIEW_WITH_FINDINGS = {
+    "summary": [],
+    "worth_checking": [
+        {"kind": "type_mismatch", "finding": "Claim type Auto, but the notes describe a slip-and-fall.", "citations": []},
+        {"kind": "date_difference", "finding": "Form says 2026-10-18; the notes say 2026-09-17.", "citations": []},
+    ],
+    "missing_or_unclear": ["Medical documentation has not been received."],
+}
+
+
+def _record_review(claim_id, output=REVIEW_WITH_FINDINGS):
+    run_id = storage.start_agent_run(claim_id, "intake", "system", "intake-test", model="test-model")
+    storage.finish_agent_run(run_id, "passed", output=output, gate={"reasons": []}, trace=[])
+
+
+def test_approval_over_open_findings_needs_the_box_ticked_and_is_recorded():
+    claim_id = _file_claim()
+    _record_review(claim_id)
+    _adjuster()
+    page = client.get(f"/adjuster/claims/{claim_id}").text
+    assert 'data-open-findings="3"' in page and 'name="acknowledge"' in page
+
+    refused = _decide(claim_id, "APPROVED")
+    assert refused.status_code == 400 and "3 review findings are still open" in refused.text
+    assert storage.get_claim(claim_id)["decisions"] == []
+
+    client.post(f"/adjuster/claims/{claim_id}/decision", data={"decision": "APPROVED", "acknowledge": "yes"})
+    decision = storage.get_claim(claim_id)["decisions"][0]
+    assert decision["decision"] == "APPROVED" and decision["open_findings"] == 3
+    assert "3 open findings at the time, acknowledged" in client.get(f"/adjuster/claims/{claim_id}").text
+
+
+def test_decline_and_more_review_need_no_acknowledgement():
+    claim_id = _file_claim()
+    _record_review(claim_id)
+    _adjuster()
+    assert _decide(claim_id, "NEEDS_MORE_REVIEW").status_code == 303
+    assert _decide(claim_id, "DECLINED", reason="The injury is not covered by an auto policy.").status_code == 303
+
+
+def test_no_findings_means_no_box_and_a_plain_approval():
+    claim_id = _file_claim()
+    _record_review(claim_id, {"summary": [], "worth_checking": [], "missing_or_unclear": []})
+    _adjuster()
+    assert 'name="acknowledge"' not in client.get(f"/adjuster/claims/{claim_id}").text
+    assert _decide(claim_id, "APPROVED").status_code == 303

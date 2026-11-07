@@ -349,6 +349,18 @@ QUEUE_VIEWS = {
 }
 
 
+def _open_findings(claim_id: str) -> list[str]:
+    """What the review still has open: the latest finished AI intake review's "worth checking" and
+    "missing or unclear" items. Approving over any of them needs an explicit acknowledgement."""
+    run = storage.latest_finished_agent_run(claim_id, "intake")
+    output = (run or {}).get("output") or {}
+    if (run or {}).get("status") not in ("passed", "flagged"):
+        return []
+    findings = [f.get("finding", "") for f in output.get("worth_checking") or [] if isinstance(f, dict)]
+    findings += [m for m in output.get("missing_or_unclear") or [] if isinstance(m, str)]
+    return [f for f in findings if f.strip()]
+
+
 def _display_status(record: dict) -> str:
     """The one status a person should see for a claim: its latest decision once there is one,
     otherwise its intake status. claims.status stays the intake (completeness) status, which the
@@ -818,6 +830,7 @@ def adjuster_view_claim(request: Request, claim_id: str, adjuster: dict | None =
             "adjuster": adjuster,
             "decisions": DECISIONS,
             "display_status": _display_status(record),
+            "open_findings": _open_findings(claim_id),
             "facts_view": _group_facts(record["facts"]),
             "ai_review": _intake_review_view(claim_id),
             "ai_ask": _ask_view(claim_id),
@@ -883,7 +896,8 @@ def adjuster_choose_model(model: str = Form(""), adjuster: dict | None = Depends
 
 @app.post("/adjuster/claims/{claim_id}/decision")
 def record_decision(request: Request, background: BackgroundTasks, claim_id: str, decision: str = Form(""),
-                    reason: str = Form(""), adjuster: dict | None = Depends(get_current_adjuster)):
+                    reason: str = Form(""), acknowledge: str = Form(""),
+                    adjuster: dict | None = Depends(get_current_adjuster)):
     if adjuster is None:
         return RedirectResponse(url="/adjuster/login", status_code=303)
 
@@ -921,7 +935,13 @@ def record_decision(request: Request, background: BackgroundTasks, claim_id: str
     if len(reason) > DECISION_REASON_MAX_LENGTH:
         return _bad_request([f"The reason can be at most {DECISION_REASON_MAX_LENGTH:,} characters."])
 
-    storage.add_decision(claim_id, decision, adjuster["username"], reason)
+    open_findings = _open_findings(claim_id)
+    if decision == "APPROVED" and open_findings and acknowledge != "yes":
+        count = len(open_findings)
+        return _bad_request([f"{count} review finding{'s are' if count != 1 else ' is'} still open. Tick "
+                             "\"I've checked the open findings\" to approve anyway; the approval records it."])
+
+    storage.add_decision(claim_id, decision, adjuster["username"], reason, open_findings=len(open_findings))
     # Only a final decision goes to the claimant. "Needs more review" is the adjuster's own marker
     # for a closer look; emailing it would tell the claimant nothing they can act on.
     if decision in FINAL_DECISIONS:

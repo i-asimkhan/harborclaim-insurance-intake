@@ -102,13 +102,20 @@
             A human judgment call, not an automated one. It's recorded under your name. Approved or
             Declined is sent to the claimant straight away; Needs more review stays internal.
           </p>
-          <form method="post" id="decision_form" data-claim-id="{{ record.claim.claim_id }}"
+          <form method="post" id="decision_form" data-claim-id="{{ record.claim.claim_id }}" data-open-findings="{{ open_findings | length }}"
                 action="/adjuster/claims/{{ record.claim.claim_id }}/decision" class="stack" style="margin-top:var(--space-4);">
             <label for="decision_reason">Reason
               <span class="hint" style="display:block;">Required to decline. Sent to the claimant with a final decision; kept internal for Needs more review.</span>
             </label>
             <textarea id="decision_reason" name="reason" rows="3" maxlength="1000"
                       placeholder="What the decision rests on: the policy term, document or finding."></textarea>
+            {% if open_findings %}
+            <label class="ack-findings" style="display:flex; gap:var(--space-2); align-items:flex-start;">
+              <input type="checkbox" name="acknowledge" value="yes" id="acknowledge_findings">
+              <span>I've checked the <a href="#ai_review">{{ open_findings | length }} open finding{{ "" if open_findings | length == 1 else "s" }}</a>
+                in the review. <span class="hint">Needed to approve.</span></span>
+            </label>
+            {% endif %}
             {% set intents = {"APPROVED": "approve", "DECLINED": "decline"} %}
             {% for choice in decisions if choice != latest_decision %}
             <button type="submit" name="decision" value="{{ choice }}" class="btn block {{ intents.get(choice, 'secondary') }}">{{ choice.replace("_", " ") | title }}</button>
@@ -132,7 +139,7 @@
           <h2>Decisions recorded</h2>
           <ul class="decision-list">
             {% for d in record.decisions %}
-            <li><strong>{{ d.decision }}</strong> by {{ d.adjuster_username }}<span class="hint" style="display:block;" title="{{ d.decided_at }}">{{ d.decided_at[:16].replace("T", " ") }} UTC &middot; {{ d.decided_at | ago }}</span>{% if d.reason %}<span class="decision-reason" style="display:block; white-space:pre-wrap;">{{ d.reason }}</span>{% endif %}</li>
+            <li><strong>{{ d.decision }}</strong> by {{ d.adjuster_username }}<span class="hint" style="display:block;" title="{{ d.decided_at }}">{{ d.decided_at[:16].replace("T", " ") }} UTC &middot; {{ d.decided_at | ago }}</span>{% if d.reason %}<span class="decision-reason" style="display:block; white-space:pre-wrap;">{{ d.reason }}</span>{% endif %}{% if d.open_findings %}<span class="hint" style="display:block;">{{ d.open_findings }} open finding{{ "" if d.open_findings == 1 else "s" }} at the time{% if d.decision == "APPROVED" %}, acknowledged{% endif %}</span>{% endif %}</li>
             {% endfor %}
           </ul>
         </div>

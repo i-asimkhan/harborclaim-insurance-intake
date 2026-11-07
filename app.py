@@ -71,6 +71,7 @@ from validation import (
 )
 
 DECISIONS = ["APPROVED", "DECLINED", "NEEDS_MORE_REVIEW"]
+FINAL_DECISIONS = {"APPROVED", "DECLINED"}
 
 
 def _base_url(request: Request) -> str:
@@ -896,6 +897,16 @@ def record_decision(request: Request, background: BackgroundTasks, claim_id: str
         return _forbidden(
             "Separation of duties: this adjuster account is linked to the claimant who filed this claim."
         )
+
+    # The page hides the buttons in these cases, but the server is what enforces them.
+    if record["status"] != READY_FOR_REVIEW:
+        return _forbidden("Decisions open once the claim is complete.")
+    latest = record["decisions"][-1]["decision"] if record["decisions"] else None
+    if latest in FINAL_DECISIONS:
+        return _forbidden("A final decision is already recorded on this claim.")
+    if decision == latest:
+        # A repeat (a double click, a resubmitted form) adds no row and sends no second notice.
+        return RedirectResponse(url=f"/adjuster/claims/{claim_id}", status_code=303)
 
     storage.add_decision(claim_id, decision, adjuster["username"])
     _notify(

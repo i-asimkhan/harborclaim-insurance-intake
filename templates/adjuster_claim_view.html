@@ -79,7 +79,13 @@
       <aside class="review-rail stack">
         <div class="card">
           <h2>Record a decision</h2>
-          {% if record.status != READY_FOR_REVIEW %}
+          {% set latest_decision = record.decisions[-1].decision if record.decisions else none %}
+          {% if latest_decision in ("APPROVED", "DECLINED") %}
+          <p class="muted" id="decision_final">
+            Final decision recorded: <strong>{{ latest_decision.replace("_", " ") | title }}</strong>.
+            It can't be changed from this page.
+          </p>
+          {% elif record.status != READY_FOR_REVIEW %}
           <p class="muted">
             Decisions open once the claim is complete. The claimant has been told what's missing.
           </p>
@@ -99,7 +105,7 @@
           <form method="post" id="decision_form" data-claim-id="{{ record.claim.claim_id }}"
                 action="/adjuster/claims/{{ record.claim.claim_id }}/decision" class="stack" style="margin-top:var(--space-4);">
             {% set intents = {"APPROVED": "approve", "DECLINED": "decline"} %}
-            {% for choice in decisions %}
+            {% for choice in decisions if choice != latest_decision %}
             <button type="submit" name="decision" value="{{ choice }}" class="btn block {{ intents.get(choice, 'secondary') }}">{{ choice.replace("_", " ") | title }}</button>
             {% endfor %}
           </form>

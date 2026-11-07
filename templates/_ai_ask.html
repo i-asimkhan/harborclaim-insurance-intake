@@ -1,6 +1,7 @@
 {# "Ask about this claim" (Phase 5, step 5.5), adjuster side only. Labels follow AGENTS.md
    section 9: "AI" only on an answer a model really wrote; the refusal and "not found" lines are
    fixed text. Model text is always autoescaped -- never the safe filter. #}
+{% from "_cites.html" import cites as cite_links %}
 {% set ask = ai_ask %}
 {% if ask.ai_on or ask.questions %}
 <div class="card ai-card" id="ask">
@@ -41,7 +42,7 @@
     <ul class="ai-list">
       {% for s in run.output.answer %}{% set where = "answer[" ~ loop.index0 ~ "]" %}
       <li{% if where in item.flagged %} class="ai-failed"{% endif %}>{{ s.text }}
-        {%- for c in s.citations %} <span class="cite" title="{{ c.quote }}">{{ c.source }}, p. {{ c.page }}</span>{% endfor -%}
+        {{- cite_links(s.citations, record.claim.claim_id, record.claim.documents) -}}
         {% if where in item.flagged %} <span class="ai-failed-tag">failed checks</span>{% endif %}</li>
       {% endfor %}
     </ul>

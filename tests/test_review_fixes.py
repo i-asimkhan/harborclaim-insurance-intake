@@ -378,3 +378,26 @@ def test_not_found_answer_is_not_labelled_as_checked_against_the_documents():
     qa = qa[:qa.index("</details>")]
     assert "found nothing in this claim's records on this" in qa
     assert "checked against the documents" not in qa
+
+
+# --- 10. Citations: each source and page once, and they link to the source ---
+
+def test_repeated_citations_collapse_and_link_to_the_source():
+    claim_id = _file_typed_claim("auto", "2026-10-18", INJURY_NOTES, policy_id="POL-CITE")
+    form = lambda q: {"source": "claim form", "page": 1, "quote": q}
+    notes = lambda q: {"source": "injury_notes.txt", "page": 1, "quote": q}
+    _record_review(claim_id, {
+        "summary": [{"text": "The form lists the policy, date and type.",
+                     "citations": [form("Policy ID: POL-CITE"), form("Incident date: 2026-10-18"), form("Claim type: Auto")]},
+                    {"text": "The notes describe a fall.",
+                     "citations": [notes("Slip-and-fall on the insured premises"), notes("Minor wrist injury, treated")]}],
+        "worth_checking": [], "missing_or_unclear": []})
+    _adjuster()
+    page = client.get(f"/adjuster/claims/{claim_id}").text
+    review = page[page.index('id="ai_review"'):]
+    first = review[:review.index("</li>")]
+    assert first.count("claim form, p. 1") == 1
+    assert 'href="#basics"' in first and "Policy ID: POL-CITE / Incident date: 2026-10-18" in first
+    assert f'href="/adjuster/claims/{claim_id}/documents/injury_notes.txt#page=1"' in review
+    assert review.count("injury_notes.txt, p. 1") == 1
+    assert 'id="basics"' in page

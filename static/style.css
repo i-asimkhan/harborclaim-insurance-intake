@@ -1132,6 +1132,8 @@ body.adjuster-login-body {
   cursor: help;
   white-space: nowrap;
 }
+a.cite { text-decoration: none; cursor: pointer; }
+a.cite:hover { color: var(--accent); border-bottom-color: var(--accent); }
 .ai-kind {
   font-size: var(--text-xs);
   font-family: var(--font-mono);

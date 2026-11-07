@@ -3,8 +3,9 @@
    is always autoescaped -- never the safe filter. Otherwise the template draft shows, as before,
    with one line saying why there is no AI review. #}
 {% set ai = ai_review %}
+{% from "_cites.html" import cites as cite_links %}
 {% macro cites(citations) -%}
-  {%- for c in citations %} <span class="cite" title="{{ c.quote }}">{{ c.source }}, p. {{ c.page }}</span>{% endfor -%}
+  {{- cite_links(citations, record.claim.claim_id, record.claim.documents) -}}
 {%- endmacro %}
 {% macro rerun() %}
   {% if ai_review.ai_on and not ai_review.running %}

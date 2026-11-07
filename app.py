@@ -72,6 +72,8 @@ from validation import (
 
 DECISIONS = ["APPROVED", "DECLINED", "NEEDS_MORE_REVIEW"]
 FINAL_DECISIONS = {"APPROVED", "DECLINED"}
+DECLINE_REASON_MIN_LENGTH = 10
+DECISION_REASON_MAX_LENGTH = 1000
 
 
 def _base_url(request: Request) -> str:
@@ -878,7 +880,8 @@ def adjuster_choose_model(model: str = Form(""), adjuster: dict | None = Depends
 
 
 @app.post("/adjuster/claims/{claim_id}/decision")
-def record_decision(request: Request, background: BackgroundTasks, claim_id: str, decision: str = Form(""), adjuster: dict | None = Depends(get_current_adjuster)):
+def record_decision(request: Request, background: BackgroundTasks, claim_id: str, decision: str = Form(""),
+                    reason: str = Form(""), adjuster: dict | None = Depends(get_current_adjuster)):
     if adjuster is None:
         return RedirectResponse(url="/adjuster/login", status_code=303)
 
@@ -908,11 +911,20 @@ def record_decision(request: Request, background: BackgroundTasks, claim_id: str
         # A repeat (a double click, a resubmitted form) adds no row and sends no second notice.
         return RedirectResponse(url=f"/adjuster/claims/{claim_id}", status_code=303)
 
-    storage.add_decision(claim_id, decision, adjuster["username"])
+    # An adverse decision needs a recorded reason, and the claimant is told it.
+    reason = reason.strip().replace("\r\n", "\n")
+    if decision == "DECLINED" and len(reason) < DECLINE_REASON_MIN_LENGTH:
+        return _bad_request([f"A decline needs a written reason (at least {DECLINE_REASON_MIN_LENGTH} "
+                             "characters). It's recorded with the decision and sent to the claimant."])
+    if len(reason) > DECISION_REASON_MAX_LENGTH:
+        return _bad_request([f"The reason can be at most {DECISION_REASON_MAX_LENGTH:,} characters."])
+
+    storage.add_decision(claim_id, decision, adjuster["username"], reason)
     _notify(
         claim_id,
         record["claim"]["claimant_email"],
-        f"An adjuster has recorded a decision on your claim: {decision.replace('_', ' ').title()}.",
+        f"An adjuster has recorded a decision on your claim: {decision.replace('_', ' ').title()}."
+        + (f" Reason: {reason}" if decision in FINAL_DECISIONS and reason else ""),
         _base_url(request),
         background,
     )

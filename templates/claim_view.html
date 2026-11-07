@@ -88,7 +88,7 @@
         <h3>Decision history</h3>
         <ul class="decision-list">
           {% for d in record.decisions %}
-          <li><strong>{{ d.decision }}</strong> by {{ d.adjuster_username }} <span class="hint">&middot; {{ d.decided_at[:16].replace("T", " ") }} UTC</span></li>
+          <li><strong>{{ d.decision }}</strong> by {{ d.adjuster_username }} <span class="hint">&middot; {{ d.decided_at[:16].replace("T", " ") }} UTC</span>{% if d.reason and d.decision in ("APPROVED", "DECLINED") %}<span class="decision-reason" style="display:block; white-space:pre-wrap;">Reason: {{ d.reason }}</span>{% endif %}</li>
           {% endfor %}
         </ul>
       </div>

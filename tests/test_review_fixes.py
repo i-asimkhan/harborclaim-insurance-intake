@@ -95,3 +95,62 @@ def test_no_decision_on_an_incomplete_claim_even_by_direct_post():
     _adjuster()
     assert _decide(claim_id, "APPROVED").status_code == 403
     assert storage.get_claim(claim_id)["decisions"] == []
+
+
+# --- 4. A decision carries a reason; a decline must have one ---
+
+def test_decline_without_a_reason_is_refused():
+    claim_id = _file_claim()
+    _adjuster()
+    for reason in ("", "   ", "too short"):
+        response = _decide(claim_id, "DECLINED", reason=reason)
+        assert response.status_code == 400 and "needs a written reason" in response.text
+    assert storage.get_claim(claim_id)["decisions"] == []
+
+
+def test_decline_reason_is_stored_shown_and_sent_to_the_claimant():
+    claim_id = _file_claim()
+    _adjuster()
+    reason = "The policy lapsed on 2026-07-31, before the incident date."
+    assert _decide(claim_id, "DECLINED", reason=reason).status_code == 303
+    assert storage.get_claim(claim_id)["decisions"][0]["reason"] == reason
+
+    adjuster_page = client.get(f"/adjuster/claims/{claim_id}").text
+    assert reason in adjuster_page and " UTC" in adjuster_page
+    assert any(reason in n["message"] for n in storage.list_notifications_for(CLAIMANT["email"]))
+    login_as_claimant(CLAIMANT)
+    assert f"Reason: {reason}" in client.get(f"/claims/{claim_id}").text
+
+
+def test_more_review_reason_stays_internal():
+    claim_id = _file_claim()
+    _adjuster()
+    note = "Check the incident date against the repair invoice."
+    _decide(claim_id, "NEEDS_MORE_REVIEW", reason=note)
+    assert note in client.get(f"/adjuster/claims/{claim_id}").text
+    assert not any(note in n["message"] for n in storage.list_notifications_for(CLAIMANT["email"]))
+    login_as_claimant(CLAIMANT)
+    assert note not in client.get(f"/claims/{claim_id}").text
+
+
+def test_reason_is_capped():
+    claim_id = _file_claim()
+    _adjuster()
+    assert _decide(claim_id, "APPROVED", reason="x" * 1001).status_code == 400
+
+
+def test_existing_decisions_survive_the_reason_migration():
+    """A database from before reasons existed: init_db must add the column, not drop the table."""
+    claim_id = _file_claim()
+    with storage._connect() as conn:
+        conn.execute("DROP TABLE adjuster_decisions")
+        conn.execute("""CREATE TABLE adjuster_decisions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, claim_id TEXT NOT NULL REFERENCES claims(claim_id),
+            decision TEXT NOT NULL, adjuster_username TEXT NOT NULL, decided_at TEXT NOT NULL)""")
+        conn.execute("INSERT INTO adjuster_decisions (claim_id, decision, adjuster_username, decided_at) "
+                     "VALUES (?, 'NEEDS_MORE_REVIEW', 'old.adjuster', '2026-10-18T18:19:30+00:00')", (claim_id,))
+    storage.init_db()
+    storage.init_db()   # and again: a second startup must not drop it either
+    decisions = storage.get_claim(claim_id)["decisions"]
+    assert [(d["decision"], d["adjuster_username"], d["reason"]) for d in decisions] == \
+        [("NEEDS_MORE_REVIEW", "old.adjuster", None)]

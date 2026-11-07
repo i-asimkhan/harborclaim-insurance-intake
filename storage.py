@@ -93,7 +93,8 @@ CREATE TABLE IF NOT EXISTS adjuster_decisions (
     claim_id TEXT NOT NULL REFERENCES claims(claim_id),
     decision TEXT NOT NULL,
     adjuster_username TEXT NOT NULL,
-    decided_at TEXT NOT NULL
+    decided_at TEXT NOT NULL,
+    reason TEXT
 );
 
 CREATE TABLE IF NOT EXISTS login_events (
@@ -179,12 +180,19 @@ _NOTIFICATION_MIGRATIONS = [
     ("delivery", "ALTER TABLE notifications ADD COLUMN delivery TEXT NOT NULL DEFAULT 'simulated'"),
 ]
 
+# Decisions recorded before reasons existed keep their rows; their reason is just empty.
+_DECISION_MIGRATIONS = [
+    ("reason", "ALTER TABLE adjuster_decisions ADD COLUMN reason TEXT"),
+]
+
 # The `adjusters` and `adjuster_decisions` tables changed shape (Google-email
 # allowlist -> username/password accounts). A dev DB created before that
 # change has the old columns; since this is gitignored data that was never
 # real, the simplest fix is to drop and let CREATE TABLE IF NOT EXISTS above
 # rebuild it, rather than writing a real migration for a table that never
-# held anything worth keeping.
+# held anything worth keeping. A table is stale only when one of these columns is
+# missing: a column added later by a migration (adjuster_decisions.reason) must not
+# make the table look stale, or every startup would drop the decisions in it.
 _STALE_SCHEMA_TABLES = {
     "adjusters": {
         "username", "password_hash", "salt", "name", "linked_claimant_email", "created_at"
@@ -207,7 +215,7 @@ def init_db() -> None:
     with _connect() as conn:
         for table, expected_columns in _STALE_SCHEMA_TABLES.items():
             existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
-            if existing and existing != expected_columns:
+            if existing and not expected_columns <= existing:
                 conn.execute(f"DROP TABLE {table}")
 
         conn.executescript(SCHEMA)
@@ -218,6 +226,10 @@ def init_db() -> None:
         notification_columns = {row["name"] for row in conn.execute("PRAGMA table_info(notifications)")}
         for column, statement in _NOTIFICATION_MIGRATIONS:
             if column not in notification_columns:
+                conn.execute(statement)
+        decision_columns = {row["name"] for row in conn.execute("PRAGMA table_info(adjuster_decisions)")}
+        for column, statement in _DECISION_MIGRATIONS:
+            if column not in decision_columns:
                 conn.execute(statement)
 
 
@@ -416,12 +428,12 @@ def create_claim(
         )
 
 
-def add_decision(claim_id: str, decision: str, adjuster_username: str) -> None:
+def add_decision(claim_id: str, decision: str, adjuster_username: str, reason: str | None = None) -> None:
     with _connect() as conn:
         conn.execute(
-            """INSERT INTO adjuster_decisions (claim_id, decision, adjuster_username, decided_at)
-               VALUES (?, ?, ?, ?)""",
-            (claim_id, decision, adjuster_username, _now()),
+            """INSERT INTO adjuster_decisions (claim_id, decision, adjuster_username, decided_at, reason)
+               VALUES (?, ?, ?, ?, ?)""",
+            (claim_id, decision, adjuster_username, _now(), reason or None),
         )
 
 
@@ -452,7 +464,7 @@ def _row_to_record(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         (row["claim_id"],),
     ).fetchall()
     decisions = conn.execute(
-        "SELECT decision, adjuster_username, decided_at FROM adjuster_decisions "
+        "SELECT decision, adjuster_username, decided_at, reason FROM adjuster_decisions "
         "WHERE claim_id = ? ORDER BY id",
         (row["claim_id"],),
     ).fetchall()

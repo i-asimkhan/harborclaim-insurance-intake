@@ -17,9 +17,14 @@
       event.preventDefault();
       if (sent) return;
       pending = button;
+      // A decline needs a written reason; the server refuses one without it too.
+      var reason = form.querySelector("[name=reason]");
+      var needsReason = button.value === "DECLINED" && (!reason || reason.value.trim().length < 10);
       text.textContent =
         "Record “" + button.textContent.trim() + "” on " + form.dataset.claimId +
-        "? It's saved under your name and the claimant is notified straight away.";
+        "? It's saved under your name and the claimant is notified straight away." +
+        (needsReason ? " A decline needs a written reason (at least 10 characters): add it in the Reason box first." : "");
+      ok.disabled = needsReason;
       ok.className = "btn " + (button.value === "APPROVED" ? "approve" : button.value === "DECLINED" ? "decline" : "secondary");
       dialog.showModal();
       cancel.focus();

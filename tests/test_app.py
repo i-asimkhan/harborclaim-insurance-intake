@@ -542,7 +542,8 @@ def test_adjuster_needs_attention_panel_excludes_decided_claims():
     assert claim_id in before.text
     assert "Awaiting a decision" in before.text
 
-    client.post(f"/adjuster/claims/{claim_id}/decision", data={"decision": "DECLINED"})
+    client.post(f"/adjuster/claims/{claim_id}/decision",
+                data={"decision": "DECLINED", "reason": "Not covered under this policy."})
 
     needing_attention = storage.claims_needing_adjuster_attention()
     assert claim_id not in [r["claim"]["claim_id"] for r in needing_attention]
@@ -953,7 +954,8 @@ def test_queue_view_filters_and_unknown_view_falls_back_to_all():
     awaiting = _file_claim("POL-F-AWAITING")
     password = storage.create_adjuster("filter.adjuster")
     login_as_adjuster("filter.adjuster", password)
-    client.post(f"/adjuster/claims/{decided}/decision", data={"decision": "DECLINED"})
+    client.post(f"/adjuster/claims/{decided}/decision",
+                data={"decision": "DECLINED", "reason": "Not covered under this policy."})
 
     assert _queue_ids(client.get("/adjuster?view=awaiting").text) == [awaiting]
     assert _queue_ids(client.get("/adjuster?view=waiting").text) == [waiting]

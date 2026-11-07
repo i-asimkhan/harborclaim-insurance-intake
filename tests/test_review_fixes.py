@@ -355,3 +355,26 @@ def test_request_agent_tool_offers_the_consistency_checks():
     result = agent_tools.get_completeness(agent_tools.claim_scope(claim_id))
     assert {c["kind"] for c in result["consistency_checks"]} == {"type_mismatch", "date_difference"}
     assert "medical bill" in result["documents_that_usually_help"]
+
+
+# --- 9. Broad questions get an answer; "not found" isn't labelled as checked ---
+
+def test_adjuster_prompt_answers_broad_questions_from_the_sources():
+    prompt = agents.ADJUSTER_PROMPT
+    assert "what is this about" in prompt and "get_intake_review has the review's summary" in prompt
+    assert "only when the sources hold nothing" in prompt
+    assert agents.PROMPT_VERSION["adjuster"] == "adjuster-v3"
+
+
+def test_not_found_answer_is_not_labelled_as_checked_against_the_documents():
+    claim_id = _file_claim()
+    run_id = storage.start_agent_run(claim_id, "adjuster", "fix.adjuster", "adjuster-v3",
+                                     question="What colour was the other car?", model="test-model")
+    storage.finish_agent_run(run_id, "passed", output={"answer": [], "not_found": True, "refused": False},
+                             gate={"reasons": []}, trace=[])
+    _adjuster()
+    page = client.get(f"/adjuster/claims/{claim_id}").text
+    qa = page[page.index("What colour was the other car?"):]
+    qa = qa[:qa.index("</details>")]
+    assert "found nothing in this claim's records on this" in qa
+    assert "checked against the documents" not in qa

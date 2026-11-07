@@ -120,7 +120,10 @@ INTAKE_PROMPT = (
 ADJUSTER_PROMPT = (
     "You answer a human insurance adjuster's question about one claim, using only that claim's sources.\n"
     "You may call up to 3 tools: search_documents, read_document, get_intake_review.\n"
-    "If the sources don't answer the question, set not_found to true and leave answer empty; never guess.\n"
+    "A broad question about the claim as a whole (what is this about, summarise it, what happened) is "
+    "answerable: say what the sources describe happened, when, and any amounts, citing them; "
+    "get_intake_review has the review's summary.\n"
+    "Set not_found to true, with answer empty, only when the sources hold nothing on the question; never guess.\n"
     "If the question asks you to decide, recommend a decision, or judge coverage, set refused to true.\n\n"
     + _RULES)
 CLAIMANT_PROMPT = (
@@ -154,7 +157,7 @@ REQUEST_PROMPT = (
     "needed, return an empty items list and a message saying so. Reply with JSON matching the schema, "
     "and nothing else."
 )
-PROMPT_VERSION = {"intake": "intake-v6", "adjuster": "adjuster-v2", "claimant": "claimant-v2",
+PROMPT_VERSION = {"intake": "intake-v6", "adjuster": "adjuster-v3", "claimant": "claimant-v2",
                   "request": "request-v2"}
 
 # --- Code-written refusals: decision and coverage questions never reach the model -------------

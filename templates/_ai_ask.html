@@ -30,7 +30,11 @@
     <p class="hint">No AI answer: {{ item.reason }}.</p>
     {% else %}
     {% set passed = run.status == "passed" %}
+    {% if item.kind == "not_found" %}
+    <p><span class="ai-tag">AI answer ({{ run.model or "unknown model" }} via OpenRouter) -- found nothing in this claim's records on this; that doesn't prove it isn't there</span></p>
+    {% else %}
     <p><span class="ai-tag">AI answer ({{ run.model or "unknown model" }} via OpenRouter) -- {% if passed %}checked against the documents; verify before relying on it{% else %}failed automated checks, see below{% endif %}</span></p>
+    {% endif %}
     {% if item.kind == "not_found" %}
     <p>{{ ask.not_found }}</p>
     {% else %}

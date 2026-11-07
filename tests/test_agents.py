@@ -1553,3 +1553,173 @@ def test_the_ai_usage_page_needs_an_adjuster(claimant_web):
               web.post("/adjuster/ai/model", data={"model": "a:free"}, follow_redirects=False)):
         assert r.status_code == 303 and r.headers["location"] == "/adjuster/login"
     assert storage.get_ai_setting("model") is None
+
+
+def test_prompts_md_matches_the_prompts_the_app_sends():
+    """PROMPTS.md goes into the course submission: it must be the code's prompts, not a copy."""
+    import importlib.util
+    root = Path(__file__).parent.parent
+    spec = importlib.util.spec_from_file_location("export_prompts", root / "scripts" / "export_prompts.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    current = (root / "PROMPTS.md").read_text(encoding="utf-8")
+    assert current == module.render(), "PROMPTS.md is out of date: run python scripts/export_prompts.py"
+
+
+# =============================================================================================
+# The request agent: drafts the one action; a human adjuster edits and sends it (2026-11-06)
+# =============================================================================================
+
+GOOD_REQUEST = {"message": "Hello, thank you for filing claim CLM-5A5A5A5A. A few items are needed to "
+                           "continue the review. Please open the claim under My claims and use Add documents.",
+                "items": ["Photos of the damage to the rear bumper"]}
+
+
+def _request_script(script, output=GOOD_REQUEST):
+    script += [_tools_reply(_tool_call("get_intake_review", call_id="a"), _tool_call("get_completeness", call_id="b")),
+               _json_reply(output)]
+
+
+def _requests(claim_id="CLM-5A5A5A5A"):
+    return storage.get_claim(claim_id)["requests"]
+
+
+def test_the_request_agent_starts_from_a_brief_and_fetches_the_rest_with_tools(fake_model):
+    script, calls = fake_model
+    _sample_claim()
+    before = _state("CLM-5A5A5A5A")
+    _request_script(script)
+    result = agents.draft_info_request("CLM-5A5A5A5A", "adj.review")
+    assert result.status == "passed"
+    first_user_message = calls[0]["messages"][1]["content"]
+    assert "Documents on file: police_report_sample.pdf" in first_user_message
+    assert "=== SOURCE:" not in first_user_message              # no document text up front
+    assert [t["tool"] for t in result.trace if t["type"] == "tool"] == ["get_intake_review", "get_completeness"]
+    assert _state("CLM-5A5A5A5A") == before                      # drafting changes nothing
+
+
+def test_drafting_changes_nothing_and_sending_is_the_one_action(fake_model, adjuster_web):
+    script, _ = fake_model
+    _sample_claim()
+    before = _state("CLM-5A5A5A5A")
+    _request_script(script)
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/draft", follow_redirects=False)
+    page = _page()
+    assert f"AI draft ({MODEL} via OpenRouter)" in page and "Photos of the damage to the rear bumper" in page
+    assert _state("CLM-5A5A5A5A") == before
+
+    text = agents.request_text(GOOD_REQUEST) + " Thank you."
+    r = adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": text, "source": "ai"},
+                          follow_redirects=False)
+    assert r.status_code == 303
+    record = storage.get_claim("CLM-5A5A5A5A")
+    assert record["status"] == "NEEDS_INFORMATION" and record["missing"] == ["adjuster_request"]
+    sent = record["requests"][0]
+    assert sent["ai_drafted"] and sent["edited"] and sent["sent_by"] == "adj.review" and sent["run_id"]
+    assert sent["message"] == text and sent["answered_at"] is None
+    assert any("asked for more information" in n["message"]
+               for n in storage.list_notifications_for("claimant@example.com"))
+
+
+def test_a_flagged_draft_is_replaced_by_the_template_and_cannot_be_sent_as_ai(fake_model, adjuster_web):
+    script, _ = fake_model
+    _sample_claim()
+    _request_script(script, {"message": "Your claim will be approved once you send receipts for $500.00.",
+                             "items": ["Receipts"]})
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/draft", follow_redirects=False)
+    page = _page()
+    assert "Template draft -- not AI-generated" in page and "failed automated checks" in page
+    assert "will be approved" not in page
+    template = agents.template_request(storage.get_claim("CLM-5A5A5A5A"))
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": template, "source": "ai"})
+    sent = _requests()[0]
+    assert not sent["ai_drafted"] and not sent["edited"] and sent["run_id"] is None
+
+
+def test_with_ai_off_the_template_draft_still_works(adjuster_web):
+    _sample_claim()
+    page = _page()
+    assert "Template draft -- not AI-generated" in page and "Draft with AI" not in page
+    template = agents.template_request(storage.get_claim("CLM-5A5A5A5A"))
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/draft", follow_redirects=False)
+    assert storage.recent_agent_runs("CLM-5A5A5A5A", "request") == []
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": template, "source": "template"})
+    assert storage.get_claim("CLM-5A5A5A5A")["status"] == "NEEDS_INFORMATION"
+
+
+def test_sending_needs_an_adjuster_a_message_and_no_conflict_or_final_decision():
+    _sample_claim()
+    web.cookies.clear()
+    r = web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": "Hi"}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/adjuster/login"
+    password = storage.create_adjuster("adj.linked", linked_claimant_email="claimant@example.com")
+    web.post("/adjuster/login", data={"username": "adj.linked", "password": password})
+    assert web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": "Hi"}).status_code == 403
+    web.cookies.clear()
+    password = storage.create_adjuster("adj.other")
+    web.post("/adjuster/login", data={"username": "adj.other", "password": password})
+    assert web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": "  "}).status_code == 400
+    storage.add_decision("CLM-5A5A5A5A", "APPROVED", "adj.other")
+    assert web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": "Hi"}).status_code == 403
+    assert _requests() == []
+    web.cookies.clear()
+
+
+def test_the_claimant_answers_and_the_claim_goes_back_for_a_fresh_ai_review(adjuster_web, claimant_web, monkeypatch):
+    _sample_claim()
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": "Please send photos.",
+                                                                           "source": "template"})
+    page = web.get("/claims/CLM-5A5A5A5A").text
+    assert "Your adjuster needs a little more information" in page and "Please send photos." in page
+    assert "drafted with AI help" not in page                    # a template request isn't labelled AI
+    assert "the information your adjuster asked for" in page
+
+    reviews = []
+    monkeypatch.setattr(ai_client, "enabled", lambda: True)
+    monkeypatch.setattr(agents, "run_intake_review", lambda claim_id: reviews.append(claim_id))
+    r = web.post("/claims/CLM-5A5A5A5A/documents", data={"note": "Photos attached."},
+                 files=[("files", ("photos.txt", b"Photo of the rear bumper taken 2026-09-10.", "text/plain"))],
+                 follow_redirects=False)
+    assert r.status_code == 303
+    record = storage.get_claim("CLM-5A5A5A5A")
+    assert record["status"] == "READY_FOR_REVIEW" and record["missing"] == []
+    assert "photos.txt" in record["claim"]["documents"]
+    assert record["requests"][0]["answered_at"] and record["requests"][0]["reply_note"] == "Photos attached."
+    assert reviews == ["CLM-5A5A5A5A"]                          # the review runs again with the new document
+    assert "note:</strong> Photos attached." in _page()
+
+
+def test_the_claimant_sees_when_ai_helped_draft_the_request(fake_model, adjuster_web, claimant_web):
+    script, _ = fake_model
+    _sample_claim()
+    _request_script(script)
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/draft", follow_redirects=False)
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/send",
+                      data={"message": agents.request_text(GOOD_REQUEST), "source": "ai"})
+    page = web.get("/claims/CLM-5A5A5A5A").text
+    assert "drafted with AI help, then read and sent by your adjuster" in page
+    assert "AI trace" not in page and "get_intake_review" not in page
+
+
+def test_only_the_owner_can_add_documents_and_an_empty_answer_is_refused(claimant_web):
+    _sample_claim("CLM-7C7C7C7C", email="other@example.com")
+    _sample_claim()
+    files = [("files", ("a.txt", b"x", "text/plain"))]
+    assert web.post("/claims/CLM-7C7C7C7C/documents", files=files).status_code == 403
+    assert web.post("/claims/CLM-5A5A5A5A/documents", data={"note": ""}).status_code == 400
+    bad = web.post("/claims/CLM-5A5A5A5A/documents", files=[("files", ("<b>x</b>.exe", b"x", "text/plain"))])
+    assert bad.status_code == 400 and "<b>x</b>" not in bad.text   # the filename is escaped
+    assert len(storage.get_claim("CLM-5A5A5A5A")["documents"]) == 2
+
+
+@pytest.mark.parametrize("output, expected", [
+    ({"message": "Hello."}, "invalid"),
+    ({"message": "", "items": []}, "invalid"),
+    ({"message": "Hello.", "items": ["a", "b", "c", "d", "e", "f"]}, "invalid"),
+    ({"message": "Please send the report for CLM-0000BBBB.", "items": []}, "flagged"),
+    ({"message": "Hello, please add photos.", "items": ["Photos showing the staged damage"]}, "flagged"),
+    ({"message": "Hello, please add photos for CLM-5A5A5A5A.", "items": ["Photos of the damage"]}, "passed"),
+])
+def test_the_gate_holds_a_drafted_request_to_the_claimant_rules(output, expected):
+    result = agent_gate.check("request", output, claimant_email="claimant@example.com", own_claim_ids={"CLM-5A5A5A5A"})
+    assert result["status"] == expected

@@ -30,6 +30,7 @@ separate code paths, not one shared view with role branches.
 Run: uvicorn app:app --reload
 """
 
+import html
 import os
 import uuid
 from datetime import date, datetime, timezone
@@ -213,6 +214,31 @@ def _ask_view(claim_id: str) -> dict:
     limit_reached = storage.agent_runs_today("adjuster") >= agents.CHARTERS["adjuster"].daily_limit()
     return {"ai_on": ai_client.enabled(), "limit_reached": limit_reached, "questions": items,
             "refusal": agents.ADJUSTER_REFUSAL, "not_found": agents.NOT_FOUND}
+
+
+def _request_view(record: dict) -> dict:
+    """The adjuster's "Request missing information" card: the draft to edit, and what was sent.
+
+    The draft is the request agent's latest one when it passed the checks; otherwise the code
+    template (from the completeness check alone), with the reason the AI draft isn't shown."""
+    claim_id = record["claim"]["claim_id"]
+    run = storage.latest_finished_agent_run(claim_id, "request")
+    view = {"ai_on": ai_client.enabled(), "source": "template", "text": agents.template_request(record),
+            "run": run, "note": None, "reasons": [],
+            "limit_reached": storage.agent_runs_today("request") >= agents.CHARTERS["request"].daily_limit(),
+            "sent": list(reversed(record["requests"])),
+            "open": any(r["answered_at"] is None for r in record["requests"]),
+            "final": bool(record["decisions"]) and record["decisions"][-1]["decision"] != "NEEDS_MORE_REVIEW"}
+    if run is None:
+        return view
+    if run["status"] == "passed" and run["output"]:
+        view.update(source="ai", text=agents.request_text(run["output"]))
+    elif run["status"] == "flagged":
+        view.update(note="The AI draft failed automated checks, so the template is shown instead.",
+                    reasons=(run["gate"] or {}).get("reasons", []))
+    else:
+        view["note"] = "No AI draft: " + AI_UNAVAILABLE_REASONS.get(run["error_type"], "the AI assistant was unavailable") + "."
+    return view
 
 
 def _claimant_nav(claimant_email: str) -> dict:
@@ -513,7 +539,8 @@ def _forbidden(message: str) -> HTMLResponse:
 
 
 def _bad_request(errors: list[str]) -> HTMLResponse:
-    items = "".join(f"<li>{e}</li>" for e in errors)
+    # Messages can carry a filename the user chose, so they're escaped.
+    items = "".join(f"<li>{html.escape(e)}</li>" for e in errors)
     return HTMLResponse(f"<h1>400 Invalid submission</h1><ul>{items}</ul>", status_code=400)
 
 
@@ -682,6 +709,80 @@ def view_claim(request: Request, claim_id: str, user: dict | None = Depends(get_
     )
 
 
+@app.post("/claims/{claim_id}/documents")
+async def add_claim_documents(
+    request: Request,
+    background: BackgroundTasks,
+    claim_id: str,
+    note: str = Form(""),
+    files: list[UploadFile] = File([]),
+    user: dict | None = Depends(get_current_user),
+):
+    """The claimant's answer to a request for information: more documents and/or a note. The
+    claim is checked again, and with new documents the AI intake review runs again, so the
+    adjuster sees a review that includes them."""
+    if user is None:
+        return RedirectResponse(url="/auth/login", status_code=303)
+    record = storage.get_claim(claim_id)
+    if record is None:
+        return templates.TemplateResponse(request, "not_found.html", {"claim_id": claim_id}, status_code=404)
+    if record["claim"]["claimant_email"] != user["email"]:
+        return _forbidden("This claim belongs to a different account.")
+    if record["decisions"] and record["decisions"][-1]["decision"] != "NEEDS_MORE_REVIEW":
+        return _forbidden("This claim already has a final decision.")
+
+    uploads = [f for f in files if f.filename]
+    note = note.strip()
+    errors = []
+    if not uploads and not note:
+        errors.append("Add at least one document or a note for your adjuster.")
+    if len(note) > 1000:
+        errors.append("The note can be at most 1,000 characters.")
+    files_and_sizes = []
+    for upload in uploads:
+        upload.file.seek(0, 2)
+        files_and_sizes.append((upload.filename, upload.file.tell()))
+        upload.file.seek(0)
+    errors += validate_files(files_and_sizes)
+    if len(record["documents"]) + len(uploads) > MAX_FILES:
+        errors.append(f"Too many files (max {MAX_FILES} per claim).")
+    if errors:
+        return _bad_request(errors)
+
+    stored = []
+    for upload in uploads:
+        content = await upload.read()
+        stored_path = storage.save_uploaded_file(claim_id, upload.filename, content)
+        storage.add_document(claim_id=claim_id, filename=stored_path.name, stored_path=stored_path,
+                             content_type=upload.content_type, size_bytes=len(content))
+        stored.append({"filename": stored_path.name, "stored_path": stored_path, "content_type": upload.content_type})
+    facts = extract_facts("", stored)
+    if facts:
+        storage.add_facts(claim_id, facts)
+
+    record = storage.get_claim(claim_id)
+    claim = record["claim"]
+    result = check_claim({"claim_id": claim_id, "policy_id": claim["policy_id"], "incident_date": claim["incident_date"],
+                          "description": claim["description"], "documents": claim["documents"]})
+    storage.answer_info_requests(claim_id, note)
+    storage.set_claim_status(claim_id, result["status"], result["missing"])
+    if stored:
+        storage.add_summary(claim_id, generate_summary(
+            {"policy_id": claim["policy_id"], "incident_date": claim["incident_date"], "description": claim["description"],
+             "documents": claim["documents"], "claim_type": claim["claim_type"]}, record["facts"]))
+
+    base_url = _base_url(request)
+    if result["status"] == NEEDS_INFORMATION:
+        message = f"Thanks, we've added your update. We still need: {', '.join(result['missing'])}."
+    else:
+        message = "Thanks, we've added your update. Your claim is back with your adjuster for review."
+        _notify_adjusters(claim_id, claim["claim_type"], base_url, background)
+    _notify(claim_id, user["email"], message, base_url, background)
+    if stored:
+        _start_intake_review(claim_id, background)
+    return RedirectResponse(url=f"/claims/{claim_id}", status_code=303)
+
+
 @app.get("/claims/{claim_id}/documents/{filename}")
 def download_document(claim_id: str, filename: str, user: dict | None = Depends(get_current_user)):
     if user is None:
@@ -834,6 +935,7 @@ def adjuster_view_claim(request: Request, claim_id: str, adjuster: dict | None =
             "facts_view": _group_facts(record["facts"]),
             "ai_review": _intake_review_view(claim_id),
             "ai_ask": _ask_view(claim_id),
+            "info_request": _request_view(record),
             **_adjuster_nav(),
             "READY_FOR_REVIEW": READY_FOR_REVIEW,
             "NEEDS_INFORMATION": NEEDS_INFORMATION,
@@ -868,6 +970,55 @@ def ask_about_claim(claim_id: str, question: str = Form(""),
     if question and ai_client.enabled():
         agents.ask_adjuster(claim_id, adjuster["username"], question)
     return RedirectResponse(url=f"/adjuster/claims/{claim_id}#ask", status_code=303)
+
+
+def _conflict_of_interest(adjuster: dict, record: dict) -> bool:
+    """Separation of duties: an adjuster linked to the claimant who filed this claim can't act on it."""
+    return bool(adjuster["linked_claimant_email"]) and adjuster["linked_claimant_email"] == record["claim"]["claimant_email"]
+
+
+@app.post("/adjuster/claims/{claim_id}/request/draft")
+def draft_request(claim_id: str, adjuster: dict | None = Depends(get_current_adjuster)):
+    """Ask the request agent for a draft (waits for it, up to a minute). Drafting changes nothing."""
+    if adjuster is None:
+        return RedirectResponse(url="/adjuster/login", status_code=303)
+    if storage.get_claim(claim_id) is None:
+        return RedirectResponse(url="/adjuster", status_code=303)
+    if ai_client.enabled():
+        agents.draft_info_request(claim_id, adjuster["username"])
+    return RedirectResponse(url=f"/adjuster/claims/{claim_id}#request", status_code=303)
+
+
+@app.post("/adjuster/claims/{claim_id}/request/send")
+def send_info_request(request: Request, background: BackgroundTasks, claim_id: str, message: str = Form(""),
+                      source: str = Form(""), adjuster: dict | None = Depends(get_current_adjuster)):
+    """The one action in the agentic workflow, and a human takes it: the adjuster's edited request
+    goes to the claimant, and the claim waits on them (NEEDS_INFORMATION) until they answer."""
+    if adjuster is None:
+        return RedirectResponse(url="/adjuster/login", status_code=303)
+    record = storage.get_claim(claim_id)
+    if record is None:
+        return RedirectResponse(url="/adjuster", status_code=303)
+    if _conflict_of_interest(adjuster, record):
+        return _forbidden("Separation of duties: this adjuster account is linked to the claimant who filed this claim.")
+    message = message.strip().replace("\r\n", "\n")
+    if not message or len(message) > 2000:
+        return _bad_request(["The request needs a message of at most 2,000 characters."])
+    view = _request_view(record)
+    if view["final"]:
+        return _forbidden("A final decision is already recorded on this claim.")
+    # Recorded honestly: whether the text an adjuster sends came from the AI draft, and whether
+    # they changed it. The source is checked against the server's own draft, not trusted from the form.
+    ai_drafted = source == "ai" and view["source"] == "ai"
+    storage.add_info_request(claim_id, message, adjuster["username"],
+                             run_id=view["run"]["id"] if ai_drafted else None, ai_drafted=ai_drafted,
+                             edited=message != view["text"].strip())
+    missing = [m for m in record["missing"] if m != "adjuster_request"] + ["adjuster_request"]
+    storage.set_claim_status(claim_id, NEEDS_INFORMATION, missing)
+    _notify(claim_id, record["claim"]["claimant_email"],
+            "Your adjuster has asked for more information to continue reviewing your claim. "
+            "See the request on your claim page.", _base_url(request), background)
+    return RedirectResponse(url=f"/adjuster/claims/{claim_id}#request", status_code=303)
 
 
 @app.get("/adjuster/ai")

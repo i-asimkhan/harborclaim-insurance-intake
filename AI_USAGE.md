@@ -40,13 +40,19 @@ The assignment's own starter prompt, as given in the take-home build packet:
 - Confirmed no real customer data, credentials, or secrets appear anywhere in this
   folder — every claim ID, policy ID, and document name is fictional.
 
-## Phase 5: the AI model inside the app (intake review)
+## Phase 5: the AI models inside the app (three agents)
 
-Separate from the build tool above: this is the model HarborClaim itself calls, off by default.
+Separate from the build tool above: these are the models HarborClaim itself calls, off by default.
+Four agents share one harness: intake review (adjuster), Ask about this claim (adjuster), Ask a
+question (claimant) and the request agent (drafts the adjuster's request to the claimant, which the
+adjuster edits and sends). The prompts are in `PROMPTS.md`; the diagram and walk-through are in
+`docs/design/AGENTIC-LAYER.md`.
 
-- **Model:** `nvidia/nemotron-3.5-super-vl:free` via OpenRouter (free tier, $0), reasoning off,
-  temperature 0. Chosen by testing (AGENTS.md section 11.4, round 1 probe).
-- **Prompt:** `intake-v6` (`agents.py`; v5 for the golden-set table below). Every output goes through the code gate
+- **Models:** `nvidia/nemotron-3.5-super-vl:free`, then `nvidia/nemotron-3-ultra-550b-a55b:free`
+  as failover, via OpenRouter (free tier, $0), reasoning off, temperature 0. Chosen by testing:
+  12 free models screened in 3 probe rounds (AGENTS.md section 11.4). An adjuster can put either
+  first on the AI usage page.
+- **Prompts:** `intake-v6`, `adjuster-v2`, `claimant-v2`, `request-v1` (`agents.py`; v5 for the golden-set table below). Every output goes through the code gate
   (`agent_gate.py`, rules G1-G9) before an adjuster sees it.
 - **Golden-set eval, 2026-11-02** (`python scripts/eval_agents.py`; 6 fictional claims in
   `sample_data/golden/`; replies recorded in `tests/fixtures/ai/intake/` and replayed by the tests):
@@ -68,4 +74,16 @@ Separate from the build tool above: this is the model HarborClaim itself calls, 
   live. It found 3 gate holes (an obeyed injection, nonsense type mismatches, dates in words),
   all fixed with tests; details in AGENTS.md section 14. Replay of all 11 cases: 9/11 hold, the 2
   misses are false type mismatches the gate now flags. Backup models (two Gemma) were
-  rate-limited upstream on every call, so Nemotron is the only model for the demo.
+  rate-limited upstream on every call, so Nemotron was the only model at that point.
+- **Probe round 3 and model bake-off, 2026-11-06** (golden set, 11 cases, intake-v6):
+
+  | Model | Cases hold | Conflicts found | Policy violations (all flagged by the gate) | Decision |
+  |---|---|---|---|---|
+  | `nemotron-3-ultra-550b-a55b:free` | 8/11 | 9/9 | 3 | Second in `AI_MODELS` |
+  | `nemotron-3.5-lightning:free` | 5/11 | 2/9 | 1 | Out: its misses pass the gate silently |
+
+  Gemma was rate-limited again and XingChen leaked its reasoning into answers. The bar: 7/11 and
+  every miss caught by the gate.
+- **First live try of the claimant assistant, 2026-11-04:** two harmless answers ("I can help you
+  check your claims") were replaced by the fixed reply because gate rule C read the verb "check"
+  as a payment check. Narrowed with tests; the claimant prompt now names the New claim link.

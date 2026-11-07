@@ -426,7 +426,7 @@ backend, not redesigning the data model.
 
 ---
 
-## Phase 5 -- The agentic layer (real AI) [~] 5.1-5.6 built; 5.7-5.8 left
+## Phase 5 -- The agentic layer (real AI) [~] 5.1-5.7 and 5.9 built; screenshots and 5.8 left
 
 Goal: three AI agents on one shared harness, each a draft-and-explain helper for a human,
 none able to decide, pay or change a claim. **Full build reference:
@@ -633,14 +633,33 @@ live run is 5.4
 
 **5.7 Documentation and screenshots**
 
-- [ ] `MOCKS.md`, `docs/design/DESIGN.md` (components 3 and 5, pressure test marked built),
-      README, `AI_USAGE.md`, new screenshots (AI review passed and flagged, trace open, both
-      assistants, the fallback).
+- [x] `MOCKS.md`, `docs/design/DESIGN.md` (components 3 and 5, pressure test marked built),
+      README (new "The AI agents" section), `AI_USAGE.md` (2026-11-06).
+- [x] `PROMPTS.md` for the course submission, generated from the code by
+      `scripts/export_prompts.py`; a test fails if it drifts from `agents.py`.
+- [ ] New screenshots: `scripts/capture_ai_screenshots.py` (live model, about 6 requests, asks
+      first) writes the AI review, trace open, both assistants, the AI usage page and the
+      fallback. Run after the 7 pm quota reset, then add them to the README. A flagged review
+      shows only if the model's answer fails a check on that run.
 
-- [ ] **Challenge 3 (independent subagent), before code freeze:** a full review of Phase 5 as
+- [ ] **Challenge 3 (independent subagent), before code freeze:** dropped for time on
+      2026-11-06 (Challenges 1 and 2 stand); kept here for after the course.
+      Original scope: a full review of Phase 5 as
       built against AGENTS.md: every guardrail in the register has its code and its test, labels
       are honest, claimant pages leak nothing, `main.py`/`test_main.py` untouched, no secrets in
       the repo. Blockers fixed before 5.8.
+
+**5.9 Agent 4: request for missing information** (owner's request, 2026-11-06) -- built
+
+- [x] Request agent (`agents.draft_info_request`, prompt `request-v1`): starts from a brief and
+      fetches the intake review and completeness with its tools; claimant rules in the gate;
+      code-written template as the fallback.
+- [x] Adjuster edits and sends (`info_requests` table: who, when, AI-drafted, edited); claim to
+      NEEDS_INFORMATION; claimant notified. Separation of duties and final decisions respected.
+- [x] Claimant answers with documents or a note (`POST /claims/{id}/documents`): checked again,
+      request marked answered, intake review re-runs with the new documents.
+- [x] Diagram and walk-through: `docs/design/agentic-layer.svg`/`.png`, `AGENTIC-LAYER.md`.
+- [x] 14 tests; 344 in all. Not tried live yet: the screenshot run tonight is its first live run.
 
 **5.8 Hosted rollout** (owner: outward-facing)
 

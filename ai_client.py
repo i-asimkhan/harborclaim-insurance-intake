@@ -50,9 +50,8 @@ FAILOVER_ERRORS = {"rate_limited", "http_error", "timeout", "bad_response", "emp
 # listed gets short, hidden reasoning, which models without a reasoning mode ignore.
 MODEL_SETTINGS: dict[str, dict] = {
     "nvidia/nemotron-3.5-super-vl:free": {"reasoning": {"enabled": False}},
-    # Probe 2026-11-06: both answered empty with reasoning on, and well with it off.
+    # Probe 2026-11-06: answered empty with reasoning on, and well with it off.
     "nvidia/nemotron-3-ultra-550b-a55b:free": {"reasoning": {"enabled": False}},
-    "nvidia/nemotron-3.5-lightning:free": {"reasoning": {"enabled": False}},
 }
 DEFAULT_REASONING = {"effort": "low", "exclude": True}
 

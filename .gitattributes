@@ -1,0 +1,5 @@
+# Keep PDFs and images byte-for-byte: the demo PDFs are plain text inside, and a
+# line-ending change on checkout would break their byte offsets.
+*.pdf binary
+*.png binary
+*.jpg binary

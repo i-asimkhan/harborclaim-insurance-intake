@@ -155,6 +155,22 @@ CREATE TABLE IF NOT EXISTS agent_runs (
     finished_at TEXT
 );
 
+-- An adjuster's request to the claimant for more information (Phase 5, the agent's one action).
+-- The request agent only drafts; a row exists only once a human adjuster has read, edited and
+-- sent it. run_id is the draft's agent run (NULL for a template draft).
+CREATE TABLE IF NOT EXISTS info_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    claim_id TEXT NOT NULL REFERENCES claims(claim_id),
+    message TEXT NOT NULL,
+    run_id INTEGER,
+    ai_drafted INTEGER NOT NULL,
+    edited INTEGER NOT NULL,
+    sent_by TEXT NOT NULL,
+    sent_at TEXT NOT NULL,
+    answered_at TEXT,
+    reply_note TEXT
+);
+
 -- Settings an adjuster changes from the app (today only "model": which AI_MODELS entry goes first).
 CREATE TABLE IF NOT EXISTS ai_settings (
     key TEXT PRIMARY KEY,
@@ -244,6 +260,7 @@ def reset() -> None:
     """
     with _connect() as conn:
         conn.execute("DELETE FROM agent_runs")
+        conn.execute("DELETE FROM info_requests")
         conn.execute("DELETE FROM adjuster_decisions")
         conn.execute("DELETE FROM status_history")
         conn.execute("DELETE FROM documents")
@@ -430,6 +447,37 @@ def create_claim(
         )
 
 
+def set_claim_status(claim_id: str, status: str, missing: list[str]) -> None:
+    """A status change after filing (an adjuster's request for information, or the claimant's
+    answer to one), recorded in the status history like the first one."""
+    now = _now()
+    with _connect() as conn:
+        conn.execute("UPDATE claims SET status = ?, missing = ? WHERE claim_id = ?",
+                     (status, json.dumps(missing), claim_id))
+        conn.execute("INSERT INTO status_history (claim_id, status, at) VALUES (?, ?, ?)",
+                     (claim_id, status, now))
+
+
+def add_info_request(claim_id: str, message: str, sent_by: str, *, run_id: int | None,
+                     ai_drafted: bool, edited: bool) -> int:
+    with _connect() as conn:
+        cursor = conn.execute(
+            """INSERT INTO info_requests (claim_id, message, run_id, ai_drafted, edited, sent_by, sent_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (claim_id, message, run_id, int(ai_drafted), int(edited), sent_by, _now()),
+        )
+        return cursor.lastrowid
+
+
+def answer_info_requests(claim_id: str, reply_note: str | None) -> int:
+    """Mark the claim's open requests answered (the claimant added documents or a note)."""
+    with _connect() as conn:
+        return conn.execute(
+            "UPDATE info_requests SET answered_at = ?, reply_note = ? WHERE claim_id = ? AND answered_at IS NULL",
+            (_now(), reply_note or None, claim_id),
+        ).rowcount
+
+
 def add_decision(claim_id: str, decision: str, adjuster_username: str, reason: str | None = None,
                  open_findings: int | None = None) -> None:
     """open_findings: how many review findings were still open when the decision was made, so an
@@ -484,6 +532,9 @@ def _row_to_record(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         "WHERE claim_id = ? ORDER BY id DESC LIMIT 1",
         (row["claim_id"],),
     ).fetchall()
+    requests = conn.execute(
+        "SELECT * FROM info_requests WHERE claim_id = ? ORDER BY id", (row["claim_id"],),
+    ).fetchall()
 
     return {
         "claim": {
@@ -502,6 +553,7 @@ def _row_to_record(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         "decisions": [dict(d) for d in decisions],
         "facts": [dict(f) for f in facts],
         "summary": dict(summaries[0]) if summaries else None,
+        "requests": [dict(r, ai_drafted=bool(r["ai_drafted"]), edited=bool(r["edited"])) for r in requests],
     }
 
 

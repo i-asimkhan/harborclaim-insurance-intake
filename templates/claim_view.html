@@ -57,7 +57,7 @@
             <p class="muted">Your claim is saved. To move it forward, please provide:</p>
             <ul class="missing-list">
               {% for field in record.missing %}
-              <li>{{ field }}</li>
+              <li>{% if field == "adjuster_request" %}the information your adjuster asked for (see below){% else %}{{ field }}{% endif %}</li>
               {% endfor %}
             </ul>
           </div>
@@ -94,6 +94,30 @@
       </div>
       {% endif %}
     </div>
+
+    {# 1b. An adjuster's open request for information, and the way to answer it. The request was
+       written (or approved) and sent by a person; if the AI drafted it, that's said plainly. #}
+    {% set open_requests = record.requests | selectattr("answered_at", "none") | list %}
+    {% if open_requests %}
+    <div class="card" id="request">
+      <h2>Your adjuster needs a little more information</h2>
+      {% for req in open_requests %}
+      <p class="request-message">{{ req.message }}</p>
+      <p class="hint">Sent by your adjuster <span title="{{ req.sent_at }}">{{ req.sent_at | ago }}</span>{% if req.ai_drafted %} &middot; drafted with AI help, then read{% if req.edited %} and edited{% endif %} and sent by your adjuster{% endif %}</p>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if not final %}
+    <div class="card" id="add-documents">
+      <h2>Add documents</h2>
+      <p class="hint">Send more documents or a note to your adjuster. Your claim is checked again as soon as they arrive.</p>
+      <form method="post" action="/claims/{{ record.claim.claim_id }}/documents" enctype="multipart/form-data" class="add-documents-form">
+        <input type="file" name="files" multiple aria-label="Documents to add">
+        <textarea name="note" maxlength="1000" rows="3" placeholder="A note for your adjuster (optional)" aria-label="Note for your adjuster"></textarea>
+        <button type="submit" class="btn">Send to your adjuster</button>
+      </form>
+    </div>
+    {% endif %}
 
     {# 2. What the claimant submitted. #}
     <div class="card">

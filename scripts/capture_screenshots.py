@@ -52,6 +52,9 @@ os.chdir(PROJ)
 
 from dotenv import load_dotenv  # noqa: E402
 
+# These 14 screenshots show no AI: keep the live model off so a run never spends free quota
+# (load_dotenv doesn't override a variable that is already set).
+os.environ["AI_ENABLED"] = "false"
 load_dotenv(PROJ / ".env")
 
 import itsdangerous  # noqa: E402

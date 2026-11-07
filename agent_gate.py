@@ -24,7 +24,9 @@ storage access. Rules:
     G8  no quote or model text carries an instruction-like pattern (possible prompt injection)
     G9  an intake "type_mismatch" finding names a claim type other than the claim form's
     C   claimant answers: no money amounts at all, and decision or payment wording only when this
-        run's tool results show that decision (e.g. "Decision recorded: Approved")
+        run's tool results show that decision (e.g. "Decision recorded: Approved"). A drafted
+        request to the claimant (the request agent) is held to C, G5 accusations, G6, G7 and G8 too:
+        the claimant will read it, after the adjuster has edited and sent it
 
 check() returns {"status": "passed" | "flagged", "reasons": [{"rule", "where", "detail"}]}.
 G1 failures are returned as status "invalid": the harness then ends the run unavailable.
@@ -209,11 +211,12 @@ def policy_violations(text: str) -> list[str]:
 
 # --- Shapes (G1) ------------------------------------------------------------------------------
 
-LIST_CAPS = {"summary": 8, "worth_checking": 6, "missing_or_unclear": 5, "answer": 6}
+LIST_CAPS = {"summary": 8, "worth_checking": 6, "missing_or_unclear": 5, "answer": 6, "items": 5}
 FINDING_KINDS = {"amount_difference", "date_difference", "type_mismatch", "missing_document",
                  "prior_claims_on_policy", "other"}
 TOP_KEYS = {"intake": {"summary", "worth_checking", "missing_or_unclear"},
-            "adjuster": {"answer", "not_found", "refused"}, "claimant": {"answer", "refused"}}
+            "adjuster": {"answer", "not_found", "refused"}, "claimant": {"answer", "refused"},
+            "request": {"message", "items"}}
 
 
 def _is_citations(value) -> bool:
@@ -253,6 +256,14 @@ def shape_errors(agent: str, output) -> list[str]:
                 or not isinstance(output["refused"], bool):
             return ["answer must be a list; not_found and refused booleans"]
         errors += [f"answer[{i}] malformed" for i, s in enumerate(output["answer"]) if not _is_sentence(s)]
+    elif agent == "request":
+        if not isinstance(output["message"], str) or not isinstance(output["items"], list) \
+                or not all(isinstance(i, str) for i in output["items"]):
+            return ["message must be a string; items a list of strings"]
+        if not output["message"].strip():
+            errors.append("message is empty")
+        if len(output["message"]) > 1200 or any(len(i) > 200 for i in output["items"]):
+            errors.append("message or an item is too long")
     else:
         if not isinstance(output["answer"], str) or not isinstance(output["refused"], bool):
             return ["answer must be a string; refused a boolean"]
@@ -343,27 +354,27 @@ CLAIMANT_MONEY = re.compile(r"\breimburs\w*|\bpa(y|id|ying|yment|yments|yout|you
 
 
 def _check_claimant(text: str, tool_text: str, claimant_email: str | None, own: set[str],
-                    reasons: list[dict]) -> None:
+                    reasons: list[dict], where: str = "answer") -> None:
     clean = _without_exemptions(text)
     if amounts_in(clean) or re.search(r"[$£€¥]|\b(usd|dollars?|bucks)\b", clean, re.I):
-        reasons.append(_reason("C", "answer", "a money amount (no claimant tool provides one)"))
+        reasons.append(_reason("C", where, "a money amount (no claimant tool provides one)"))
     for m in CLAIMANT_MONEY.finditer(clean):
-        reasons.append(_reason("C", "answer", f"payment or coverage wording: {m.group(0)!r}"))
+        reasons.append(_reason("C", where, f"payment or coverage wording: {m.group(0)!r}"))
     for decision, pattern in CLAIMANT_DECISION_WORDS.items():
         if pattern.search(clean) and f"decision recorded: {decision}" not in tool_text.lower():
-            reasons.append(_reason("C", "answer", f"says the claim is {decision} without that decision on record"))
+            reasons.append(_reason("C", where, f"says the claim is {decision} without that decision on record"))
     for m in ACCUSATION_STEMS.finditer(clean):
-        reasons.append(_reason("G5", "answer", f"accusation wording: {m.group(0)!r}"))
+        reasons.append(_reason("G5", where, f"accusation wording: {m.group(0)!r}"))
     if INJECTION.search(clean):
-        reasons.append(_reason("G8", "answer", "looks like an injected instruction"))
+        reasons.append(_reason("G8", where, "looks like an injected instruction"))
     for m in CLAIM_ID_ANY.finditer(clean):
         claim_id = f"CLM-{m.group(1).upper()}"
         if claim_id not in own:
-            reasons.append(_reason("G6", "answer", f"mentions a claim that isn't the claimant's: {claim_id}"))
+            reasons.append(_reason("G6", where, f"mentions a claim that isn't the claimant's: {claim_id}"))
     for m in EMAIL_ANY.finditer(clean):
         found = re.sub(r"\s+", "", m.group(0)).lower()
         if not claimant_email or found != claimant_email.lower():
-            reasons.append(_reason("G7", "answer", "mentions an email address"))
+            reasons.append(_reason("G7", where, "mentions an email address"))
 
 
 def check(agent: str, output, *, sources: dict[str, list[str]] | None = None,
@@ -394,6 +405,10 @@ def check(agent: str, output, *, sources: dict[str, list[str]] | None = None,
     elif agent == "adjuster":
         for i, s in enumerate(output["answer"]):
             _check_cited(f"answer[{i}]", s["text"], s["citations"], sources, tool_numbers, reasons)
+    elif agent == "request":
+        _check_claimant(output["message"], tool_text, claimant_email, own_claim_ids or set(), reasons, "message")
+        for i, item in enumerate(output["items"]):
+            _check_claimant(item, tool_text, claimant_email, own_claim_ids or set(), reasons, f"items[{i}]")
     else:
         _check_claimant(output["answer"], tool_text, claimant_email, own_claim_ids or set(), reasons)
     return {"status": "flagged" if reasons else "passed", "reasons": reasons}

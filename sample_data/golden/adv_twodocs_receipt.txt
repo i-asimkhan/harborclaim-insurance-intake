@@ -1,0 +1,3 @@
+Northgate Plumbing -- payment receipt (fictional, for classroom use)
+Received $1,785.00 from the homeowner for invoice NP-7731.
+Work covered by this receipt: water heater replacement completed on 2026-10-03.

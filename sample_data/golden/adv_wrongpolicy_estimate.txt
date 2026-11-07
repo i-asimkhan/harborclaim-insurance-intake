@@ -1,0 +1,4 @@
+Seabreeze Auto Repair -- repair estimate (fictional, for classroom use)
+Customer: Dana Whitlock, policy HC-AUTO-2733
+Vehicle: grey 2019 hatchback, rear hatch and tail light damaged in a collision on 2026-10-11.
+Rear hatch and tail light replacement, total estimate $2,240.00

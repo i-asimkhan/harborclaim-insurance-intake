@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI usage -- Adjuster -- HarborClaim</title>
+  <link rel="stylesheet" href="{{ static_url('style.css') }}">
+</head>
+<body class="adjuster-theme">
+  {# Which approved model answers first, and today's usage. The list is AI_MODELS from the
+     server's settings: nothing typed here can add a model. #}
+  <div class="page">
+    {% include "_adjuster_header.html" %}
+
+    <div class="page-head">
+      <h1>AI usage</h1>
+      <p class="subtitle">Which model answers first, and how much of today's limits is used. Counts reset at midnight UTC.</p>
+    </div>
+
+    <div class="stack">
+    <div class="card ai-card">
+      <h2>Model</h2>
+      {% if not ai_on %}
+      <p class="hint">AI is off on this site (AI_PROVIDER is not set).</p>
+      {% elif not models %}
+      <p class="hint">No models are configured (AI_MODELS is empty).</p>
+      {% else %}
+      <form method="post" action="/adjuster/ai/model" class="ai-ask-form">
+        <select name="model" aria-label="Model that answers first">
+          {% for m in models %}<option value="{{ m }}"{% if loop.first %} selected{% endif %}>{{ m }}</option>{% endfor %}
+        </select>
+        <button type="submit" class="btn secondary">Use this model</button>
+      </form>
+      <p class="hint">
+        Answering first: <span class="mono">{{ models[0] }}</span>{% if chosen and chosen.value == models[0] %}
+        (chosen by {{ chosen.updated_by }}, <span title="{{ chosen.updated_at }}">{{ chosen.updated_at | ago }}</span>){% endif %}.
+        {% if models | length > 1 %}If it's busy, the next one on the list answers.{% endif %}
+        The list comes from AI_MODELS in the server settings. Golden set (11 claims):
+        Nemotron 3.5 Super 9/11 (prompt intake-v5), Nemotron 3 Ultra 8/11 (intake-v6).
+      </p>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <h2>Today</h2>
+      <table class="facts-table">
+        <thead><tr><th>AI helper</th><th>Used</th><th>Daily limit</th><th>Left</th></tr></thead>
+        <tbody>
+          {% for a in usage.agents %}
+          <tr><td>{{ a.name | capitalize }}{% if a.name == "claimant" and not claimant_chat %} <span class="hint">(off)</span>{% endif %}</td>
+            <td>{{ a.used }}</td><td>{{ a.limit }}</td><td>{{ [a.limit - a.used, 0] | max }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p class="hint">
+        Model requests the app sent to OpenRouter today: <strong>{{ usage.requests }}</strong>
+        (one question can take up to 3). The free tier allows about 50 a day for the whole account,
+        including anything else that uses the same key. Questions answered by code with the fixed reply
+        don't count.
+      </p>
+    </div>
+    </div>
+  </div>
+</body>
+</html>

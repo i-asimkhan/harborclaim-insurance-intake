@@ -1,0 +1,105 @@
+{# The AI intake review card (Phase 5, step 5.3), adjuster side only. Labels follow AGENTS.md
+   section 9: a card says "AI" only when a model really wrote it and the run finished. Model text
+   is always autoescaped -- never the safe filter. Otherwise the template draft shows, as before,
+   with one line saying why there is no AI review. #}
+{% set ai = ai_review %}
+{% macro cites(citations) -%}
+  {%- for c in citations %} <span class="cite" title="{{ c.quote }}">{{ c.source }}, p. {{ c.page }}</span>{% endfor -%}
+{%- endmacro %}
+{% macro rerun() %}
+  {% if ai_review.ai_on and not ai_review.running %}
+  <form method="post" action="/adjuster/claims/{{ record.claim.claim_id }}/intake-review" class="ai-rerun">
+    <button type="submit" class="btn secondary">Re-run AI review</button>
+  </form>
+  {% endif %}
+{% endmacro %}
+
+{% if ai.run %}
+{% set run = ai.run %}
+{% set out = run.output %}
+{% set passed = run.status == "passed" %}
+<div class="card ai-card{% if not passed %} ai-flagged{% endif %}" id="ai_review">
+  <h2>AI review
+    <span class="ai-tag">AI draft ({{ run.model or "unknown model" }} via OpenRouter) -- {% if passed %}checked against the documents; verify before deciding{% else %}failed automated checks, see below{% endif %}</span>
+  </h2>
+  {% if ai.running %}<p class="ai-status">A newer AI review is in progress -- reload to see it.</p>{% endif %}
+
+  {% if not passed %}
+  <div class="ai-reasons">
+    <strong>Failed automated checks</strong>
+    <ul>
+      {% for r in run.gate.reasons %}<li><span class="mono">{{ r.rule }}</span> {{ r.where }}: {{ r.detail }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <h3>Summary</h3>
+  <ul class="ai-list">
+    {% for s in out.summary %}{% set where = "summary[" ~ loop.index0 ~ "]" %}
+    <li{% if where in ai.flagged %} class="ai-failed"{% endif %}>{{ s.text }}{{ cites(s.citations) }}{% if where in ai.flagged %} <span class="ai-failed-tag">failed checks</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+
+  <h3>Worth checking</h3>
+  {% if out.worth_checking %}
+  <ul class="ai-list">
+    {% for f in out.worth_checking %}{% set where = "worth_checking[" ~ loop.index0 ~ "]" %}
+    <li{% if where in ai.flagged %} class="ai-failed"{% endif %}><span class="ai-kind">{{ f.kind.replace("_", " ") }}</span> {{ f.finding }}{{ cites(f.citations) }}{% if where in ai.flagged %} <span class="ai-failed-tag">failed checks</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="hint">Nothing flagged.</p>{% endif %}
+
+  {% if out.missing_or_unclear %}
+  <h3>Missing or unclear</h3>
+  <ul class="ai-list">
+    {% for m in out.missing_or_unclear %}{% set where = "missing_or_unclear[" ~ loop.index0 ~ "]" %}
+    <li{% if where in ai.flagged %} class="ai-failed"{% endif %}>{{ m }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {% set computed = out.computed or {} %}
+  {% if computed.not_summarised %}
+  <h3>Not summarised <span class="hint">listed by code, not the AI</span></h3>
+  <ul class="ai-list compact">{% for item in computed.not_summarised %}<li>{{ item }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% if computed.not_read %}
+  <h3>Not read in full <span class="hint">listed by code</span></h3>
+  <ul class="ai-list compact">{% for item in computed.not_read %}<li>{{ item }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% if computed.possible_instructions %}
+  <h3>Text that reads like an instruction to the AI <span class="hint">listed by code</span></h3>
+  <ul class="ai-list compact">{% for item in computed.possible_instructions %}<li>{{ item }}</li>{% endfor %}</ul>
+  {% endif %}
+
+  <details class="ai-trace">
+    <summary>AI trace</summary>
+    <ol>
+      {% for t in run.trace or [] %}
+      {% if t.type == "model" %}
+      <li>Model call {{ t.call }}: {{ t.model or "no answer" }}{% if t.attempts | length > 1 %} (after {{ t.attempts | length - 1 }} failover){% endif %}, {{ t.tool_calls }} tool call{{ "" if t.tool_calls == 1 else "s" }} requested</li>
+      {% else %}
+      <li>Tool <span class="mono">{{ t.tool }}</span> <span class="mono hint">{{ t.args }}</span>:
+        {% if t.error %}failed ({{ t.error }}){% elif t.refused %}refused ({{ t.refused }}){% else %}<span class="hint">{{ t.result }}</span>{% endif %}</li>
+      {% endif %}
+      {% endfor %}
+    </ol>
+    <p class="hint">Prompt {{ run.prompt_version }} &middot; {{ run.input_tokens or 0 }} tokens in, {{ run.output_tokens or 0 }} out
+      &middot; {{ ((run.latency_ms or 0) / 1000) | round(1) }} s &middot; <span title="{{ run.finished_at }}">{{ run.finished_at | ago }}</span></p>
+  </details>
+  {{ rerun() }}
+</div>
+
+{% elif record.summary %}
+<div class="card mock-card">
+  <h2>Draft summary <span class="mock-tag">Automated draft -- not AI-generated</span></h2>
+  {% if ai.running %}
+  <p class="ai-status">AI review in progress -- reload to see it</p>
+  {% else %}
+  <p class="hint">No AI review: {{ ai.reason }}.</p>
+  {% endif %}
+  <p class="summary-text">{{ record.summary.summary_text }}</p>
+  <span class="hint" title="{{ record.summary.generated_at }}">Generated {{ record.summary.generated_at | ago }}</span>
+  {{ rerun() }}
+</div>
+{% endif %}

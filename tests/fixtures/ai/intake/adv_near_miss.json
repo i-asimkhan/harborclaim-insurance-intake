@@ -1,0 +1,31 @@
+{
+ "case": "adv_near_miss",
+ "prompt_version": "intake-v5",
+ "models": [
+  "nvidia/nemotron-3.5-super-vl:free"
+ ],
+ "recorded_at": "2026-11-03T00:15:10+00:00",
+ "replies": [
+  {
+   "ok": true,
+   "error_type": null,
+   "message": {
+    "role": "assistant",
+    "content": "{\"summary\": [{\"text\": \"The claim form lists Policy ID HC-AUTO-2315, an incident date of 2026-09-21, and claim type Auto.\", \"citations\": [{\"source\": \"claim form\", \"page\": 1, \"quote\": \"Policy ID: HC-AUTO-2315\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Incident date: 2026-09-21\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Claim type: Auto\"}]}, {\"text\": \"The description says another car dented the front passenger door in a parking lot on 2026-09-21 and quotes $1,250.00 for repair.\", \"citations\": [{\"source\": \"description\", \"page\": 1, \"quote\": \"Another car dented my front passenger door in a parking lot on 2026-09-21.\"}, {\"source\": \"description\", \"page\": 1, \"quote\": \"The shop quoted $1,250.00 for the repair.\"}]}, {\"text\": \"The estimate from Marlow Collision Center describes a front passenger door dented in a parking lot collision on 2026-09-21 with a total estimate of $1,520.00.\", \"citations\": [{\"source\": \"adv_nearmiss_estimate.txt\", \"page\": 1, \"quote\": \"Vehicle: front passenger door dented in a parking lot collision on 2026-09-21.\"}, {\"source\": \"adv_nearmiss_estimate.txt\", \"page\": 1, \"quote\": \"Door panel repair, blend and paint, total estimate $1,520.00\"}]}], \"worth_checking\": [{\"finding\": \"The description quotes $1,250.00 while the estimate totals $1,520.00.\", \"kind\": \"amount_difference\", \"citations\": [{\"source\": \"description\", \"page\": 1, \"quote\": \"The shop quoted $1,250.00 for the repair.\"}, {\"source\": \"adv_nearmiss_estimate.txt\", \"page\": 1, \"quote\": \"total estimate $1,520.00\"}]}], \"missing_or_unclear\": []}"
+   },
+   "content": "{\"summary\": [{\"text\": \"The claim form lists Policy ID HC-AUTO-2315, an incident date of 2026-09-21, and claim type Auto.\", \"citations\": [{\"source\": \"claim form\", \"page\": 1, \"quote\": \"Policy ID: HC-AUTO-2315\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Incident date: 2026-09-21\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Claim type: Auto\"}]}, {\"text\": \"The description says another car dented the front passenger door in a parking lot on 2026-09-21 and quotes $1,250.00 for repair.\", \"citations\": [{\"source\": \"description\", \"page\": 1, \"quote\": \"Another car dented my front passenger door in a parking lot on 2026-09-21.\"}, {\"source\": \"description\", \"page\": 1, \"quote\": \"The shop quoted $1,250.00 for the repair.\"}]}, {\"text\": \"The estimate from Marlow Collision Center describes a front passenger door dented in a parking lot collision on 2026-09-21 with a total estimate of $1,520.00.\", \"citations\": [{\"source\": \"adv_nearmiss_estimate.txt\", \"page\": 1, \"quote\": \"Vehicle: front passenger door dented in a parking lot collision on 2026-09-21.\"}, {\"source\": \"adv_nearmiss_estimate.txt\", \"page\": 1, \"quote\": \"Door panel repair, blend and paint, total estimate $1,520.00\"}]}], \"worth_checking\": [{\"finding\": \"The description quotes $1,250.00 while the estimate totals $1,520.00.\", \"kind\": \"amount_difference\", \"citations\": [{\"source\": \"description\", \"page\": 1, \"quote\": \"The shop quoted $1,250.00 for the repair.\"}, {\"source\": \"adv_nearmiss_estimate.txt\", \"page\": 1, \"quote\": \"total estimate $1,520.00\"}]}], \"missing_or_unclear\": []}",
+   "tool_calls": [],
+   "finish_reason": "stop",
+   "model_served": "nvidia/nemotron-3.5-super-vl:free",
+   "input_tokens": 1301,
+   "output_tokens": 537,
+   "latency_ms": 6218,
+   "attempts": [
+    {
+     "model": "nvidia/nemotron-3.5-super-vl:free",
+     "error_type": null
+    }
+   ]
+  }
+ ]
+}

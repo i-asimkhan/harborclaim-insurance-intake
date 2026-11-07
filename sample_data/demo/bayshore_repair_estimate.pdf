@@ -1,0 +1,59 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 1522 >>
+stream
+BT
+/F2 13 Tf 1 0 0 1 60 760 Tm (Bayshore Collision Center \(fictional, for classroom use\)) Tj
+/F2 13 Tf 1 0 0 1 60 740 Tm (Repair Estimate) Tj
+/F1 11 Tf 1 0 0 1 60 720 Tm () Tj
+/F1 11 Tf 1 0 0 1 60 704 Tm (Estimate number: BCC-77215        Date: 2026-10-29) Tj
+/F1 11 Tf 1 0 0 1 60 688 Tm (Customer: Jordan Ellis) Tj
+/F1 11 Tf 1 0 0 1 60 672 Tm (Vehicle: 2021 Honda Civic, plate JXR-4417) Tj
+/F1 11 Tf 1 0 0 1 60 656 Tm (Insurance: HarborClaim, policy HC-AUTO-5318) Tj
+/F1 11 Tf 1 0 0 1 60 640 Tm () Tj
+/F2 13 Tf 1 0 0 1 60 624 Tm (Parts) Tj
+/F1 11 Tf 1 0 0 1 60 604 Tm (Rear bumper cover \(OEM\)                       $612.00) Tj
+/F1 11 Tf 1 0 0 1 60 588 Tm (Trunk lid \(OEM\)                               $894.50) Tj
+/F1 11 Tf 1 0 0 1 60 572 Tm (Left tail lamp assembly                       $318.90) Tj
+/F1 11 Tf 1 0 0 1 60 556 Tm (Clips, brackets and hardware                   $86.00) Tj
+/F2 13 Tf 1 0 0 1 60 540 Tm (Labor and paint) Tj
+/F1 11 Tf 1 0 0 1 60 520 Tm (Body labor, 14.5 hours at $62.00               $899.00) Tj
+/F1 11 Tf 1 0 0 1 60 504 Tm (Paint and materials                           $540.00) Tj
+/F1 11 Tf 1 0 0 1 60 488 Tm (Rear camera recalibration                     $136.00) Tj
+/F1 11 Tf 1 0 0 1 60 472 Tm () Tj
+/F2 13 Tf 1 0 0 1 60 456 Tm (Total estimate $3,486.40) Tj
+/F1 11 Tf 1 0 0 1 60 436 Tm () Tj
+/F1 11 Tf 1 0 0 1 60 420 Tm (Estimate valid for 30 days. Hidden damage found during repair will be) Tj
+/F1 11 Tf 1 0 0 1 60 404 Tm (reported to the insurer before any additional work.) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000251 00000 n 
+0000001825 00000 n 
+0000001895 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+1970
+%%EOF

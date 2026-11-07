@@ -1,0 +1,68 @@
+{# "Ask about this claim" (Phase 5, step 5.5), adjuster side only. Labels follow AGENTS.md
+   section 9: "AI" only on an answer a model really wrote; the refusal and "not found" lines are
+   fixed text. Model text is always autoescaped -- never the safe filter. #}
+{% set ask = ai_ask %}
+{% if ask.ai_on or ask.questions %}
+<div class="card ai-card" id="ask">
+  <h2>Ask about this claim <span class="hint">answers come only from this claim's records</span></h2>
+  {% if ask.ai_on and not ask.limit_reached %}
+  <form method="post" action="/adjuster/claims/{{ record.claim.claim_id }}/ask" class="ai-ask-form">
+    <input type="text" name="question" maxlength="500" required
+           placeholder="e.g. What date does the police report give?" aria-label="Question about this claim">
+    <button type="submit" class="btn secondary">Ask</button>
+  </form>
+  <p class="hint">Takes up to a minute. The assistant can't approve, decline, judge coverage or suggest an amount.</p>
+  {% elif ask.ai_on %}
+  <p class="hint">Today's AI question limit is reached.</p>
+  {% else %}
+  <p class="hint">The AI assistant is off on this site.</p>
+  {% endif %}
+
+  {% for item in ask.questions %}{% set run = item.run %}
+  <details class="ai-qa"{% if loop.first %} open{% endif %}>
+    <summary class="ai-question"><strong>Q:</strong> {{ run.question }}
+      <span class="hint">{{ run.actor }} &middot; <span title="{{ run.started_at }}">{{ run.started_at | ago }}</span></span></summary>
+    {% if item.kind == "refused" %}
+    <p><span class="mock-tag">Fixed reply -- not AI-generated</span> {{ ask.refusal }}</p>
+    {% elif item.kind == "running" %}
+    <p class="ai-status">Answer in progress -- reload to see it</p>
+    {% elif item.kind == "unavailable" %}
+    <p class="hint">No AI answer: {{ item.reason }}.</p>
+    {% else %}
+    {% set passed = run.status == "passed" %}
+    <p><span class="ai-tag">AI answer ({{ run.model or "unknown model" }} via OpenRouter) -- {% if passed %}checked against the documents; verify before relying on it{% else %}failed automated checks, see below{% endif %}</span></p>
+    {% if item.kind == "not_found" %}
+    <p>{{ ask.not_found }}</p>
+    {% else %}
+    <ul class="ai-list">
+      {% for s in run.output.answer %}{% set where = "answer[" ~ loop.index0 ~ "]" %}
+      <li{% if where in item.flagged %} class="ai-failed"{% endif %}>{{ s.text }}
+        {%- for c in s.citations %} <span class="cite" title="{{ c.quote }}">{{ c.source }}, p. {{ c.page }}</span>{% endfor -%}
+        {% if where in item.flagged %} <span class="ai-failed-tag">failed checks</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% if not passed %}
+    <div class="ai-reasons"><ul>
+      {% for r in run.gate.reasons %}<li><span class="mono">{{ r.rule }}</span> {{ r.where }}: {{ r.detail }}</li>{% endfor %}
+    </ul></div>
+    {% endif %}
+    <details class="ai-trace">
+      <summary>AI trace</summary>
+      <ol>
+        {% for t in run.trace or [] %}
+        {% if t.type == "model" %}
+        <li>Model call {{ t.call }}: {{ t.model or "no answer" }}, {{ t.tool_calls }} tool call{{ "" if t.tool_calls == 1 else "s" }} requested</li>
+        {% else %}
+        <li>Tool <span class="mono">{{ t.tool }}</span> <span class="mono hint">{{ t.args }}</span>:
+          {% if t.error %}failed ({{ t.error }}){% elif t.refused %}refused ({{ t.refused }}){% else %}<span class="hint">{{ t.result }}</span>{% endif %}</li>
+        {% endif %}
+        {% endfor %}
+      </ol>
+      <p class="hint">Prompt {{ run.prompt_version }} &middot; {{ ((run.latency_ms or 0) / 1000) | round(1) }} s</p>
+    </details>
+    {% endif %}
+  </details>
+  {% endfor %}
+</div>
+{% endif %}

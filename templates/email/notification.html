@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<body style="margin:0;padding:0;background:#f7f6f4;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#3d3a36;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f7f6f4;">
+    <tr><td align="center" style="padding:32px 16px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;">
+        <tr><td style="padding:0 4px 16px;font-family:Georgia,'Times New Roman',serif;font-size:22px;font-weight:bold;color:#c93b25;">HarborClaim</td></tr>
+        <tr><td style="background:#ffffff;border:1px solid #ebe8e3;border-radius:12px;padding:28px;">
+          <p style="margin:0 0 6px;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#6b665f;">{{ heading }}</p>
+          <p style="margin:0 0 20px;font-family:Georgia,'Times New Roman',serif;font-size:20px;line-height:1.4;color:#3d3a36;">{{ message }}</p>
+          <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background:#fdeeea;border-radius:8px;">
+            <tr><td style="padding:10px 14px;font-size:13px;color:#6b665f;">Claim number&nbsp;&nbsp;<strong style="color:#3d3a36;font-family:Consolas,'Courier New',monospace;">{{ claim_id }}</strong></td></tr>
+          </table>
+          <table role="presentation" cellpadding="0" cellspacing="0">
+            <tr><td style="background:#c93b25;border-radius:8px;"><a href="{{ link }}" style="display:inline-block;padding:12px 22px;font-size:14px;font-weight:bold;color:#ffffff;text-decoration:none;">{{ button }}</a></td></tr>
+          </table>
+        </td></tr>
+        <tr><td style="padding:16px 4px 0;font-size:12px;line-height:1.5;color:#6b665f;">
+          Button not working? Copy this link into your browser:<br>
+          <a href="{{ link }}" style="color:#c93b25;word-break:break-all;">{{ link }}</a><br><br>
+          This is a demo system with fictional data.
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>

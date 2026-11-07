@@ -2,51 +2,39 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Adjuster queue -- HarborClaim</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="{{ static_url('style.css') }}">
 </head>
 <body class="adjuster-theme">
   <div class="page wide">
-    <header class="app-header">
-      <div class="brand">Harbor<span>Claim</span> <span class="role-tag">ADJUSTER</span></div>
-      <nav>
-        <a href="/adjuster">Queue</a>
-        <a href="/adjuster/notifications">Notifications</a>
-        <span class="hint">{{ adjuster.username }}</span>
-        <a href="/adjuster/logout">Sign out</a>
-      </nav>
-    </header>
+    {% include "_adjuster_header.html" %}
 
-    <h1>Adjuster queue</h1>
-    <p class="subtitle">
-      Every claim in the system, regardless of who filed it &mdash; visible here only
-      because {{ adjuster.username }} has a provisioned adjuster account, entirely
-      separate from any Google sign-in.
-    </p>
-
-    <div class="card notification-panel">
-      <h2 style="font-size:1.05rem; margin-top:0;">
-        Needs attention
-        {% if needs_attention %}<span class="badge-count">{{ needs_attention | length }}</span>{% endif %}
-      </h2>
-      <p class="hint" style="margin-top:0;">
-        Computed fresh on every page load &mdash; not a stored, per-adjuster "seen" flag.
-      </p>
-      {% if needs_attention %}
-      <ul class="missing-list" style="color:var(--ink);">
-        {% for record in needs_attention %}
-        <li>
-          <a href="/adjuster/claims/{{ record.claim.claim_id }}">{{ record.claim.claim_id }}</a>
-          &mdash; {{ record.claim.policy_id or "—" }}, filed {{ record.history[0].at }}
-        </li>
-        {% endfor %}
-      </ul>
-      {% else %}
-      <p style="margin-bottom:0;">Nothing waiting on a decision right now.</p>
-      {% endif %}
+    <div class="page-head">
+      <h1>Adjuster queue</h1>
+      <p class="subtitle">Claims waiting on a decision come first, oldest at the top.</p>
     </div>
 
-    <div class="card" style="margin-top:1.2rem;">
+    {# The count tiles are the filters. #}
+    <nav class="stat-row" aria-label="Filter claims">
+      {% for key, label in views.items() %}
+      <a class="stat{% if key == 'awaiting' %} attention{% endif %}{% if key == view %} active{% endif %}"
+         href="/adjuster{% if key != 'all' %}?view={{ key }}{% endif %}"{% if key == view %} aria-current="page"{% endif %}>
+        <span class="stat-value">{{ counts[key] }}</span>
+        <span class="stat-label">{{ label }}</span>
+      </a>
+      {% endfor %}
+    </nav>
+
+    <form class="queue-search" method="get" action="/adjuster" role="search">
+      {% if view != "all" %}<input type="hidden" name="view" value="{{ view }}">{% endif %}
+      <label class="sr-only" for="queue_q">Search claims</label>
+      <input type="search" id="queue_q" name="q" value="{{ q }}" placeholder="Search claim ID, claimant, policy or type">
+      <button type="submit" class="btn secondary">Search</button>
+      {% if q or view != "all" %}<a class="queue-clear" href="/adjuster">Clear</a>{% endif %}
+    </form>
+
+    <div class="card{% if claims %} table-card{% endif %}">
       {% if claims %}
       <table class="claims-table">
         <colgroup>
@@ -54,7 +42,7 @@
           <col style="width:18%"><col style="width:12%"><col style="width:11%">
         </colgroup>
         <thead>
-          <tr><th>Claim</th><th>Type</th><th>Claimant</th><th>Policy</th><th>Status</th><th>Decision</th><th>Submitted</th></tr>
+          <tr><th>Claim</th><th>Type</th><th>Claimant</th><th>Policy</th><th>Status</th><th>Decision</th><th>Filed</th></tr>
         </thead>
         <tbody>
           {% for record in claims %}
@@ -62,28 +50,34 @@
             <td><a href="/adjuster/claims/{{ record.claim.claim_id }}">{{ record.claim.claim_id }}</a></td>
             <td>{{ CLAIM_TYPES[record.claim.claim_type][0] if record.claim.claim_type in CLAIM_TYPES else record.claim.claim_type }}</td>
             <td><span class="truncate" title="{{ record.claim.claimant_email or '' }}">{{ record.claim.claimant_email or "—" }}</span></td>
-            <td><span class="truncate" title="{{ record.claim.policy_id or '' }}">{{ record.claim.policy_id or "—" }}</span></td>
+            <td><span class="truncate mono" title="{{ record.claim.policy_id or '' }}">{{ record.claim.policy_id or "—" }}</span></td>
             <td>
               {% if record.status == READY_FOR_REVIEW %}
-                <span class="badge ready" style="font-size:0.78rem; padding:0.3rem 0.6rem;">READY_FOR_REVIEW</span>
+                <span class="badge ready">READY_FOR_REVIEW</span>
               {% else %}
-                <span class="badge needs" style="font-size:0.78rem; padding:0.3rem 0.6rem;">NEEDS_INFORMATION</span>
+                <span class="badge needs">NEEDS_INFORMATION</span>
               {% endif %}
             </td>
             <td>
-              {% if record.decisions %}
-                {{ record.decisions[-1].decision.replace("_", " ") }}
+              {% if record.decisions and record.decisions[-1].decision == "NEEDS_MORE_REVIEW" %}
+                <span class="queue-awaiting">Needs more review</span>
+              {% elif record.decisions %}
+                {{ record.decisions[-1].decision.replace("_", " ") | title }}
+              {% elif record.status == READY_FOR_REVIEW %}
+                <span class="queue-awaiting">Awaiting review</span>
               {% else %}
-                <span class="hint">awaiting review</span>
+                <span class="hint">Waiting on claimant</span>
               {% endif %}
             </td>
-            <td title="{{ record.history[0].at }}">{{ record.history[0].at[:10] }}</td>
+            <td class="nowrap" title="{{ record.history[0].at }}">{{ record.history[0].at | ago }}</td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
-      {% else %}
+      {% elif total == 0 %}
       <div class="empty-state">No claims submitted yet.</div>
+      {% else %}
+      <div class="empty-state">No claims match{% if q %} &ldquo;{{ q }}&rdquo;{% endif %}{% if view != "all" %} in {{ views[view] | lower }}{% endif %}. <a href="/adjuster">Clear filters</a></div>
       {% endif %}
     </div>
   </div>

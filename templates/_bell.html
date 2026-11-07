@@ -1,0 +1,30 @@
+{# The claimant's notification bell. Included by _claimant_header.html and also served on its
+   own by GET /notifications/bell, which static/app.js polls. Needs `unread_count` and
+   `notification_preview` (app._claimant_nav). #}
+<details class="bell">
+  <summary aria-label="Notifications{% if unread_count %}, {{ unread_count }} unread{% endif %}" title="Notifications">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+    {% if unread_count %}<span class="badge-count">{{ unread_count }}</span>{% endif %}
+  </summary>
+  <div class="bell-menu">
+    <div class="bell-menu-head">
+      <span>Notifications</span>
+      {% if unread_count %}<span class="hint">{{ unread_count }} unread</span>{% endif %}
+    </div>
+    {% if notification_preview %}
+    <ul>
+      {% for n in notification_preview %}
+      <li{% if not n.read_at %} class="unread"{% endif %}>
+        <a href="/claims/{{ n.claim_id }}">
+          {{ n.message }}
+          <span class="bell-meta"><span class="mono">{{ n.claim_id }}</span> &middot; <span title="{{ n.created_at }}">{{ n.created_at | ago }}</span></span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="bell-empty">No notifications yet.</div>
+    {% endif %}
+    <a class="bell-all" href="/notifications">View all notifications</a>
+  </div>
+</details>

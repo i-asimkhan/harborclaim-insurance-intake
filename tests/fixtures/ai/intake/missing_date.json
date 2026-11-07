@@ -1,0 +1,31 @@
+{
+ "case": "missing_date",
+ "prompt_version": "intake-v5",
+ "models": [
+  "nvidia/nemotron-3.5-super-vl:free"
+ ],
+ "recorded_at": "2026-11-02T21:13:33+00:00",
+ "replies": [
+  {
+   "ok": true,
+   "error_type": null,
+   "message": {
+    "role": "assistant",
+    "content": "{\"summary\": [{\"text\": \"The claim form lists Policy ID HC-HOME-3392 with claim type Property and no incident date provided.\", \"citations\": [{\"source\": \"claim form\", \"page\": 1, \"quote\": \"Policy ID: HC-HOME-3392\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Claim type: Property\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Incident date: (not provided)\"}]}, {\"text\": \"The description states that a pipe burst under the kitchen sink and soaked the cabinet floor.\", \"citations\": [{\"source\": \"description\", \"page\": 1, \"quote\": \"A pipe burst under my kitchen sink and soaked the cabinet floor.\"}]}, {\"text\": \"The plumber invoice reports an invoice total of $480.00 for repairing a burst pipe under the kitchen sink and drying the cabinet floor.\", \"citations\": [{\"source\": \"missing_plumber_invoice.txt\", \"page\": 1, \"quote\": \"Invoice total $480.00\"}, {\"source\": \"missing_plumber_invoice.txt\", \"page\": 1, \"quote\": \"Repaired a burst pipe under the kitchen sink and dried the cabinet floor.\"}]}], \"worth_checking\": [], \"missing_or_unclear\": [\"The claim form does not provide an incident date.\"]}"
+   },
+   "content": "{\"summary\": [{\"text\": \"The claim form lists Policy ID HC-HOME-3392 with claim type Property and no incident date provided.\", \"citations\": [{\"source\": \"claim form\", \"page\": 1, \"quote\": \"Policy ID: HC-HOME-3392\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Claim type: Property\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Incident date: (not provided)\"}]}, {\"text\": \"The description states that a pipe burst under the kitchen sink and soaked the cabinet floor.\", \"citations\": [{\"source\": \"description\", \"page\": 1, \"quote\": \"A pipe burst under my kitchen sink and soaked the cabinet floor.\"}]}, {\"text\": \"The plumber invoice reports an invoice total of $480.00 for repairing a burst pipe under the kitchen sink and drying the cabinet floor.\", \"citations\": [{\"source\": \"missing_plumber_invoice.txt\", \"page\": 1, \"quote\": \"Invoice total $480.00\"}, {\"source\": \"missing_plumber_invoice.txt\", \"page\": 1, \"quote\": \"Repaired a burst pipe under the kitchen sink and dried the cabinet floor.\"}]}], \"worth_checking\": [], \"missing_or_unclear\": [\"The claim form does not provide an incident date.\"]}",
+   "tool_calls": [],
+   "finish_reason": "stop",
+   "model_served": "nvidia/nemotron-3.5-super-vl:free",
+   "input_tokens": 1164,
+   "output_tokens": 307,
+   "latency_ms": 2297,
+   "attempts": [
+    {
+     "model": "nvidia/nemotron-3.5-super-vl:free",
+     "error_type": null
+    }
+   ]
+  }
+ ]
+}

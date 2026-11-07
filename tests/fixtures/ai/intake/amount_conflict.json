@@ -1,0 +1,31 @@
+{
+ "case": "amount_conflict",
+ "prompt_version": "intake-v5",
+ "models": [
+  "nvidia/nemotron-3.5-super-vl:free"
+ ],
+ "recorded_at": "2026-11-02T21:13:23+00:00",
+ "replies": [
+  {
+   "ok": true,
+   "error_type": null,
+   "message": {
+    "role": "assistant",
+    "content": "{\"summary\": [{\"text\": \"The claim form lists Policy ID HC-HOME-3310, incident date 2026-09-02, and claim type Property.\", \"citations\": [{\"source\": \"claim form\", \"page\": 1, \"quote\": \"Policy ID: HC-HOME-3310\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Incident date: 2026-09-02\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Claim type: Property\"}]}, {\"text\": \"The description says a storm on 2026-09-02 tore shingles off the roof and the roofer says the repair will cost $2,500.00.\", \"citations\": [{\"source\": \"description\", \"page\": 1, \"quote\": \"A storm on 2026-09-02 tore shingles off my roof.\"}, {\"source\": \"description\", \"page\": 1, \"quote\": \"The roofer says the repair will cost $2,500.00.\"}]}, {\"text\": \"The roofer's estimate totals $2,150.00 for replacing storm-damaged shingles on the north slope of the roof.\", \"citations\": [{\"source\": \"amount_roof_estimate.txt\", \"page\": 1, \"quote\": \"Total estimate $2,150.00\"}]}], \"worth_checking\": [{\"finding\": \"The description states a roofer repair cost of $2,500.00 while the roofer's estimate totals $2,150.00.\", \"kind\": \"amount_difference\", \"citations\": [{\"source\": \"description\", \"page\": 1, \"quote\": \"The roofer says the repair will cost $2,500.00.\"}, {\"source\": \"amount_roof_estimate.txt\", \"page\": 1, \"quote\": \"Total estimate $2,150.00\"}]}], \"missing_or_unclear\": []}"
+   },
+   "content": "{\"summary\": [{\"text\": \"The claim form lists Policy ID HC-HOME-3310, incident date 2026-09-02, and claim type Property.\", \"citations\": [{\"source\": \"claim form\", \"page\": 1, \"quote\": \"Policy ID: HC-HOME-3310\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Incident date: 2026-09-02\"}, {\"source\": \"claim form\", \"page\": 1, \"quote\": \"Claim type: Property\"}]}, {\"text\": \"The description says a storm on 2026-09-02 tore shingles off the roof and the roofer says the repair will cost $2,500.00.\", \"citations\": [{\"source\": \"description\", \"page\": 1, \"quote\": \"A storm on 2026-09-02 tore shingles off my roof.\"}, {\"source\": \"description\", \"page\": 1, \"quote\": \"The roofer says the repair will cost $2,500.00.\"}]}, {\"text\": \"The roofer's estimate totals $2,150.00 for replacing storm-damaged shingles on the north slope of the roof.\", \"citations\": [{\"source\": \"amount_roof_estimate.txt\", \"page\": 1, \"quote\": \"Total estimate $2,150.00\"}]}], \"worth_checking\": [{\"finding\": \"The description states a roofer repair cost of $2,500.00 while the roofer's estimate totals $2,150.00.\", \"kind\": \"amount_difference\", \"citations\": [{\"source\": \"description\", \"page\": 1, \"quote\": \"The roofer says the repair will cost $2,500.00.\"}, {\"source\": \"amount_roof_estimate.txt\", \"page\": 1, \"quote\": \"Total estimate $2,150.00\"}]}], \"missing_or_unclear\": []}",
+   "tool_calls": [],
+   "finish_reason": "stop",
+   "model_served": "nvidia/nemotron-3.5-super-vl:free",
+   "input_tokens": 1243,
+   "output_tokens": 482,
+   "latency_ms": 3500,
+   "attempts": [
+    {
+     "model": "nvidia/nemotron-3.5-super-vl:free",
+     "error_type": null
+    }
+   ]
+  }
+ ]
+}

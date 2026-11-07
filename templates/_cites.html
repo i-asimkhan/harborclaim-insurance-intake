@@ -1,0 +1,16 @@
+{# Citations under one AI sentence, each source and page once (several quotes from one page are
+   joined in the hover text). A document citation opens that document at the page; "claim form"
+   and "description" jump to the Basics card. Quotes are model text, so autoescaped as usual. #}
+{% macro cites(citations, claim_id, documents) -%}
+  {%- set seen = namespace(keys=[]) -%}
+  {%- for c in citations -%}
+    {%- set key = c.source ~ "|" ~ c.page -%}
+    {%- if key not in seen.keys -%}
+      {%- set seen.keys = seen.keys + [key] -%}
+      {%- set quotes = citations | selectattr("source", "equalto", c.source) | selectattr("page", "equalto", c.page) | map(attribute="quote") | list -%}
+      {%- if c.source in documents %} <a class="cite" href="/adjuster/claims/{{ claim_id }}/documents/{{ c.source }}#page={{ c.page }}" target="_blank" rel="noopener" title="{{ quotes | join(' / ') }}">{{ c.source }}, p. {{ c.page }}</a>
+      {%- else %} <a class="cite" href="#basics" title="{{ quotes | join(' / ') }}">{{ c.source }}, p. {{ c.page }}</a>
+      {%- endif -%}
+    {%- endif -%}
+  {%- endfor -%}
+{%- endmacro %}

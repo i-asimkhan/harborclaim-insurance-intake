@@ -62,6 +62,47 @@ The port matters — `8123` has to match the redirect URI registered in Google C
 Console (see "Accounts and privacy" below) or claimant sign-in will fail with
 `redirect_uri_mismatch`.
 
+## The AI agents (FIN 6934 final project)
+
+Phase 5 adds four AI agents to the intake workflow. They read, explain and draft; none of them
+can approve, decline, pay, judge coverage or change a claim. The one action in the loop, asking
+the claimant for more, is drafted by an agent and sent by the adjuster. A human adjuster decides.
+
+![The agentic layer in the claim workflow](docs/design/agentic-layer.png)
+
+The walk-through of this diagram is [`docs/design/AGENTIC-LAYER.md`](docs/design/AGENTIC-LAYER.md).
+
+| Agent | Who sees it | What it does |
+|---|---|---|
+| **Intake review** | Adjuster, on each claim page | Reads the claim and its documents, writes a short summary and "worth checking" findings (amount or date differences, type mismatches, missing documents). Every sentence cites a document, page and word-for-word quote. |
+| **Ask about this claim** | Adjuster | Answers a question from that claim's records only, with citations, or says it isn't in the records. |
+| **Ask a question** (`/help`) | Claimant | Says where the claimant's own claims stand and what's still needed. Never mentions anyone else's claim, amounts or decisions not on record. |
+| **Request missing information** | Adjuster drafts, claimant receives | Starts from a brief and calls its tools to find what's missing, then drafts a request. The adjuster edits and sends it; the claimant answers by adding documents, the claim is checked again and the intake review re-runs. |
+
+**How it's built** (details in [`docs/design/AGENTS.md`](docs/design/AGENTS.md)):
+
+- **One shared harness** (`agents.py`): a charter per agent (prompt, JSON schema, daily limit),
+  up to 3 model calls and 3 tool calls per run, read-only tools (`agent_tools.py`), and an
+  append-only `agent_runs` log of every question, answer, check result and trace.
+- **Code checks every answer** (`agent_gate.py`, rules G1-G9 and C) before anyone sees it:
+  quotes must be in the documents word for word, numbers must come from the quotes, no
+  decision/coverage/payment wording, no other claimant's data, injected instructions caught. A
+  failed answer is shown as "failed automated checks" (adjuster) or replaced by a fixed reply
+  (claimant). Decision questions ("Should I approve this?") get a fixed reply from code with no
+  model call.
+- **Models:** free open-weight NVIDIA models on OpenRouter, $0. 12 free models screened in 3
+  rounds; two passed and run with automatic failover: `nvidia/nemotron-3.5-super-vl:free`, then
+  `nvidia/nemotron-3-ultra-550b-a55b:free`. An adjuster picks which answers first on the
+  **AI usage** page (`/adjuster/ai`), which also shows today's usage against the limits.
+- **Honest labels:** "AI draft (model via OpenRouter)" only on text a model wrote and the checks
+  passed; the template summary stays as the labelled fallback when AI is off or a model is down.
+- **Tested:** 344 automated tests (a scripted fake model, no network), a golden set of 11
+  fictional claims run live (`scripts/eval_agents.py`), and two red-team rounds. Prompts and
+  results: [`PROMPTS.md`](PROMPTS.md) and [`AI_USAGE.md`](AI_USAGE.md).
+
+AI is off unless switched on in `.env` (setting names in "Deploying to Azure App Service",
+step 6). `python scripts/show_ai_runs.py` prints today's runs.
+
 ## What this is
 
 The minimum working example from the take-home spec: a claim completeness checker.
@@ -362,11 +403,13 @@ this repo's `main` branch. To reproduce it:
    adjuster email is only sent when email is real; with email simulated it is skipped and not
    recorded anywhere, because notification rows belong to claimants.
    See `email_delivery.py` and `ROADMAP.md` (Phase 3).
-6. **AI agents (Phase 5, in progress; off by default).** No model is ever called unless you
+6. **AI agents (Phase 5; off by default).** No model is ever called unless you
    opt in. Names only: `AI_PROVIDER` (`openrouter` to enable; blank = off), `AI_ENABLED`
    (`false` switches AI off without clearing the rest), `OPENROUTER_API_KEY`, `AI_MODELS` (tested
    free model IDs in order of preference; the next is tried when one is busy or down; never the
-   `openrouter/free` router), `AI_TIMEOUT_SECONDS`. The model is
+   `openrouter/free` router), `AI_TIMEOUT_SECONDS`, `AI_CLAIMANT_CHAT` (`true` shows the
+   claimant's Ask a question page), and the daily limits `AI_DAILY_LIMIT_INTAKE`,
+   `AI_DAILY_LIMIT_ADJUSTER`, `AI_DAILY_LIMIT_CLAIMANT` (defaults 10, 10, 5). The model is
    a free OpenRouter model called with `httpx`; no OpenAI service, model, key or package is
    used. Free providers may log prompts, which is acceptable only because every claim and
    document here is fictional. See `ai_client.py` and `docs/design/AGENTS.md`.
@@ -471,8 +514,8 @@ All seven Design Deliverable stages are wired into one pipeline now — see
 | Document/evidence storage | ✅ Real — `storage.py` writes uploaded files to `data/uploads/<claim_id>/`, never touches their contents |
 | Persistent claims database | ✅ Real — SQLite, survives a server restart (verified by actually restarting `uvicorn` mid-session) |
 | Accounts | ✅ Real — Google sign-in for claimants, provisioned username/password for adjusters |
-| Fact extraction | 🟡 **Mock** — real text read (via `pypdf`), fake intelligence (plain regex) — see `MOCKS.md` |
-| Summary generation | 🟡 **Mock** — template-assembled from stored fields, no model call — see `MOCKS.md` |
+| Fact extraction | 🟡 **Mock** — real text read (via `pypdf`), fake intelligence (plain regex) — see `MOCKS.md`. The AI intake review reads the same document text when AI is on. |
+| Summary generation | ✅ **Real AI when switched on** — the intake review agent, checked by code; 🟡 the template summary remains the labelled fallback — see `MOCKS.md` |
 | Adjuster review | ✅ Real — a human decision, gated by separation of duties |
 | Notifications | 🟡 **Mock** — logged on two channels, nothing actually sent — see `MOCKS.md` |
 

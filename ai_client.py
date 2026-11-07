@@ -36,6 +36,8 @@ from dataclasses import dataclass, field
 
 import httpx
 
+import privacy
+
 OPENROUTER = "openrouter"
 ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_TIMEOUT_SECONDS = 30
@@ -48,9 +50,8 @@ FAILOVER_ERRORS = {"rate_limited", "http_error", "timeout", "bad_response", "emp
 # listed gets short, hidden reasoning, which models without a reasoning mode ignore.
 MODEL_SETTINGS: dict[str, dict] = {
     "nvidia/nemotron-3.5-super-vl:free": {"reasoning": {"enabled": False}},
-    # Probe 2026-11-06: both answered empty with reasoning on, and well with it off.
+    # Probe 2026-11-06: answered empty with reasoning on, and well with it off.
     "nvidia/nemotron-3-ultra-550b-a55b:free": {"reasoning": {"enabled": False}},
-    "nvidia/nemotron-3.5-lightning:free": {"reasoning": {"enabled": False}},
 }
 DEFAULT_REASONING = {"effort": "low", "exclude": True}
 
@@ -121,6 +122,9 @@ def _call_one(name: str, key: str, messages: list[dict], tools: list[dict] | Non
         "temperature": 0,  # a draft that must quote sources exactly: as repeatable as the model allows
         "reasoning": MODEL_SETTINGS.get(name, {}).get("reasoning", DEFAULT_REASONING),
     }
+    if privacy.data_policy() == privacy.PRODUCTION:
+        # Real claim data: only providers that don't collect prompts (privacy.py).
+        payload["provider"] = {"data_collection": "deny"}
     if tools:
         payload["tools"] = tools
         payload["tool_choice"] = tool_choice or "auto"
@@ -189,6 +193,9 @@ def chat(messages: list[dict], *, tools: list[dict] | None = None, tool_choice: 
     candidates = (models or configured_models())[:MAX_MODELS]
     if not key or not candidates:
         return _failed("bad_config", started, "OPENROUTER_API_KEY or AI_MODELS missing")
+    candidates = [name for name in candidates if privacy.model_allowed(name)]
+    if not candidates:
+        return _failed("bad_config", started, "no configured model is approved for real claim data")
 
     budget = timeout or timeout_seconds()
     attempts: list[dict] = []

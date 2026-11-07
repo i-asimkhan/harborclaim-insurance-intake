@@ -82,7 +82,7 @@ def test_signed_out_new_claim_form_redirects_to_login_on_submit():
     response = submit(
         policy_id="POL-1",
         incident_date="2026-01-01",
-        description="Anonymous attempt.",
+        description="Anonymous attempt. in this test claim",
     )
     assert response.status_code in (307, 303, 302)
     assert response.headers["location"] == "/auth/login"
@@ -117,8 +117,8 @@ def test_complete_claim_redirects_and_shows_ready_for_review():
 
     result = client.get(claim_url)
     assert result.status_code == 200
-    assert "READY_FOR_REVIEW" in result.text
-    assert "NEEDS_INFORMATION" not in result.text
+    assert "Ready for review" in result.text
+    assert "Needs information" not in result.text
     assert "police_report.pdf" in result.text
     assert CLAIMANT["email"] in result.text
 
@@ -133,7 +133,7 @@ def test_incomplete_claim_names_the_missing_field():
     claim_url = response.headers["location"]
 
     result = client.get(claim_url)
-    assert "NEEDS_INFORMATION" in result.text
+    assert "Needs information" in result.text
     assert "incident_date" in result.text
 
 
@@ -194,10 +194,10 @@ def test_a_claimant_cannot_view_another_claimants_claim():
 
 def test_my_claims_list_only_shows_my_own_claims():
     login_as_claimant(CLAIMANT)
-    submit(policy_id="POL-MINE", incident_date="2026-01-01", description="Mine.", files=[("a.pdf", b"x")])
+    submit(policy_id="POL-MINE", incident_date="2026-01-01", description="Mine. in this test claim", files=[("a.pdf", b"x")])
 
     login_as_claimant(OTHER_CLAIMANT)
-    submit(policy_id="POL-THEIRS", incident_date="2026-01-02", description="Theirs.", files=[("b.pdf", b"y")])
+    submit(policy_id="POL-THEIRS", incident_date="2026-01-02", description="Theirs. in this test claim", files=[("b.pdf", b"y")])
 
     response = client.get("/claims")
     assert "POL-THEIRS" in response.text
@@ -272,10 +272,10 @@ def test_claimant_login_does_not_grant_adjuster_access():
 
 def test_adjuster_sees_every_claim_regardless_of_owner():
     login_as_claimant(CLAIMANT)
-    submit(policy_id="POL-MINE", incident_date="2026-01-01", description="Mine.", files=[("a.pdf", b"x")])
+    submit(policy_id="POL-MINE", incident_date="2026-01-01", description="Mine. in this test claim", files=[("a.pdf", b"x")])
 
     login_as_claimant(OTHER_CLAIMANT)
-    submit(policy_id="POL-THEIRS", incident_date="2026-01-02", description="Theirs.", files=[("b.pdf", b"y")])
+    submit(policy_id="POL-THEIRS", incident_date="2026-01-02", description="Theirs. in this test claim", files=[("b.pdf", b"y")])
 
     password = storage.create_adjuster("queue.adjuster")
     login_as_adjuster("queue.adjuster", password)
@@ -311,11 +311,11 @@ def test_only_a_logged_in_adjuster_can_record_a_decision():
 
     # Shows up on both the claimant's own view and the adjuster's separate one.
     claimant_view = client.get(f"/claims/{claim_id}")
-    assert "APPROVED" in claimant_view.text
+    assert "Approved" in claimant_view.text
     assert "decider" in claimant_view.text
 
     adjuster_view = client.get(f"/adjuster/claims/{claim_id}")
-    assert "APPROVED" in adjuster_view.text
+    assert "Approved" in adjuster_view.text
     assert "decider" in adjuster_view.text
 
 
@@ -436,7 +436,7 @@ def test_summary_names_a_missing_incident_date_instead_of_leaving_a_blank():
     response = submit(
         policy_id="POL-NODATE",
         incident_date="",
-        description="Kitchen fire.",
+        description="Kitchen fire. in this test claim",
         files=[("notes.txt", b"Fire in kitchen.")],
     )
     claim_id = response.headers["location"].rsplit("/", 1)[-1]
@@ -450,7 +450,7 @@ def test_summary_states_when_no_documents_were_provided():
     from summary import generate_summary
 
     text = generate_summary(
-        {"policy_id": "POL-1", "incident_date": "2026-08-01", "description": "x", "documents": []},
+        {"policy_id": "POL-1", "incident_date": "2026-08-01", "description": "x in this test claim", "documents": []},
         facts=[],
     )
     assert "Documents on file: none provided." in text
@@ -471,7 +471,7 @@ def test_submission_creates_notifications_on_both_mock_channels():
     response = submit(
         policy_id="POL-NOTIFY",
         incident_date="2026-08-02",
-        description="Minor claim.",
+        description="Minor claim. in this test claim",
         files=[("a.pdf", b"x")],
     )
     claim_id = response.headers["location"].rsplit("/", 1)[-1]
@@ -495,7 +495,7 @@ def test_incomplete_submission_notification_names_the_missing_field():
 def test_notifications_page_lists_and_marks_them_read():
     login_as_claimant(CLAIMANT)
     response = submit(
-        policy_id="POL-READ", incident_date="2026-08-03", description="x", files=[("a.pdf", b"x")]
+        policy_id="POL-READ", incident_date="2026-08-03", description="x in this test claim", files=[("a.pdf", b"x")]
     )
     claim_id = response.headers["location"].rsplit("/", 1)[-1]
 
@@ -530,7 +530,7 @@ def test_adjuster_needs_attention_panel_excludes_decided_claims():
     response = submit(
         policy_id="POL-ATTN",
         incident_date="2026-08-05",
-        description="Needs review.",
+        description="Needs review. in this test claim",
         files=[("a.pdf", b"x")],
     )
     claim_id = response.headers["location"].rsplit("/", 1)[-1]
@@ -542,7 +542,8 @@ def test_adjuster_needs_attention_panel_excludes_decided_claims():
     assert claim_id in before.text
     assert "Awaiting a decision" in before.text
 
-    client.post(f"/adjuster/claims/{claim_id}/decision", data={"decision": "DECLINED"})
+    client.post(f"/adjuster/claims/{claim_id}/decision",
+                data={"decision": "DECLINED", "reason": "Not covered under this policy."})
 
     needing_attention = storage.claims_needing_adjuster_attention()
     assert claim_id not in [r["claim"]["claim_id"] for r in needing_attention]
@@ -554,7 +555,7 @@ def test_adjuster_needs_attention_panel_excludes_decided_claims():
 def test_adjuster_session_alone_cannot_open_the_claimant_claim_page():
     login_as_claimant(CLAIMANT)
     response = submit(
-        policy_id="POL-SEP-1", incident_date="2026-09-01", description="x", files=[("a.pdf", b"x")]
+        policy_id="POL-SEP-1", incident_date="2026-09-01", description="x in this test claim", files=[("a.pdf", b"x")]
     )
     claim_id = response.headers["location"].rsplit("/", 1)[-1]
 
@@ -571,7 +572,7 @@ def test_adjuster_session_alone_cannot_open_the_claimant_claim_page():
 def test_claimant_session_alone_cannot_open_the_adjuster_claim_page():
     login_as_claimant(CLAIMANT)
     response = submit(
-        policy_id="POL-SEP-2", incident_date="2026-09-02", description="x", files=[("a.pdf", b"x")]
+        policy_id="POL-SEP-2", incident_date="2026-09-02", description="x in this test claim", files=[("a.pdf", b"x")]
     )
     claim_id = response.headers["location"].rsplit("/", 1)[-1]
 
@@ -608,7 +609,7 @@ def test_policy_id_too_long_is_rejected():
     response = submit(
         policy_id="P" * 41,
         incident_date="2026-09-01",
-        description="x",
+        description="x in this test claim",
         files=[("a.pdf", b"x")],
     )
     assert response.status_code == 400
@@ -621,7 +622,7 @@ def test_future_incident_date_is_rejected():
     response = submit(
         policy_id="POL-FUTURE",
         incident_date="2099-01-01",
-        description="x",
+        description="x in this test claim",
         files=[("a.pdf", b"x")],
     )
     assert response.status_code == 400
@@ -634,7 +635,7 @@ def test_disallowed_file_type_is_rejected():
     response = submit(
         policy_id="POL-BADFILE",
         incident_date="2026-09-01",
-        description="x",
+        description="x in this test claim",
         files=[("malware.exe", b"not really malware, just a bad extension")],
     )
     assert response.status_code == 400
@@ -648,7 +649,7 @@ def test_oversized_file_is_rejected():
     response = submit(
         policy_id="POL-BIGFILE",
         incident_date="2026-09-01",
-        description="x",
+        description="x in this test claim",
         files=[("huge.pdf", big_content)],
     )
     assert response.status_code == 400
@@ -674,7 +675,7 @@ def test_claim_type_is_stored_and_shown_to_both_roles():
     response = submit(
         policy_id="POL-AUTO",
         incident_date="2026-09-01",
-        description="Rear-end collision.",
+        description="Rear-end collision. in this test claim",
         claim_type="auto",
         files=[("a.pdf", b"x")],
     )
@@ -693,7 +694,7 @@ def test_claim_type_is_stored_and_shown_to_both_roles():
 def test_blank_claim_type_defaults_to_other():
     login_as_claimant(CLAIMANT)
     response = submit(
-        policy_id="POL-NOTYPE", incident_date="2026-09-01", description="x", files=[("a.pdf", b"x")]
+        policy_id="POL-NOTYPE", incident_date="2026-09-01", description="x in this test claim", files=[("a.pdf", b"x")]
     )
     claim_id = response.headers["location"].rsplit("/", 1)[-1]
     assert storage.get_claim(claim_id)["claim"]["claim_type"] == "other"
@@ -704,7 +705,7 @@ def test_unknown_claim_type_is_rejected_and_nothing_is_stored():
     response = submit(
         policy_id="POL-BADTYPE",
         incident_date="2026-09-01",
-        description="x",
+        description="x in this test claim",
         claim_type="spaceship",
         files=[("a.pdf", b"x")],
     )
@@ -720,7 +721,7 @@ def test_claim_type_does_not_change_completeness():
     response = submit(
         policy_id="POL-AUTO-PHOTO",
         incident_date="2026-09-01",
-        description="Dented door.",
+        description="Dented door. in this test claim",
         claim_type="auto",
         files=[("photo.jpg", b"x")],
     )
@@ -772,7 +773,7 @@ def test_claimant_bell_counts_each_event_once_and_links_to_the_full_page():
     # Every event is logged on both channels; the bell counts events, so one
     # submission shows as 1 unread, not 2.
     login_as_claimant(CLAIMANT)
-    submit(policy_id="POL-BELL", incident_date="2026-08-05", description="x", files=[("a.pdf", b"x")])
+    submit(policy_id="POL-BELL", incident_date="2026-08-05", description="x in this test claim", files=[("a.pdf", b"x")])
 
     page = client.get("/claims")
     assert '<details class="bell">' in page.text
@@ -788,7 +789,7 @@ def test_claimant_bell_counts_each_event_once_and_links_to_the_full_page():
 
 def test_adjuster_bell_shows_the_live_needs_attention_count_on_every_adjuster_page():
     login_as_claimant(CLAIMANT)
-    response = submit(policy_id="POL-ADJ-BELL", incident_date="2026-08-06", description="x", files=[("a.pdf", b"x")])
+    response = submit(policy_id="POL-ADJ-BELL", incident_date="2026-08-06", description="x in this test claim", files=[("a.pdf", b"x")])
     claim_id = response.headers["location"].rsplit("/", 1)[-1]
 
     password = storage.create_adjuster("bell.adjuster")
@@ -810,7 +811,7 @@ def test_more_than_ten_files_is_rejected_and_nothing_is_stored():
     response = submit(
         policy_id="POL-ELEVEN",
         incident_date="2026-09-01",
-        description="x",
+        description="x in this test claim",
         files=[(f"page{i}.pdf", b"x") for i in range(11)],
     )
     assert response.status_code == 400
@@ -823,7 +824,7 @@ def test_exactly_ten_files_is_accepted():
     response = submit(
         policy_id="POL-TEN",
         incident_date="2026-09-01",
-        description="x",
+        description="x in this test claim",
         files=[(f"page{i}.pdf", b"x") for i in range(10)],
     )
     assert response.status_code == 303
@@ -836,7 +837,7 @@ def test_exactly_ten_files_is_accepted():
 def test_notifications_page_shows_each_event_once_with_both_channel_tags():
     # Every event is logged on two channels; the page groups them back into one entry.
     login_as_claimant(CLAIMANT)
-    response = submit(policy_id="POL-ONCE", incident_date="2026-08-07", description="x", files=[("a.pdf", b"x")])
+    response = submit(policy_id="POL-ONCE", incident_date="2026-08-07", description="x in this test claim", files=[("a.pdf", b"x")])
     claim_id = response.headers["location"].rsplit("/", 1)[-1]
     password = storage.create_adjuster("once.adjuster")
     login_as_adjuster("once.adjuster", password)
@@ -920,7 +921,7 @@ def _file_claim(policy_id, complete=True):
     response = submit(
         policy_id=policy_id,
         incident_date="2026-08-10" if complete else "",
-        description="x",
+        description="x in this test claim",
         files=[("a.pdf", b"x")],
     )
     return response.headers["location"].rsplit("/", 1)[-1]
@@ -953,7 +954,8 @@ def test_queue_view_filters_and_unknown_view_falls_back_to_all():
     awaiting = _file_claim("POL-F-AWAITING")
     password = storage.create_adjuster("filter.adjuster")
     login_as_adjuster("filter.adjuster", password)
-    client.post(f"/adjuster/claims/{decided}/decision", data={"decision": "DECLINED"})
+    client.post(f"/adjuster/claims/{decided}/decision",
+                data={"decision": "DECLINED", "reason": "Not covered under this policy."})
 
     assert _queue_ids(client.get("/adjuster?view=awaiting").text) == [awaiting]
     assert _queue_ids(client.get("/adjuster?view=waiting").text) == [waiting]
@@ -1009,7 +1011,7 @@ def test_blank_credentials_never_log_anyone_in_or_hit_the_audit_log():
 
 def test_decision_post_without_a_decision_is_a_page_not_a_json_error():
     login_as_claimant(CLAIMANT)
-    response = submit(policy_id="POL-NODEC", incident_date="2026-08-11", description="x", files=[("a.pdf", b"x")])
+    response = submit(policy_id="POL-NODEC", incident_date="2026-08-11", description="x in this test claim", files=[("a.pdf", b"x")])
     claim_id = response.headers["location"].rsplit("/", 1)[-1]
     password = storage.create_adjuster("nodec.adjuster")
     login_as_adjuster("nodec.adjuster", password)
@@ -1123,7 +1125,7 @@ def test_claimant_email_has_a_link_to_the_claim_and_a_designed_html_version(monk
     sent = []
     monkeypatch.setattr(email_delivery, "_send_via_acs", lambda to, subject, body, html=None: sent.append((body, html)))
     login_as_claimant(CLAIMANT)
-    response = submit(policy_id="POL-EMAIL-HTML", incident_date="2026-08-14", description="Private text.", files=[("a.pdf", b"x")])
+    response = submit(policy_id="POL-EMAIL-HTML", incident_date="2026-08-14", description="Private text. in this test claim", files=[("a.pdf", b"x")])
     claim_id = response.headers["location"].rsplit("/", 1)[-1]
 
     body, html = sent[0]
@@ -1141,9 +1143,9 @@ def test_adjuster_inbox_is_emailed_only_for_claims_ready_for_review(monkeypatch)
     monkeypatch.setattr(email_delivery, "_send_via_acs", lambda to, subject, body, html=None: sent.append((to, body, html)))
     login_as_claimant(CLAIMANT)
 
-    ready = submit(policy_id="POL-ADJ-READY", incident_date="2026-08-15", description="x", files=[("a.pdf", b"x")])
+    ready = submit(policy_id="POL-ADJ-READY", incident_date="2026-08-15", description="x in this test claim", files=[("a.pdf", b"x")])
     ready_id = ready.headers["location"].rsplit("/", 1)[-1]
-    submit(policy_id="POL-ADJ-INCOMPLETE", incident_date="2026-08-15", description="x", files=[])
+    submit(policy_id="POL-ADJ-INCOMPLETE", incident_date="2026-08-15", description="x in this test claim", files=[])
 
     to_adjusters = [m for m in sent if m[0] == "adjusters@example.com"]
     assert len(to_adjusters) == 1  # the ready claim only, not the incomplete one
@@ -1158,7 +1160,7 @@ def test_no_adjuster_email_when_the_setting_is_empty(monkeypatch):
     sent = []
     monkeypatch.setattr(email_delivery, "_send_via_acs", lambda to, subject, body, html=None: sent.append(to))
     login_as_claimant(CLAIMANT)
-    submit(policy_id="POL-ADJ-OFF", incident_date="2026-08-16", description="x", files=[("a.pdf", b"x")])
+    submit(policy_id="POL-ADJ-OFF", incident_date="2026-08-16", description="x in this test claim", files=[("a.pdf", b"x")])
     assert sent == [CLAIMANT["email"]]
 
 
@@ -1222,7 +1224,7 @@ def test_a_failed_email_never_breaks_the_request_and_never_leaks_the_error(monke
     monkeypatch.setattr(email_delivery, "_send_via_acs", boom)
     caplog.set_level(logging.WARNING, logger="uvicorn.error")
     login_as_claimant(CLAIMANT)
-    response = submit(policy_id="POL-EMAIL-FAIL", incident_date="2026-08-13", description="x", files=[("a.pdf", b"x")])
+    response = submit(policy_id="POL-EMAIL-FAIL", incident_date="2026-08-13", description="x in this test claim", files=[("a.pdf", b"x")])
 
     assert response.status_code == 303  # the claim was filed regardless
     claim_id = response.headers["location"].rsplit("/", 1)[-1]

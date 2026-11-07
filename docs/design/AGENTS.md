@@ -58,7 +58,10 @@ The terms this file uses, in the sense the course uses them.
 
 ---
 
-## 2. The three agents at a glance
+## 2. The agents at a glance
+
+Three agents were designed first; a fourth, the request agent (section 5.4), was added on
+2026-11-06 to give the workflow its one action, taken by a human.
 
 | | 1. Intake review | 2. Adjuster assistant | 3. Claimant assistant |
 |---|---|---|---|
@@ -373,6 +376,49 @@ material.
 legal questions get a fixed answer pointing to the adjuster.
 
 **Output schema.** `{"answer": "...", "refused": bool}`.
+
+### 5.4 Request agent (added 2026-11-06)
+
+**Objective.** Draft the adjuster's request to the claimant for what's still needed: the one
+*action* in the agentic workflow. The agent drafts; a human sends. Overview and diagram:
+[`AGENTIC-LAYER.md`](AGENTIC-LAYER.md).
+
+**When.** The adjuster clicks *Draft with AI* in the "Request missing information" card on the
+claim page. Synchronous form post, up to a minute. Limit: `AI_DAILY_LIMIT_REQUEST` (default 10).
+
+**Context: a brief, not the documents.** Unlike the other agents it gets no prefetch
+(`Charter.prefetch=False`): only the claim form and the document names (`agent_tools.brief_text`).
+It has to fetch the rest, so its tool use is real and shown in the trace.
+
+| Tool | Returns |
+|---|---|
+| `get_intake_review()` | The latest intake review: summary, findings, what it found missing or unclear, and whether it passed the gate |
+| `get_completeness()` | What the completeness check found missing, the documents on file, and the claim type's document hint |
+| `search_documents(query)` | Matching passages, to check whether something is already provided |
+
+**Output schema.** `{"message": "...", "items": ["..."]}` (at most 5 items). The page joins them
+as the message followed by "What we need:" and the items.
+
+**Gate.** The claimant will read it, so it is held to the claimant rules on the message and every
+item: no amounts (C), no decision or payment wording unless on record (C), no accusations (G5),
+only this claim's ID (G6), only the claimant's email (G7), no injected instructions (G8).
+
+**What people see.** A passed draft is labelled "AI draft (*model* via OpenRouter) -- checked
+automatically; read and edit before sending". A flagged or missing draft is replaced by the
+template (`agents.template_request`, written by code from the completeness check only), labelled
+"Template draft -- not AI-generated", with the gate's reasons. Either way the adjuster edits the
+text in a textarea.
+
+**The action, taken by the adjuster** (`POST /adjuster/claims/{id}/request/send`): separation of
+duties and "no final decision" are checked; the request is stored in `info_requests` with who sent
+it, the draft's run id, whether it came from the AI draft (checked against the server's own draft,
+not trusted from the form) and whether it was edited; the claim goes to NEEDS_INFORMATION with
+`adjuster_request` in `missing`; the claimant is notified.
+
+**The claimant's answer** (`POST /claims/{id}/documents`): documents and/or a note. The claim is
+checked again (`main.check_claim`), facts are extracted from the new files, the template summary is
+rebuilt, open requests are marked answered with the note, and with new documents the intake
+review runs again. The claimant page says "drafted with AI help" on a request the AI drafted.
 
 ---
 

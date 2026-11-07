@@ -30,6 +30,7 @@ separate code paths, not one shared view with role branches.
 Run: uvicorn app:app --reload
 """
 
+import html
 import os
 import uuid
 from datetime import date, datetime, timezone
@@ -49,7 +50,9 @@ from starlette.middleware.sessions import SessionMiddleware
 import storage
 import agents
 import ai_client
+import consistency
 import email_delivery
+import privacy
 from email_delivery import send_email
 from auth import get_current_adjuster, get_current_user, router as auth_router
 from extraction import extract_facts
@@ -71,6 +74,9 @@ from validation import (
 )
 
 DECISIONS = ["APPROVED", "DECLINED", "NEEDS_MORE_REVIEW"]
+FINAL_DECISIONS = {"APPROVED", "DECLINED"}
+DECLINE_REASON_MIN_LENGTH = 10
+DECISION_REASON_MAX_LENGTH = 1000
 
 
 def _base_url(request: Request) -> str:
@@ -211,6 +217,31 @@ def _ask_view(claim_id: str) -> dict:
             "refusal": agents.ADJUSTER_REFUSAL, "not_found": agents.NOT_FOUND}
 
 
+def _request_view(record: dict) -> dict:
+    """The adjuster's "Request missing information" card: the draft to edit, and what was sent.
+
+    The draft is the request agent's latest one when it passed the checks; otherwise the code
+    template (from the completeness check alone), with the reason the AI draft isn't shown."""
+    claim_id = record["claim"]["claim_id"]
+    run = storage.latest_finished_agent_run(claim_id, "request")
+    view = {"ai_on": ai_client.enabled(), "source": "template", "text": agents.template_request(record),
+            "run": run, "note": None, "reasons": [],
+            "limit_reached": storage.agent_runs_today("request") >= agents.CHARTERS["request"].daily_limit(),
+            "sent": list(reversed(record["requests"])),
+            "open": any(r["answered_at"] is None for r in record["requests"]),
+            "final": bool(record["decisions"]) and record["decisions"][-1]["decision"] != "NEEDS_MORE_REVIEW"}
+    if run is None:
+        return view
+    if run["status"] == "passed" and run["output"]:
+        view.update(source="ai", text=agents.request_text(run["output"]))
+    elif run["status"] == "flagged":
+        view.update(note="The AI draft failed automated checks, so the template is shown instead.",
+                    reasons=(run["gate"] or {}).get("reasons", []))
+    else:
+        view["note"] = "No AI draft: " + AI_UNAVAILABLE_REASONS.get(run["error_type"], "the AI assistant was unavailable") + "."
+    return view
+
+
 def _claimant_nav(claimant_email: str) -> dict:
     """Context for the claimant top nav's notification bell (_claimant_header.html).
 
@@ -345,6 +376,27 @@ QUEUE_VIEWS = {
 }
 
 
+def _open_findings(record: dict) -> list[str]:
+    """What the review still has open: the code's consistency checks, plus the latest finished AI
+    intake review's "worth checking" and "missing or unclear" items. Approving over any of them
+    needs an explicit acknowledgement. The code checks count even when the AI is off."""
+    findings = [c["finding"] for c in consistency.check(record)]
+    run = storage.latest_finished_agent_run(record["claim"]["claim_id"], "intake")
+    output = (run or {}).get("output") or {}
+    if (run or {}).get("status") in ("passed", "flagged"):
+        findings += [f.get("finding", "") for f in output.get("worth_checking") or [] if isinstance(f, dict)]
+        findings += [m for m in output.get("missing_or_unclear") or [] if isinstance(m, str)]
+    return [f for f in findings if f.strip()]
+
+
+def _display_status(record: dict) -> str:
+    """The one status a person should see for a claim: its latest decision once there is one,
+    otherwise its intake status. claims.status stays the intake (completeness) status, which the
+    queue and the bell filter on, so decisions are layered on top here instead of written into it.
+    """
+    return record["decisions"][-1]["decision"] if record["decisions"] else record["status"]
+
+
 def _queue_category(record: dict) -> str:
     """Where a claim sits in the queue, by its *latest* decision: Approved or Declined
     finishes it, but "Needs more review" means the adjuster still has to act, so it stays
@@ -466,6 +518,17 @@ def time_ago(iso: str) -> str:
 templates.env.globals["static_url"] = static_url
 templates.env.filters["ago"] = time_ago
 
+# What a person reads for a status or decision code. The codes stay in the data, the forms and
+# the API; pages show these.
+STATUS_LABELS = {
+    "READY_FOR_REVIEW": "Ready for review",
+    "NEEDS_INFORMATION": "Needs information",
+    "NEEDS_MORE_REVIEW": "Needs more review",
+    "APPROVED": "Approved",
+    "DECLINED": "Declined",
+}
+templates.env.filters["status_label"] = lambda code: STATUS_LABELS.get(code, str(code).replace("_", " ").capitalize())
+
 
 @app.exception_handler(Exception)
 async def unhandled_error(request: Request, exc: Exception) -> HTMLResponse:
@@ -489,7 +552,8 @@ def _forbidden(message: str) -> HTMLResponse:
 
 
 def _bad_request(errors: list[str]) -> HTMLResponse:
-    items = "".join(f"<li>{e}</li>" for e in errors)
+    # Messages can carry a filename the user chose, so they're escaped.
+    items = "".join(f"<li>{html.escape(e)}</li>" for e in errors)
     return HTMLResponse(f"<h1>400 Invalid submission</h1><ul>{items}</ul>", status_code=400)
 
 
@@ -658,6 +722,80 @@ def view_claim(request: Request, claim_id: str, user: dict | None = Depends(get_
     )
 
 
+@app.post("/claims/{claim_id}/documents")
+async def add_claim_documents(
+    request: Request,
+    background: BackgroundTasks,
+    claim_id: str,
+    note: str = Form(""),
+    files: list[UploadFile] = File([]),
+    user: dict | None = Depends(get_current_user),
+):
+    """The claimant's answer to a request for information: more documents and/or a note. The
+    claim is checked again, and with new documents the AI intake review runs again, so the
+    adjuster sees a review that includes them."""
+    if user is None:
+        return RedirectResponse(url="/auth/login", status_code=303)
+    record = storage.get_claim(claim_id)
+    if record is None:
+        return templates.TemplateResponse(request, "not_found.html", {"claim_id": claim_id}, status_code=404)
+    if record["claim"]["claimant_email"] != user["email"]:
+        return _forbidden("This claim belongs to a different account.")
+    if record["decisions"] and record["decisions"][-1]["decision"] != "NEEDS_MORE_REVIEW":
+        return _forbidden("This claim already has a final decision.")
+
+    uploads = [f for f in files if f.filename]
+    note = note.strip()
+    errors = []
+    if not uploads and not note:
+        errors.append("Add at least one document or a note for your adjuster.")
+    if len(note) > 1000:
+        errors.append("The note can be at most 1,000 characters.")
+    files_and_sizes = []
+    for upload in uploads:
+        upload.file.seek(0, 2)
+        files_and_sizes.append((upload.filename, upload.file.tell()))
+        upload.file.seek(0)
+    errors += validate_files(files_and_sizes)
+    if len(record["documents"]) + len(uploads) > MAX_FILES:
+        errors.append(f"Too many files (max {MAX_FILES} per claim).")
+    if errors:
+        return _bad_request(errors)
+
+    stored = []
+    for upload in uploads:
+        content = await upload.read()
+        stored_path = storage.save_uploaded_file(claim_id, upload.filename, content)
+        storage.add_document(claim_id=claim_id, filename=stored_path.name, stored_path=stored_path,
+                             content_type=upload.content_type, size_bytes=len(content))
+        stored.append({"filename": stored_path.name, "stored_path": stored_path, "content_type": upload.content_type})
+    facts = extract_facts("", stored)
+    if facts:
+        storage.add_facts(claim_id, facts)
+
+    record = storage.get_claim(claim_id)
+    claim = record["claim"]
+    result = check_claim({"claim_id": claim_id, "policy_id": claim["policy_id"], "incident_date": claim["incident_date"],
+                          "description": claim["description"], "documents": claim["documents"]})
+    storage.answer_info_requests(claim_id, note)
+    storage.set_claim_status(claim_id, result["status"], result["missing"])
+    if stored:
+        storage.add_summary(claim_id, generate_summary(
+            {"policy_id": claim["policy_id"], "incident_date": claim["incident_date"], "description": claim["description"],
+             "documents": claim["documents"], "claim_type": claim["claim_type"]}, record["facts"]))
+
+    base_url = _base_url(request)
+    if result["status"] == NEEDS_INFORMATION:
+        message = f"Thanks, we've added your update. We still need: {', '.join(result['missing'])}."
+    else:
+        message = "Thanks, we've added your update. Your claim is back with your adjuster for review."
+        _notify_adjusters(claim_id, claim["claim_type"], base_url, background)
+    _notify(claim_id, user["email"], message, base_url, background)
+    if stored:
+        _start_intake_review(claim_id, background)
+    return RedirectResponse(url=f"/claims/{claim_id}", status_code=303)
+
+
 @app.get("/claims/{claim_id}/documents/{filename}")
 def download_document(claim_id: str, filename: str, user: dict | None = Depends(get_current_user)):
     if user is None:
@@ -805,9 +943,13 @@ def adjuster_view_claim(request: Request, claim_id: str, adjuster: dict | None =
             "record": record,
             "adjuster": adjuster,
             "decisions": DECISIONS,
+            "display_status": _display_status(record),
+            "open_findings": _open_findings(record),
+            "code_checks": consistency.check(record),
             "facts_view": _group_facts(record["facts"]),
             "ai_review": _intake_review_view(claim_id),
             "ai_ask": _ask_view(claim_id),
+            "info_request": _request_view(record),
             **_adjuster_nav(),
             "READY_FOR_REVIEW": READY_FOR_REVIEW,
             "NEEDS_INFORMATION": NEEDS_INFORMATION,
@@ -844,6 +986,55 @@ def ask_about_claim(claim_id: str, question: str = Form(""),
     return RedirectResponse(url=f"/adjuster/claims/{claim_id}#ask", status_code=303)
 
 
+def _conflict_of_interest(adjuster: dict, record: dict) -> bool:
+    """Separation of duties: an adjuster linked to the claimant who filed this claim can't act on it."""
+    return bool(adjuster["linked_claimant_email"]) and adjuster["linked_claimant_email"] == record["claim"]["claimant_email"]
+
+
+@app.post("/adjuster/claims/{claim_id}/request/draft")
+def draft_request(claim_id: str, adjuster: dict | None = Depends(get_current_adjuster)):
+    """Ask the request agent for a draft (waits for it, up to a minute). Drafting changes nothing."""
+    if adjuster is None:
+        return RedirectResponse(url="/adjuster/login", status_code=303)
+    if storage.get_claim(claim_id) is None:
+        return RedirectResponse(url="/adjuster", status_code=303)
+    if ai_client.enabled():
+        agents.draft_info_request(claim_id, adjuster["username"])
+    return RedirectResponse(url=f"/adjuster/claims/{claim_id}#request", status_code=303)
+
+
+@app.post("/adjuster/claims/{claim_id}/request/send")
+def send_info_request(request: Request, background: BackgroundTasks, claim_id: str, message: str = Form(""),
+                      source: str = Form(""), adjuster: dict | None = Depends(get_current_adjuster)):
+    """The one action in the agentic workflow, and a human takes it: the adjuster's edited request
+    goes to the claimant, and the claim waits on them (NEEDS_INFORMATION) until they answer."""
+    if adjuster is None:
+        return RedirectResponse(url="/adjuster/login", status_code=303)
+    record = storage.get_claim(claim_id)
+    if record is None:
+        return RedirectResponse(url="/adjuster", status_code=303)
+    if _conflict_of_interest(adjuster, record):
+        return _forbidden("Separation of duties: this adjuster account is linked to the claimant who filed this claim.")
+    message = message.strip().replace("\r\n", "\n")
+    if not message or len(message) > 2000:
+        return _bad_request(["The request needs a message of at most 2,000 characters."])
+    view = _request_view(record)
+    if view["final"]:
+        return _forbidden("A final decision is already recorded on this claim.")
+    # Recorded honestly: whether the text an adjuster sends came from the AI draft, and whether
+    # they changed it. The source is checked against the server's own draft, not trusted from the form.
+    ai_drafted = source == "ai" and view["source"] == "ai"
+    storage.add_info_request(claim_id, message, adjuster["username"],
+                             run_id=view["run"]["id"] if ai_drafted else None, ai_drafted=ai_drafted,
+                             edited=message != view["text"].strip())
+    missing = [m for m in record["missing"] if m != "adjuster_request"] + ["adjuster_request"]
+    storage.set_claim_status(claim_id, NEEDS_INFORMATION, missing)
+    _notify(claim_id, record["claim"]["claimant_email"],
+            "Your adjuster has asked for more information to continue reviewing your claim. "
+            "See the request on your claim page.", _base_url(request), background)
+    return RedirectResponse(url=f"/adjuster/claims/{claim_id}#request", status_code=303)
+
+
 @app.get("/adjuster/ai")
 def adjuster_ai_settings(request: Request, adjuster: dict | None = Depends(get_current_adjuster)):
     """Which approved model answers first, and today's AI usage against the daily limits."""
@@ -853,7 +1044,8 @@ def adjuster_ai_settings(request: Request, adjuster: dict | None = Depends(get_c
         request, "adjuster_ai.html",
         {"adjuster": adjuster, "active": "ai", "ai_on": ai_client.enabled(), "models": agents.model_order(),
          "chosen": storage.get_ai_setting("model"), "usage": agents.usage_today(),
-         "claimant_chat": agents.claimant_chat_enabled(), **_adjuster_nav()},
+         "claimant_chat": agents.claimant_chat_enabled(), "data_policy": privacy.data_policy(),
+         "free_tier": [m for m in agents.model_order() if privacy.is_free_tier(m)], **_adjuster_nav()},
     )
 
 
@@ -868,7 +1060,9 @@ def adjuster_choose_model(model: str = Form(""), adjuster: dict | None = Depends
 
 
 @app.post("/adjuster/claims/{claim_id}/decision")
-def record_decision(request: Request, background: BackgroundTasks, claim_id: str, decision: str = Form(""), adjuster: dict | None = Depends(get_current_adjuster)):
+def record_decision(request: Request, background: BackgroundTasks, claim_id: str, decision: str = Form(""),
+                    reason: str = Form(""), acknowledge: str = Form(""),
+                    adjuster: dict | None = Depends(get_current_adjuster)):
     if adjuster is None:
         return RedirectResponse(url="/adjuster/login", status_code=303)
 
@@ -888,14 +1082,42 @@ def record_decision(request: Request, background: BackgroundTasks, claim_id: str
             "Separation of duties: this adjuster account is linked to the claimant who filed this claim."
         )
 
-    storage.add_decision(claim_id, decision, adjuster["username"])
-    _notify(
-        claim_id,
-        record["claim"]["claimant_email"],
-        f"An adjuster has recorded a decision on your claim: {decision.replace('_', ' ').title()}.",
-        _base_url(request),
-        background,
-    )
+    # The page hides the buttons in these cases, but the server is what enforces them.
+    if record["status"] != READY_FOR_REVIEW:
+        return _forbidden("Decisions open once the claim is complete.")
+    latest = record["decisions"][-1]["decision"] if record["decisions"] else None
+    if latest in FINAL_DECISIONS:
+        return _forbidden("A final decision is already recorded on this claim.")
+    if decision == latest:
+        # A repeat (a double click, a resubmitted form) adds no row and sends no second notice.
+        return RedirectResponse(url=f"/adjuster/claims/{claim_id}", status_code=303)
+
+    # An adverse decision needs a recorded reason, and the claimant is told it.
+    reason = reason.strip().replace("\r\n", "\n")
+    if decision == "DECLINED" and len(reason) < DECLINE_REASON_MIN_LENGTH:
+        return _bad_request([f"A decline needs a written reason (at least {DECLINE_REASON_MIN_LENGTH} "
+                             "characters). It's recorded with the decision and sent to the claimant."])
+    if len(reason) > DECISION_REASON_MAX_LENGTH:
+        return _bad_request([f"The reason can be at most {DECISION_REASON_MAX_LENGTH:,} characters."])
+
+    open_findings = _open_findings(record)
+    if decision == "APPROVED" and open_findings and acknowledge != "yes":
+        count = len(open_findings)
+        return _bad_request([f"{count} review finding{'s are' if count != 1 else ' is'} still open. Tick "
+                             "\"I've checked the open findings\" to approve anyway; the approval records it."])
+
+    storage.add_decision(claim_id, decision, adjuster["username"], reason, open_findings=len(open_findings))
+    # Only a final decision goes to the claimant. "Needs more review" is the adjuster's own marker
+    # for a closer look; emailing it would tell the claimant nothing they can act on.
+    if decision in FINAL_DECISIONS:
+        _notify(
+            claim_id,
+            record["claim"]["claimant_email"],
+            f"An adjuster has recorded a decision on your claim: {decision.replace('_', ' ').title()}."
+            + (f" Reason: {reason}" if reason else ""),
+            _base_url(request),
+            background,
+        )
     return RedirectResponse(url=f"/adjuster/claims/{claim_id}", status_code=303)
 
 

@@ -12,6 +12,8 @@ Tools return plain JSON-able values. "Nothing found" is a normal result, not an 
 import re
 from dataclasses import dataclass, field
 
+import consistency
+import privacy
 import storage
 from main import READY_FOR_REVIEW
 from validation import CLAIM_TYPES
@@ -54,7 +56,8 @@ def claim_scope(claim_id: str) -> Scope | None:
     claim = record["claim"]
     scope = Scope(claim_id=claim_id, record=record)
     scope.sources["claim form"] = [claim_form_text(claim)]
-    scope.sources["description"] = [claim["description"] or "(no description given)"]
+    # Sources are redacted once, here: the model and the gate then read the same text (privacy.py).
+    scope.sources["description"] = [privacy.redact(claim["description"]) or "(no description given)"]
     budget = TOTAL_CHARS
     for doc in record["documents"]:
         pages = storage.read_document_pages(claim_id, doc["filename"]) or []
@@ -66,7 +69,7 @@ def claim_scope(claim_id: str) -> Scope | None:
             room = min(PER_DOCUMENT_CHARS - used, budget)
             if room <= 0:
                 break
-            kept.append(page[:room])
+            kept.append(privacy.redact(page[:room]))
             used += len(kept[-1])
             budget -= len(kept[-1])
         if sum(len(p) for p in kept) < sum(len(p) for p in pages):
@@ -95,6 +98,14 @@ def context_text(scope: Scope) -> str:
     if claim_type in CLAIM_TYPES:
         parts.append(f"=== DOCUMENT HINT FOR THIS CLAIM TYPE ===\n{CLAIM_TYPES[claim_type][1]}")
     return "\n\n".join(parts)
+
+
+def brief_text(scope: Scope) -> str:
+    """The short start for the request agent: the claim form and document names, no document text.
+    Everything else it needs it has to fetch with its tools, so the trace shows what it looked at."""
+    claim = scope.record["claim"]
+    return (f"=== CLAIM {claim['claim_id']} ===\n{claim_form_text(claim)}\n"
+            f"Documents on file: {', '.join(claim['documents']) or 'none'}")
 
 
 # --- Intake tools -----------------------------------------------------------------------------
@@ -179,6 +190,31 @@ def get_intake_review(scope: Scope) -> dict:
     return {"available": True, "gate_status": run["status"], "review": run["output"]}
 
 
+# --- Request tool -----------------------------------------------------------------------------
+
+# The completeness check's field names, as a claimant reads them. "adjuster_request" is the entry
+# added while an adjuster's request for information is open.
+MISSING_WORDS = {"policy_id": "policy ID", "incident_date": "incident date",
+                 "description": "description of what happened", "documents": "at least one supporting document",
+                 "adjuster_request": "the information your adjuster asked for"}
+
+
+def get_completeness(scope: Scope) -> dict:
+    """What the deterministic completeness check found missing, what the code's consistency checks
+    found (claim form vs. documents), the documents on file and which documents usually help: for
+    the claim type, and for what the documents describe when that differs."""
+    record = scope.record
+    claim_type = record["claim"]["claim_type"]
+    checks = consistency.check(record)
+    helps = [CLAIM_TYPES[claim_type][1]] if claim_type in CLAIM_TYPES else []
+    for c in checks:
+        helps += [CLAIM_TYPES[t][1] for t in c.get("fits", [])[:1] if CLAIM_TYPES[t][1] not in helps]
+    return {"missing_fields": [MISSING_WORDS.get(m, m) for m in record["missing"] if m != "adjuster_request"],
+            "consistency_checks": [{"kind": c["kind"], "ask": c["ask"]} for c in checks],
+            "documents_on_file": record["claim"]["documents"],
+            "documents_that_usually_help": " ".join(helps) or None}
+
+
 # --- Claimant tools ---------------------------------------------------------------------------
 
 def _own_claim(scope: Scope, claim_id) -> dict | None:
@@ -217,9 +253,7 @@ def get_missing_items(scope: Scope, claim_id) -> dict:
     record = _own_claim(scope, claim_id)
     if record is None:
         return {"found": False}
-    words = {"policy_id": "policy ID", "incident_date": "incident date", "description": "description of what happened",
-             "documents": "at least one supporting document"}
-    return {"found": True, "missing": [words.get(m, m) for m in record["missing"]]}
+    return {"found": True, "missing": [MISSING_WORDS.get(m, m) for m in record["missing"]]}
 
 
 def get_document_hints(scope: Scope, claim_type) -> dict:
@@ -257,6 +291,18 @@ TOOLS = {
             {"source": {"type": "string"}, "page": {"type": "integer"}}, ["source"])),
         "get_intake_review": (get_intake_review, _spec(
             "get_intake_review", "The latest automated intake review of this claim and whether it passed checks.")),
+    },
+    "request": {
+        "get_intake_review": (get_intake_review, _spec(
+            "get_intake_review", "The latest automated intake review of this claim: its summary, findings and "
+                                 "what it found missing or unclear, and whether it passed checks.")),
+        "get_completeness": (get_completeness, _spec(
+            "get_completeness", "What the completeness check found missing, the documents on file, and "
+                                "which documents usually help for this claim type.")),
+        "search_documents": (search_documents, _spec(
+            "search_documents", "Find passages in this claim's documents that match a few keywords, to check "
+                                "whether something is already provided.",
+            {"query": {"type": "string", "description": "a few keywords"}}, ["query"])),
     },
     "claimant": {
         "list_my_claims": (list_my_claims, _spec("list_my_claims", "The signed-in claimant's own claims.")),

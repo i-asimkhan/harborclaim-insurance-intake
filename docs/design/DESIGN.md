@@ -19,9 +19,9 @@ runs but stands in for the real thing (see `MOCKS.md`).
 |---|---|---|---|
 | 1 | Claimant | Submits claim details and supporting documents | Built — Google sign-in, sees only their own claims |
 | 2 | Claim intake | Validates input, stores the claim and its files | Built — `app.py`, `validation.py`, `storage.py` |
-| 3 | AI extractor | Pulls structured facts (dates, amounts, incident type) from documents. Never authoritative. | Mocked — `extraction.py`, regex only |
+| 3 | AI extractor | Pulls structured facts (dates, amounts, incident type) from documents. Never authoritative. | Mocked — `extraction.py`, regex only. The AI review reads the same text and cites it, but never writes facts |
 | 4 | Completeness check | Returns `READY_FOR_REVIEW` or `NEEDS_INFORMATION` with the missing fields named. Deterministic. | Built — `main.py`; the standalone Assignment 7 version is `claim-intake-streamlit/logic.py` in the course submission |
-| 5 | AI summary | Drafts a summary for the adjuster. A draft only. | Mocked — `summary.py`, fixed template |
+| 5 | AI summary | Drafts a summary for the adjuster. A draft only. | **Built (Phase 5)** — the intake review agent (`agents.py`), checked by `agent_gate.py`; the template `summary.py` is the labelled fallback. Two more agents answer questions: adjuster (per claim) and claimant (own claims only) |
 | 6 | Adjuster review | A human reads the summary *and* the source documents, then decides | Built — separate adjuster login, separation-of-duties check |
 | 7 | Claims store | Claims, documents, status history, decisions, login audit trail | Built — SQLite (`storage.py`) |
 | 8 | Claimant notification | Tells the claimant the status, or exactly what is missing | Mocked — logged on two channels, not sent |
@@ -50,12 +50,14 @@ Built today:
 - The current summary only restates fields already stored on the claim, so it cannot
   introduce a date, amount, or status that isn't in the record.
 
-For a real AI summary (designed, not built):
+For the real AI summary (**built in Phase 5**, `agents.py` and `agent_gate.py`):
 
-- Each sentence cites the document and page it came from.
-- An automated check compares the summary's dates, amounts, and status words against the
-  extracted facts. Any mismatch flags the summary and routes the case to human review. The
-  flag and the adjuster's resolution go into the audit trail.
+- Each sentence cites the document, page and a word-for-word quote (gate rules G2-G3).
+- An automated check compares the summary's dates and amounts against the cited quotes and the
+  tool results, and catches decision, coverage and payment wording (G4-G5) and injected
+  instructions (G8). Any failure flags the review: the failing lines are marked, the reasons
+  listed, and the label says "failed automated checks". Every run, flagged or not, is kept in
+  the append-only `agent_runs` log. (Not built: recording the adjuster's resolution of a flag.)
 - A citation does not fix a wrong sentence. If the source says $2,150 and the summary says
   $2,500, adding a reference to the source only makes the error easier to trace. The sentence
   has to be rewritten to match the source.
@@ -75,8 +77,11 @@ Built today:
 - The full extracted-facts table and document list are always shown next to the summary, so a
   fact the summary leaves out is still in front of the adjuster.
 
-For a real AI summary (designed, not built):
+For the real AI summary (**built in Phase 5**):
 
-- A coverage check confirms that every extracted fact appears in the summary or is listed as
-  "not covered in this summary".
-- A summary that fails the check is flagged and the case goes to human review.
+- Code (`agent_gate.not_summarised`), not the model, lists every extracted amount and date that
+  appears in no summary sentence or finding, under the review as "Not summarised -- listed by
+  code, not the AI".
+- What code can't catch is a *finding* the model never makes (a conflict it doesn't mention).
+  That is measured by the golden set instead (`scripts/eval_agents.py`): the one model that
+  missed most conflicts there was kept out of `AI_MODELS` (AGENTS.md section 11.4).

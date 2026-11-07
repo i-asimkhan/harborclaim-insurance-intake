@@ -17,6 +17,27 @@ in this project is made up for the class. Nothing here is a real claims system.
 | Summary generation | `summary.py` | Assembles a paragraph from fields already on the claim plus whatever extraction found, using a fixed string template. | No model call. Generates nothing that isn't a direct restatement of data already stored and visible on the same page -- it cannot "hallucinate" a fact, because it has no way to introduce one that isn't already in the database. |
 | Notifications | `storage.add_notification` / `app._notify` / `email_delivery.py` | Writes a row to the `notifications` table on two "channels" (`in_app`, `email`) every time a claim's status changes or an adjuster decides on it. The email channel goes through `email_delivery.send_email`, and each row records what happened: `simulated`, `sent` or `failed`. | **By default nothing is sent**: with `EMAIL_PROVIDER` unset the email channel is a label on a database row, shown as "Email (simulated)". Real delivery through Azure Communication Services exists behind `EMAIL_PROVIDER=acs` and has been run once against the real service (one claim-filed email, locally); the hosted site is not switched on. No push service; the in-app channel is only a row shown on page load. |
 
+## Phase 5: real AI next to the mocks
+
+With AI switched on (`AI_PROVIDER=openrouter`, see the README), a real model now does what the
+summary mock stands in for. The mocks stay, unchanged, as the fallback.
+
+| What the adjuster or claimant sees | When | Label on the page |
+|---|---|---|
+| AI intake review: summary and "worth checking" findings, each cited | AI on, the code checks passed | "AI draft (*model* via OpenRouter) -- checked against the documents" |
+| The same review with failing lines marked and the reasons listed | AI on, the code checks flagged it | "failed automated checks" |
+| Template summary (`summary.py`) | AI off, a model down or over the daily limit | "Automated draft -- not AI-generated" |
+| Fixed reply to a decision or coverage question | Always: written by code, no model call | "Fixed reply -- not AI-generated" |
+| Claimant answer (`/help`) | AI on, `AI_CLAIMANT_CHAT=true`, checks passed | "AI answer (*model* via OpenRouter)"; anything flagged shows the fixed reply |
+| Draft request for missing information (adjuster) | AI on, the adjuster clicked Draft with AI, checks passed | "AI draft (*model* via OpenRouter) -- checked automatically; read and edit before sending" |
+| The same card with AI off, a flagged draft or a model down | Always available | "Template draft -- not AI-generated" (written by code from the completeness check) |
+| The request on the claimant's page | Once the adjuster sends it | "drafted with AI help, then read and sent by your adjuster" when the AI drafted it; nothing extra for a template |
+
+Fact extraction (`extraction.py`) and the facts table stay regex-based in every case: the AI
+review reads the same document text but never writes facts, statuses or decisions. Notifications
+are unchanged. The models, prompts and test results are in `PROMPTS.md`, `AI_USAGE.md` and
+`docs/design/AGENTS.md`.
+
 ## Why mocks instead of nothing
 
 Early in this project these three stages simply didn't exist -- the pipeline stopped at
@@ -57,7 +78,8 @@ those are placeholders standing in for something not yet built.
   text, with inline citations back to the specific document and page a claim was drawn
   from, plus a way to flag when the generated text says something the source documents
   don't support -- the exact failure mode the Design Deliverable's pressure test asks
-  about.
+  about. **Built in Phase 5** as the intake review agent (above); what's still missing is a
+  paid or self-hosted model for higher volume and a document-AI service for scanned files.
 - **Notifications**: real email works behind a flag (`email_delivery.py`, Azure
   Communication Services, first real send done locally) but the hosted site still has to be
   switched on; the in-app channel still needs a push/websocket mechanism to

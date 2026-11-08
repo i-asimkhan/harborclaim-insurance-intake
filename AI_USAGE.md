@@ -52,7 +52,7 @@ adjuster edits and sends). The prompts are in `PROMPTS.md`; the diagram and walk
   as failover, via OpenRouter (free tier, $0), reasoning off, temperature 0. Chosen by testing:
   12 free models screened in 3 probe rounds (AGENTS.md section 11.4). An adjuster can put either
   first on the AI usage page.
-- **Prompts:** `intake-v6`, `adjuster-v2`, `claimant-v2`, `request-v1` (`agents.py`; v5 for the golden-set table below). Every output goes through the code gate
+- **Prompts:** `intake-v6`, `adjuster-v3`, `claimant-v2`, `request-v2` (`agents.py`; v5 for the golden-set table below). Every output goes through the code gate
   (`agent_gate.py`, rules G1-G9) before an adjuster sees it.
 - **Golden-set eval, 2026-11-02** (`python scripts/eval_agents.py`; 6 fictional claims in
   `sample_data/golden/`; replies recorded in `tests/fixtures/ai/intake/` and replayed by the tests):
@@ -87,3 +87,72 @@ adjuster edits and sends). The prompts are in `PROMPTS.md`; the diagram and walk
 - **First live try of the claimant assistant, 2026-11-04:** two harmless answers ("I can help you
   check your claims") were replaced by the fixed reply because gate rule C read the verb "check"
   as a payment check. Narrowed with tests; the claimant prompt now names the New claim link.
+
+## Adjuster review fixes, 2026-11-06 (PR #3)
+
+**Tool:** Claude Code (Claude Opus 5.5). **Prompt:** the owner reviewed the adjuster page for one
+real-looking claim (CLM-6AD24F55: filed as Auto, notes describing a slip-and-fall, two decisions
+8 seconds apart, the description "ggregrrg3wt3g3") and asked Claude Code to review what it showed,
+then to "fix all of these one by one". Claude Code listed 14 problems; each became one commit with
+its own tests, in `tests/test_review_fixes.py`.
+
+### What Claude Code built
+
+| # | Problem on the page | Change | Commit |
+|---|---|---|---|
+| 1 | Badge said Ready for review after a Needs more review decision | Badge shows the latest decision; `claims.status` stays the intake status the queue filters on | `c57aa3e` |
+| 2 | Two identical decisions 8 s apart | A repeat of the latest decision records nothing and sends nothing | `6e7e511` |
+| 3 | A final decision could be overwritten by a direct POST | Refused on the server, as are decisions on incomplete claims | `6e7e511` |
+| 4 | No reason recorded with a decision | `reason` column; a decline needs one (10+ characters) and the claimant is told it; exact times in the history | `48136ba` |
+| 5 | Claim data, including health details, went to free-tier models | `privacy.py`: emails, phones, SSNs and card numbers redacted from sources; `AI_DATA_POLICY` setting | `64ab31c` |
+| 6 | "Needs more review" emailed the claimant | Only Approved and Declined notify | `08a8830` |
+| 7 | Approve was one click away with findings open | Approving needs "I've checked the open findings"; the count is recorded | `aaf81ac` |
+| 8 | Info-request template asked an "Auto" slip-and-fall claimant for a police report | Template and request agent ask to confirm type and date, and for documents that fit what the notes describe (`request-v2`) | `ce61110` |
+| 9 | "What is this about?" got "Not found", labelled "checked against the documents" | Broad questions answered from the sources (`adjuster-v3`); not-found has its own label | `f9ea98c` |
+| 10 | "claim form, p. 1" three times under one sentence | One citation per source and page, linked to the document page | `c77aa62` |
+| 11 | "Not summarised listed by code, not the AI": a bare date | "Dates and amounts the summary doesn't mention", each with the line it came from | `2955d07` |
+| 12 | Raw codes such as `NEEDS_MORE_REVIEW` on the pages | Plain labels everywhere; codes stay in the data | `c322b9d` |
+| 13 | Intake accepted "ggregrrg3wt3g3" as a description | At least 3 real words, making up at least half of the text | `424eeaa` |
+| 14 | The type mismatch was left to the AI | `consistency.py`: claim type vs. described incidents, incident date vs. document dates, by code; counted as open findings | `34e3b8a` |
+
+- **`privacy.py`** runs when the agents' sources are built (`agent_tools.claim_scope`), so the
+  model and the gate read the same redacted text and quote checks still line up. Card numbers are
+  removed only if they pass the Luhn checksum, so long policy and claim numbers stay.
+- **`AI_DATA_POLICY`:** `test` (default, unchanged behaviour: any configured model, fictional claims
+  only) or `production` (`:free` models and `openrouter/free` refused; OpenRouter asked for
+  providers that don't collect prompts). The AI usage page shows which is active.
+- **`consistency.py`** works from the keyword scan's facts, so it flags a mismatch even when AI is
+  off or the AI review failed its checks.
+
+### What was verified
+
+- **By tests (Claude Code ran them):** 377 tests pass (`python -m pytest -q`), browser tests
+  included. Five commits (`c57aa3e`, `6e7e511`, `48136ba`, `64ab31c`, `aaf81ac`) were also run on
+  their own in a separate git worktree, without the owner's then-uncommitted Phase 5.7 work.
+  `main.py` and `test_main.py` (the graded minimum) are unchanged. Both GitHub checks on PR #3 pass.
+- **A data-loss risk caught in review:** `init_db` dropped `adjuster_decisions` whenever its columns
+  changed, so adding `reason` would have wiped every recorded decision. It now drops a table only
+  when a required column is missing; a test builds the old table, runs `init_db` twice and checks
+  the decision survives.
+- **Not verified yet:** `request-v2` and `adjuster-v3` have not run against a live model.
+  `scripts/eval_agents.py` covers only the intake agent, so they are being checked live in the
+  app. The request agent had not run against the real model at the time of the PR.
+
+### Checked by the owner
+
+To be ticked by the owner. Claude Code can't confirm these on the owner's behalf.
+
+- [ ] Read the PR #3 diff
+- [ ] Saw the 14 fixes on the local site (port 8123)
+- [ ] Ran the test suite locally
+- [ ] Ran `request-v2` and `adjuster-v3` live
+
+### Known limits
+
+- **The keyword scan misses negation.** "No injuries were reported" still counts as bodily
+  injury, so `consistency.py` can flag a type mismatch on such a phrase. It flags; it never decides.
+- **The description rule is a heuristic.** It stops a keyboard mash, but any three real words pass.
+  It doesn't judge whether a description is true or complete.
+- **Redaction is pattern-based.** Names, addresses and medical details are not removed. Real claims
+  need `AI_DATA_POLICY=production`, a paid no-retention model, and a provider agreement covering
+  retention and health data.

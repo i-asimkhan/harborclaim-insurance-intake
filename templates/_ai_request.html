@@ -1,10 +1,14 @@
 {# "Request missing information" (Phase 5), adjuster side. The request agent only drafts; the
    adjuster edits and sends, and only sending changes the claim. Labels follow AGENTS.md section 9:
-   "AI draft" only on text a model wrote and the checks passed; the template is fixed code text.
-   Model text is always autoescaped -- never the safe filter. #}
+   the AI badge only on text a model wrote and the checks passed; the standard request is plain
+   app text. Folded unless the claim is waiting on information, a draft exists or a request is open
+   (or the page is loaded at #request). Model text is always autoescaped -- never the safe filter. #}
+{% from "_ai_badge.html" import ai_badge %}
 {% set r = info_request %}
-<div class="card ai-card" id="request">
-  <h2>Request missing information <span class="hint">{% if r.ai_on %}the AI agent drafts it, you edit and send it{% else %}edit the template and send it{% endif %}</span></h2>
+{% set unfold = record.status != READY_FOR_REVIEW or r.run or r.open %}
+<details class="card fold{% if r.source == 'ai' %} ai-card{% endif %}" id="request"{% if unfold %} open{% endif %}>
+  <summary><h2>Request missing information{% if r.open %} <span class="fold-count">open</span>{% endif %}</h2>
+    <span class="hint">{% if r.ai_on %}The AI agent drafts it; you edit and send it{% else %}Edit the standard request and send it{% endif %}</span></summary>
   {% if r.final %}
   <p class="hint">A final decision is recorded, so no further requests can be sent.</p>
   {% else %}
@@ -14,15 +18,15 @@
     <span class="hint">Takes up to a minute. The agent looks up the intake review and the completeness check itself; its steps are under AI trace.</span>
   </form>
   {% elif r.ai_on %}
-  <p class="hint">Today's AI draft limit is reached; the template below works the same way.</p>
+  <p class="hint">Today's AI draft limit is reached; the standard request below works the same way.</p>
   {% else %}
-  <p class="hint">The AI assistant is off on this site; the template below works the same way.</p>
+  <p class="hint">AI isn't available; the standard request below works the same way.</p>
   {% endif %}
 
   {% if r.source == "ai" %}
-  <p><span class="ai-tag">AI draft ({{ r.run.model or "unknown model" }} via OpenRouter) -- checked automatically; read and edit before sending</span></p>
+  <p>{{ ai_badge("Checked. Read and edit before sending", r.run.model) }}</p>
   {% else %}
-  <p><span class="mock-tag">Template draft -- not AI-generated</span>{% if r.note %} <span class="hint">{{ r.note }}</span>{% endif %}</p>
+  {% if r.note %}<p class="hint">{{ r.note }}</p>{% endif %}
   {% if r.reasons %}
   <div class="ai-reasons"><ul>
     {% for reason in r.reasons %}<li><span class="mono">{{ reason.rule }}</span> {{ reason.where }}: {{ reason.detail }}</li>{% endfor %}
@@ -50,7 +54,7 @@
       {% endif %}
       {% endfor %}
     </ol>
-    <p class="hint">Prompt {{ r.run.prompt_version }} &middot; {{ ((r.run.latency_ms or 0) / 1000) | round(1) }} s &middot; drafted by {{ r.run.actor }}</p>
+    <p class="hint">Model {{ r.run.model or "unknown" }} via OpenRouter &middot; prompt {{ r.run.prompt_version }} &middot; {{ ((r.run.latency_ms or 0) / 1000) | round(1) }} s &middot; drafted by {{ r.run.actor }}</p>
   </details>
   {% endif %}
   {% endif %}
@@ -61,7 +65,7 @@
   <details class="ai-qa"{% if loop.first %} open{% endif %}>
     <summary class="ai-question">
       <span title="{{ s.sent_at }}">{{ s.sent_at | ago }}</span> by {{ s.sent_by }} &middot;
-      {% if s.ai_drafted %}AI draft{% if s.edited %}, edited{% else %}, unchanged{% endif %}{% else %}template{% if s.edited %}, edited{% endif %}{% endif %} &middot;
+      {% if s.ai_drafted %}AI draft{% if s.edited %}, edited{% else %}, unchanged{% endif %}{% else %}standard request{% if s.edited %}, edited{% endif %}{% endif %} &middot;
       {% if s.answered_at %}<strong>answered</strong> <span class="hint" title="{{ s.answered_at }}">{{ s.answered_at | ago }}</span>{% else %}waiting on the claimant{% endif %}
     </summary>
     <p class="request-message">{{ s.message }}</p>
@@ -69,4 +73,4 @@
   </details>
   {% endfor %}
   {% endif %}
-</div>
+</details>

@@ -22,16 +22,20 @@ in this project is made up for the class. Nothing here is a real claims system.
 With AI switched on (`AI_PROVIDER=openrouter`, see the README), a real model now does what the
 summary mock stands in for. The mocks stay, unchanged, as the fallback.
 
-| What the adjuster or claimant sees | When | Label on the page |
+Only AI is labelled: model-written text carries the purple `AI` badge and its check result
+(AGENTS.md section 9). Text without the badge is the app's own: a template, a fixed reply or a
+rule check.
+
+| What the adjuster or claimant sees | When | On the page |
 |---|---|---|
-| AI intake review: summary and "worth checking" findings, each cited | AI on, the code checks passed | "AI draft (*model* via OpenRouter) -- checked against the documents" |
-| The same review with failing lines marked and the reasons listed | AI on, the code checks flagged it | "failed automated checks" |
-| Template summary (`summary.py`) | AI off, a model down or over the daily limit | "Automated draft -- not AI-generated" |
-| Fixed reply to a decision or coverage question | Always: written by code, no model call | "Fixed reply -- not AI-generated" |
-| Claimant answer (`/help`) | AI on, `AI_CLAIMANT_CHAT=true`, checks passed | "AI answer (*model* via OpenRouter)"; anything flagged shows the fixed reply |
-| Draft request for missing information (adjuster) | AI on, the adjuster clicked Draft with AI, checks passed | "AI draft (*model* via OpenRouter) -- checked automatically; read and edit before sending" |
-| The same card with AI off, a flagged draft or a model down | Always available | "Template draft -- not AI-generated" (written by code from the completeness check) |
-| The request on the claimant's page | Once the adjuster sends it | "drafted with AI help, then read and sent by your adjuster" when the AI drafted it; nothing extra for a template |
+| AI intake review: summary and "worth checking" findings, each cited | AI on, the code checks passed | `AI` badge + "Checked against the documents" |
+| The same review with failing lines marked and the reasons listed | AI on, the code checks flagged it | Amber `AI` badge + "Failed checks" |
+| Standard summary (`summary.py`, the template) | AI off, a model down or over the daily limit | No badge; "No AI review: *reason*. Showing the standard summary." |
+| Fixed reply to a decision or coverage question | Always: written by code, no model call | No badge; just the sentence |
+| Claimant answer (`/help`) | AI on, `AI_CLAIMANT_CHAT=true`, checks passed | `AI` badge + "Checked"; anything flagged shows the fixed reply |
+| Draft request for missing information (adjuster) | AI on, the adjuster clicked Draft with AI, checks passed | `AI` badge + "Checked. Read and edit before sending" |
+| The same card with AI off, a flagged draft or a model down | Always available | No badge: the standard request (written by code from the completeness check) |
+| The request on the claimant's page | Once the adjuster sends it | "drafted with AI help, then read and sent by your adjuster" when the AI drafted it; nothing extra otherwise |
 
 Fact extraction (`extraction.py`) and the facts table stay regex-based in every case: the AI
 review reads the same document text but never writes facts, statuses or decisions. Notifications

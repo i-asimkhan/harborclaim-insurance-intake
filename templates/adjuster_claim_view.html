@@ -30,7 +30,7 @@
           <h2>Missing from the claimant</h2>
           <ul class="missing-list">
             {% for field in record.missing %}
-            <li>{{ field }}</li>
+            <li>{{ field | missing_label }}</li>
             {% endfor %}
           </ul>
         </div>
@@ -63,10 +63,12 @@
           </dl>
         </div>
 
+        {# The findings the approve acknowledgement refers to: rule checks, then the AI review. #}
+        <div class="stack" id="findings">
         {% if code_checks %}
-        <div class="card mock-card" id="code_checks">
-          <h2>Consistency checks <span class="mock-tag">By code -- not AI</span></h2>
-          <p class="hint">The claim form compared with what the keyword scan found in the documents. Flags only; check the originals.</p>
+        <div class="card" id="code_checks">
+          <h2>Consistency checks <span class="fold-count">{{ code_checks | length }}</span></h2>
+          <p class="hint">The claim form compared with the documents by HarborClaim's own rules. Flags only; check the originals.</p>
           <ul class="ai-list">
             {% for c in code_checks %}<li><span class="ai-kind">{{ c.kind.replace("_", " ") }}</span> {{ c.finding }}</li>{% endfor %}
           </ul>
@@ -74,16 +76,18 @@
         {% endif %}
 
         {% include "_ai_review.html" %}
+        </div>
         {% include "_ai_ask.html" %}
         {% include "_ai_request.html" %}
 
         {% if facts_view.groups or facts_view.unread_documents %}
-        <div class="card mock-card">
-          <h2>What the documents say <span class="mock-tag">Automated extraction -- not AI</span></h2>
-          <p class="hint">A keyword scan. Check anything that matters against the originals above.</p>
+        <details class="card fold" id="document_facts">
+          <summary><h2>What the documents say</h2>
+            <span class="hint">Every amount, date and incident word found in the documents</span></summary>
+          <p class="hint">Found automatically by a keyword scan. Check anything that matters against the originals above.</p>
           {% set description_label = "the claimant's description" %}
           {% include "_facts_groups.html" %}
-        </div>
+        </details>
         {% endif %}
       </div>
 
@@ -123,13 +127,15 @@
             {% if open_findings %}
             <label class="ack-findings" style="display:flex; gap:var(--space-2); align-items:flex-start;">
               <input type="checkbox" name="acknowledge" value="yes" id="acknowledge_findings">
-              <span>I've checked the <a href="#ai_review">{{ open_findings | length }} open finding{{ "" if open_findings | length == 1 else "s" }}</a>
+              <span>I've checked the <a href="#findings">{{ open_findings | length }} open finding{{ "" if open_findings | length == 1 else "s" }}</a>
                 in the review. <span class="hint">Needed to approve.</span></span>
             </label>
             {% endif %}
             {% set intents = {"APPROVED": "approve", "DECLINED": "decline"} %}
+            {# Buttons say what you're doing (verbs); the confirm dialog names the outcome. #}
+            {% set verbs = {"APPROVED": "Approve", "DECLINED": "Decline", "NEEDS_MORE_REVIEW": "Mark for more review"} %}
             {% for choice in decisions if choice != latest_decision %}
-            <button type="submit" name="decision" value="{{ choice }}" class="btn block {{ intents.get(choice, 'secondary') }}">{{ choice.replace("_", " ") | title }}</button>
+            <button type="submit" name="decision" value="{{ choice }}" data-outcome="{{ choice | status_label }}" class="btn block {{ intents.get(choice, 'secondary') }}">{{ verbs.get(choice, choice | status_label) }}</button>
             {% endfor %}
           </form>
 

@@ -232,7 +232,7 @@ def run(selected: set[str]):
             shot(adjuster, "08-adjuster-queue")
             adjuster.goto(f"{BASE}/adjuster/claims/{ready_id}")
             shot(adjuster, "09-adjuster-claim-view")
-            adjuster.get_by_role("button", name="Approved").click()
+            adjuster.get_by_role("button", name="Approve", exact=True).click()
             adjuster.get_by_role("button", name="Confirm decision").click()
             adjuster.wait_for_selector("text=Decisions recorded")
             shot(adjuster, "10-adjuster-decision-recorded")

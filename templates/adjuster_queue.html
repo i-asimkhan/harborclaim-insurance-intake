@@ -15,11 +15,14 @@
       <p class="subtitle">Claims waiting on a decision come first, oldest at the top.</p>
     </div>
 
-    {# The count tiles are the filters. #}
+    {# The count tiles are the filters. Clicking the selected tile again clears it (back to all
+       claims); the search text is kept either way. #}
     <nav class="stat-row" aria-label="Filter claims">
       {% for key, label in views.items() %}
+      {% set target = "all" if key == view else key %}
+      {% set params = ([("view", target)] if target != "all" else []) + ([("q", q)] if q else []) %}
       <a class="stat{% if key == 'awaiting' %} attention{% endif %}{% if key == view %} active{% endif %}"
-         href="/adjuster{% if key != 'all' %}?view={{ key }}{% endif %}"{% if key == view %} aria-current="page"{% endif %}>
+         href="/adjuster{% if params %}?{{ params | urlencode }}{% endif %}"{% if key == view %} aria-current="page" title="Click again to show all claims"{% endif %}>
         <span class="stat-value">{{ counts[key] }}</span>
         <span class="stat-label">{{ label }}</span>
       </a>

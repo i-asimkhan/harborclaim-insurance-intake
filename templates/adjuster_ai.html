@@ -18,7 +18,7 @@
     </div>
 
     <div class="stack">
-    <div class="card ai-card" id="data_policy">
+    <div class="card" id="data_policy">
       <h2>Claim data</h2>
       {% if data_policy == "production" %}
       <p class="hint">Data policy: <strong>production</strong>. Free-tier models are refused, and requests go only to
@@ -31,7 +31,7 @@
       {% endif %}
     </div>
 
-    <div class="card ai-card">
+    <div class="card">
       <h2>Model</h2>
       {% if not ai_on %}
       <p class="hint">AI is off on this site (AI_PROVIDER is not set).</p>

@@ -1,0 +1,6 @@
+{# The one AI label (AGENTS.md section 9): every piece of model-written text carries it, with its
+   check result. Anything without this badge was not written by a model. The model's name is in the
+   badge's title and in the AI trace footer. #}
+{% macro ai_badge(status, model=None, flagged=False) -%}
+<span class="ai-badge-group"><span class="ai-badge{% if flagged %} flagged{% endif %}" title="Written by {{ model or 'an AI model' }} via OpenRouter, then checked by code">AI</span><span class="ai-badge-text{% if flagged %} flagged{% endif %}">{{ status }}</span></span>
+{%- endmacro %}

@@ -1053,9 +1053,10 @@ import app as app_module  # noqa: E402
 from auth import get_current_user  # noqa: E402
 
 web = TestClient(app_module.app)
-PASSED_LABEL = f"AI draft ({MODEL} via OpenRouter) -- checked against the documents; verify before deciding"
-FLAGGED_LABEL = f"AI draft ({MODEL} via OpenRouter) -- failed automated checks, see below"
-TEMPLATE_LABEL = "Automated draft -- not AI-generated"
+# The one AI label (templates/_ai_badge.html); anything without it isn't model-written.
+PASSED_LABEL = f'title="Written by {MODEL} via OpenRouter, then checked by code">AI</span><span class="ai-badge-text">Checked against the documents</span>'
+FLAGGED_LABEL = f'<span class="ai-badge flagged" title="Written by {MODEL} via OpenRouter, then checked by code">AI</span><span class="ai-badge-text flagged">Failed checks</span>'
+TEMPLATE_LABEL = "<h2>Summary</h2>"                     # the standard (template) summary card
 
 
 @pytest.fixture
@@ -1107,7 +1108,7 @@ def test_ai_off_queues_nothing_and_the_page_says_why(adjuster_web):
     storage.add_summary("CLM-5A5A5A5A", "Template draft text.")
     page = _page()
     assert TEMPLATE_LABEL in page and "No AI review: AI review is off on this site." in page
-    assert "AI draft" not in page and "Re-run AI review" not in page
+    assert 'class="ai-badge' not in page and "Re-run AI review" not in page
     adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/intake-review", follow_redirects=False)
     assert storage.recent_agent_runs("CLM-5A5A5A5A", "intake") == []
 
@@ -1124,7 +1125,7 @@ def test_check_1_normal_a_passed_review_shows_cited_and_labelled(fake_model, adj
     assert "Dates and amounts the summary doesn't mention" in page   # computed by code, shown under the summary
     assert "AI trace" in page and "Model call 1: fake/model:free" in page
     assert "Re-run AI review" in page
-    assert "Automated extraction -- not AI" in page          # the regex facts card keeps its own label
+    assert 'id="document_facts"' in page                   # the regex facts card is still there, folded
 
 
 def test_check_2_missing_or_ambiguous_shows_what_is_unclear(fake_model, adjuster_web):
@@ -1147,7 +1148,7 @@ def test_check_3_injected_model_failure_falls_back_to_the_template(fake_model, a
     page = _page()
     assert TEMPLATE_LABEL in page and "Template draft text." in page
     assert "No AI review: the AI service didn&#39;t answer in time." in page
-    assert "AI draft" not in page and "Re-run AI review" in page
+    assert 'class="ai-badge' not in page and "Re-run AI review" in page
 
 
 def test_a_flagged_review_says_so_and_marks_the_failing_sentence(fake_model, adjuster_web):
@@ -1156,8 +1157,8 @@ def test_a_flagged_review_says_so_and_marks_the_failing_sentence(fake_model, adj
     assert _reviewed_claim(script, bad).status == "flagged"
     page = _page()
     assert FLAGGED_LABEL in page and PASSED_LABEL not in page
-    assert "Failed automated checks" in page and "$9,999.00 is not in the cited quotes" in page
-    assert page.count("failed checks</span>") == 1
+    assert "<strong>Failed checks</strong>" in page and "$9,999.00 is not in the cited quotes" in page
+    assert page.count("failed check</span>") == 1
 
 
 def test_model_text_is_escaped_never_rendered_as_html(fake_model, adjuster_web):
@@ -1263,7 +1264,7 @@ def test_an_ordinal_in_a_quoted_address_is_not_an_unverifiable_date():
 
 # --- Step 5.5: "Ask about this claim" on the adjuster page --------------------------------------
 
-ANSWER_LABEL = f"AI answer ({MODEL} via OpenRouter) -- checked against the documents; verify before relying on it"
+ANSWER_LABEL = f'title="Written by {MODEL} via OpenRouter, then checked by code">AI</span><span class="ai-badge-text">Checked against the documents</span>'
 GOOD_ANSWER = {"answer": [{"text": "The repair estimate totals $4,240.00.",
                            "citations": [_cite(ESTIMATE, "Total estimate $4,240.00")]}],
                "not_found": False, "refused": False}
@@ -1293,7 +1294,7 @@ def test_a_decision_question_shows_the_fixed_refusal_and_calls_no_model(fake_mod
     _ask("Should I approve this claim?")
     page = _page()
     assert calls == [] and "Should I approve this claim?" in page
-    assert "Fixed reply -- not AI-generated" in page and "That decision is yours" in page
+    assert "That decision is yours" in page and 'class="ai-badge' not in page   # a fixed reply has no AI badge
     assert "AI answer" not in page
     assert storage.agent_runs_today("adjuster") == 0          # a code refusal costs nothing against the limit
 
@@ -1314,7 +1315,7 @@ def test_a_flagged_answer_says_so_and_a_failed_call_says_why(fake_model, adjuste
     script.append(_json_reply(bad))
     _ask("What does the estimate total?")
     page = _page()
-    assert "failed automated checks, see below" in page and "$9,999.00 is not in the cited quotes" in page
+    assert 'ai-badge-text flagged">Failed checks' in page and "$9,999.00 is not in the cited quotes" in page
     script.append(_failed_reply("timeout"))
     _ask("When was the police report filed?")
     assert "No AI answer: the AI service didn&#39;t answer in time." in _page()
@@ -1440,7 +1441,7 @@ def test_a_claimant_question_gets_a_labelled_answer_and_changes_nothing(fake_mod
     assert r.status_code == 303 and r.headers["location"] == "/help"
     page = web.get("/help").text
     assert "Where is my claim?" in page and "Your claim CLM-5A5A5A5A is with an adjuster for review." in page
-    assert f"AI answer ({MODEL} via OpenRouter)" in page
+    assert f'title="Written by {MODEL} via OpenRouter, then checked by code">AI</span><span class="ai-badge-text">Checked</span>' in page
     assert _state("CLM-5A5A5A5A") == before
 
 
@@ -1452,7 +1453,8 @@ def test_another_claimants_claim_never_appears_and_shows_the_fixed_reply(fake_mo
     script.append(_json_reply({"answer": "CLM-7C7C7C7C is also in review.", "refused": False}))
     _help_ask("What about CLM-7C7C7C7C?")
     page = web.get("/help").text
-    assert "CLM-7C7C7C7C is also in review." not in page and "Fixed reply -- not AI-generated" in page
+    assert "CLM-7C7C7C7C is also in review." not in page and "your adjuster decides that" in page
+    assert 'class="ai-badge' not in page                    # the fixed reply carries no AI badge
     assert "G6" not in page and "AI trace" not in page                 # no gate detail for claimants
 
 
@@ -1605,7 +1607,8 @@ def test_drafting_changes_nothing_and_sending_is_the_one_action(fake_model, adju
     _request_script(script)
     adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/draft", follow_redirects=False)
     page = _page()
-    assert f"AI draft ({MODEL} via OpenRouter)" in page and "Photos of the damage to the rear bumper" in page
+    assert f'title="Written by {MODEL} via OpenRouter, then checked by code">AI</span><span class="ai-badge-text">Checked. Read and edit before sending</span>' in page
+    assert "Photos of the damage to the rear bumper" in page
     assert _state("CLM-5A5A5A5A") == before
 
     text = agents.request_text(GOOD_REQUEST) + " Thank you."
@@ -1628,7 +1631,7 @@ def test_a_flagged_draft_is_replaced_by_the_template_and_cannot_be_sent_as_ai(fa
                              "items": ["Receipts"]})
     adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/draft", follow_redirects=False)
     page = _page()
-    assert "Template draft -- not AI-generated" in page and "failed automated checks" in page
+    assert "the standard request is shown instead" in page and "Read and edit before sending" not in page
     assert "will be approved" not in page
     template = agents.template_request(storage.get_claim("CLM-5A5A5A5A"))
     adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": template, "source": "ai"})
@@ -1639,7 +1642,7 @@ def test_a_flagged_draft_is_replaced_by_the_template_and_cannot_be_sent_as_ai(fa
 def test_with_ai_off_the_template_draft_still_works(adjuster_web):
     _sample_claim()
     page = _page()
-    assert "Template draft -- not AI-generated" in page and "Draft with AI" not in page
+    assert "Edit the standard request and send it" in page and "Draft with AI" not in page
     template = agents.template_request(storage.get_claim("CLM-5A5A5A5A"))
     adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/draft", follow_redirects=False)
     assert storage.recent_agent_runs("CLM-5A5A5A5A", "request") == []
@@ -1723,3 +1726,16 @@ def test_only_the_owner_can_add_documents_and_an_empty_answer_is_refused(claiman
 def test_the_gate_holds_a_drafted_request_to_the_claimant_rules(output, expected):
     result = agent_gate.check("request", output, claimant_email="claimant@example.com", own_claim_ids={"CLM-5A5A5A5A"})
     assert result["status"] == expected
+
+
+def test_the_claim_page_links_to_help_with_its_own_claim_number(fake_model, claimant_web, monkeypatch):
+    _sample_claim()
+    _sample_claim("CLM-7C7C7C7C", email="other@example.com")
+    assert "Ask a question &rarr;" not in web.get("/claims/CLM-5A5A5A5A").text   # assistant off
+    monkeypatch.setenv("AI_CLAIMANT_CHAT", "true")
+    page = web.get("/claims/CLM-5A5A5A5A").text
+    assert 'href="/help?about=CLM-5A5A5A5A">Ask a question &rarr;</a>' in page
+    assert 'value="About CLM-5A5A5A5A: "' in web.get("/help?about=CLM-5A5A5A5A").text
+    # Someone else's claim number, or anything that isn't one, prefills nothing.
+    assert 'value=""' in web.get("/help?about=CLM-7C7C7C7C").text
+    assert 'value=""' in web.get("/help?about=<script>").text

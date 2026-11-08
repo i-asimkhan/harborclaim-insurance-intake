@@ -94,8 +94,8 @@ The walk-through of this diagram is [`docs/design/AGENTIC-LAYER.md`](docs/design
   rounds; two passed and run with automatic failover: `nvidia/nemotron-3.5-super-vl:free`, then
   `nvidia/nemotron-3-ultra-550b-a55b:free`. An adjuster picks which answers first on the
   **AI usage** page (`/adjuster/ai`), which also shows today's usage against the limits.
-- **Honest labels:** "AI draft (model via OpenRouter)" only on text a model wrote and the checks
-  passed; the template summary stays as the labelled fallback when AI is off or a model is down.
+- **Honest labels:** the purple `AI` badge, with its check result, only on text a model wrote and the checks
+  passed; when AI is off or a model is down, the standard summary shows with one line saying why.
 - **Adjuster safeguards** (PR #3, details in [`AI_USAGE.md`](AI_USAGE.md)):
   - **Decisions, enforced by the server:** a final decision can't be overwritten, a repeat records
     nothing, a decline needs a reason the claimant is told, and approving while findings are open
@@ -106,7 +106,7 @@ The walk-through of this diagram is [`docs/design/AGENTIC-LAYER.md`](docs/design
     model sees a claim. `AI_DATA_POLICY=production` refuses free-tier models.
   - **Known limits:** the keyword scan misses negation ("No injuries" still counts as an injury),
     the description rule is a heuristic, and names and medical details are not redacted.
-- **Tested:** 377 automated tests (a scripted fake model, no network), a golden set of 11
+- **Tested:** 380 automated tests (a scripted fake model, no network), a golden set of 11
   fictional claims run live (`scripts/eval_agents.py`, intake agent only), and two red-team
   rounds. Prompts and results: [`PROMPTS.md`](PROMPTS.md) and [`AI_USAGE.md`](AI_USAGE.md).
 

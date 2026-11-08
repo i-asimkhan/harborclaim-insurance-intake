@@ -22,7 +22,7 @@ adjuster, not the AI. Nothing an agent does can approve, pay or change a claim.
 | 1 | Claimant | Files a claim: type, policy, incident date, description, documents. |
 | 2 | Code | The completeness check marks it READY_FOR_REVIEW or NEEDS_INFORMATION; a regex scan pulls amounts and dates; a template summary is written as the fallback. |
 | A | **Intake review agent** | Runs on every new claim, after the claimant's page has loaded. Writes a short summary and "worth checking" findings, e.g. *the description says $3,250.00 but the estimate totals $3,486.40*. Every sentence cites a document, page and word-for-word quote. |
-| 3 | Adjuster | Reviews the AI draft next to the original documents. Labels say exactly what a model wrote and what code wrote. |
+| 3 | Adjuster | Reviews the AI draft next to the original documents. Everything a model wrote carries the purple `AI` badge and its check result; anything without it is the app's own. |
 | B | **Ask about this claim** | The adjuster asks questions; answers come only from this claim's records, with citations, or "Not found in this claim's records." |
 | C | **Request agent** | When something is missing, the adjuster clicks *Draft with AI*. The agent starts with only a brief (claim form and file names), **decides to call its tools** (`get_intake_review`, `get_completeness`, `search_documents`) to find out what's missing and what's already there, and drafts a polite request. |
 | 4 | Adjuster | **Edits and sends.** Nothing is sent until the adjuster clicks *Send to claimant*. The app records whether the text came from the AI draft and whether the adjuster changed it. |
@@ -57,7 +57,7 @@ All four agents share one harness (`agents.py`):
 5. **Code gate** (`agent_gate.py`, rules G1-G9 and C): quotes must be in the documents word for
    word; every number must come from the quotes; no decision, coverage, payment or accusation
    wording; no other claimant's claim or email; instructions planted in a document are caught.
-6. **What people see**: passed text gets the "AI draft (model via OpenRouter)" label; flagged text
+6. **What people see**: passed text gets the purple `AI` badge with "Checked"; flagged text
    is marked, or replaced by a fixed reply or the template; a model that's down leaves the
    template fallback in place.
 7. **Audit log**: every run, its question, answer, check result, trace, model and timing, in the
@@ -70,7 +70,7 @@ answers with a fixed reply.
 
 The workflow never depends on AI. With AI off, a model down, or the day's limit used:
 
-- the intake review shows the template summary, labelled "Automated draft -- not AI-generated";
+- the intake review shows the standard summary, with one line saying why there's no AI review;
 - the request card offers a template draft written by code from the completeness check, and the
   adjuster sends it the same way;
 - the assistants say they can't answer just now;
@@ -78,7 +78,7 @@ The workflow never depends on AI. With AI off, a model down, or the day's limit 
 
 ## Evidence it works
 
-- **344 automated tests** with a scripted fake model (no network): every gate rule, every label,
+- **380 automated tests** with a scripted fake model (no network): every gate rule, every label,
   the request loop end to end, separation of duties, and that drafting changes nothing.
 - **Golden set**: 11 fictional claims with known answers run live (`scripts/eval_agents.py`);
   used to choose the models and to keep out one that missed conflicts silently.

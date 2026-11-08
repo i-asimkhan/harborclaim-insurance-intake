@@ -35,8 +35,9 @@
         <a class="bell-all" href="/adjuster/notifications">View all notifications</a>
       </div>
     </details>
-    <span class="hint nav-user">{{ adjuster.username }}</span>
-    <a href="/adjuster/logout">Sign out</a>
+    {% with account_name=(adjuster.name or adjuster.username), account_detail=adjuster.username ~ " (adjuster)", logout_url="/adjuster/logout" %}
+    {% include "_account.html" %}
+    {% endwith %}
   </nav>
 </header>
 <script src="{{ static_url('app.js') }}" defer></script>

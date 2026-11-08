@@ -78,7 +78,7 @@
     <rect x="695" y="587" width="210" height="100" rx="10" fill="#ffffff" stroke="#c98a1b" stroke-width="2"/>
     <circle cx="717" cy="609" r="12" fill="#c98a1b"/><text x="717" y="613" text-anchor="middle" class="step">3</text>
     <text x="736" y="614" class="box-title">Reviews the claim</text>
-    <text x="709" y="642" class="box-text">AI draft next to the original</text>
+    <text x="709" y="642" class="box-text">AI review next to the original</text>
     <text x="709" y="659" class="box-text">documents; labels say what</text>
     <text x="709" y="676" class="box-text">AI wrote and what code wrote</text>
   </g>
@@ -229,7 +229,7 @@
   <g>
     <rect x="1244" y="800" width="180" height="120" rx="10" fill="#ffffff" stroke="#5b6b80" stroke-width="1.5"/>
     <text x="1258" y="826" class="box-title">What people see</text>
-    <text x="1258" y="850" class="box-text">Passed: "AI draft" label</text>
+    <text x="1258" y="850" class="box-text">Passed: "AI · Checked" badge</text>
     <text x="1258" y="867" class="box-text">Flagged: marked, or a</text>
     <text x="1258" y="884" class="box-text">fixed reply / template</text>
     <text x="1258" y="901" class="box-text">Down: template fallback</text>
@@ -243,7 +243,7 @@
     <text x="1466" y="884" class="box-text">answer, check,</text>
     <text x="1466" y="901" class="box-text">trace, model</text>
   </g>
-  <text x="44" y="958" class="pill">Decision questions ("Should I approve this?") never reach a model: code answers them with a fixed reply.   Tested with 344 automated tests, an 11-claim golden set run live, and two red-team rounds.</text>
+  <text x="44" y="958" class="pill">Decision questions ("Should I approve this?") never reach a model: code answers them with a fixed reply.   Tested with 380 automated tests, an 11-claim golden set run live, and two red-team rounds.</text>
 
   <!-- Legend -->
   <g transform="translate(40,1020)">

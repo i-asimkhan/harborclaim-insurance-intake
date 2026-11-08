@@ -312,7 +312,7 @@ def test_auto_claim_with_injury_notes_and_another_date_is_flagged_by_code():
 
     _adjuster()
     page = client.get(f"/adjuster/claims/{claim_id}").text
-    assert 'id="code_checks"' in page and "By code -- not AI" in page
+    assert 'id="code_checks"' in page and "HarborClaim's own rules" in page
     # They count as open findings, so approval needs the acknowledgement even with AI off.
     assert 'data-open-findings="2"' in page
     assert _decide(claim_id, "APPROVED").status_code == 400
@@ -376,8 +376,8 @@ def test_not_found_answer_is_not_labelled_as_checked_against_the_documents():
     page = client.get(f"/adjuster/claims/{claim_id}").text
     qa = page[page.index("What colour was the other car?"):]
     qa = qa[:qa.index("</details>")]
-    assert "found nothing in this claim's records on this" in qa
-    assert "checked against the documents" not in qa
+    assert "Nothing found in this claim&#39;s records" in qa or "Nothing found in this claim's records" in qa
+    assert "Checked against the documents" not in qa
 
 
 # --- 10. Citations: each source and page once, and they link to the source ---

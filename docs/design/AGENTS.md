@@ -533,16 +533,26 @@ first line; each one has a hard guardrail behind it.
 
 ## 9. Labels (honest, and changed only when true)
 
-| Situation | Label |
+**One rule (2026-11-08): only AI is labelled.** Every piece of model-written text carries the
+purple `AI` badge (`templates/_ai_badge.html`) followed by its check result; the model's name is in
+the badge's title and in the AI trace footer. Anything without the badge was not written by a model:
+the standard summary, the standard request, fixed replies, consistency checks and the document
+facts are plain app text, with no "not AI" tags. This replaced a set of per-card "not AI" tags,
+which made sense while most stages were mocks and confused reviewers once real AI was in.
+
+| Situation | What the page shows |
 |---|---|
-| AI review passed the gate | `AI draft (<model name> via OpenRouter) -- checked against the documents; verify before deciding` |
-| AI review flagged | `AI draft (<model name> via OpenRouter) -- failed automated checks, see below` |
-| AI off, unavailable, or limit reached | Today's template card, unchanged: `Automated draft -- not AI-generated`, plus one line saying why AI isn't shown |
-| AI review running | `AI review in progress -- reload to see it`, template draft below |
-| Adjuster assistant answer | `AI assistant (<model name> via OpenRouter) -- answers come from this claim's records; it can't make decisions` |
-| Claimant assistant | `AI assistant -- it can explain your claim's status; your adjuster makes every decision` |
-| Refusal (either assistant) | No AI label: the text is fixed, written by HarborClaim |
-| Extracted facts | Unchanged: `Automated extraction -- not AI` |
+| AI review passed the gate | `AI` badge + **Checked against the documents**, and one line: written by a model, then checked by code; verify before deciding |
+| AI review flagged | Amber `AI` badge + **Failed checks**, the reasons listed, each failing line marked *failed check* |
+| AI off, unavailable, or limit reached | The standard summary (title "Summary"), with one quiet line: "No AI review: *reason*. Showing the standard summary." |
+| AI review running | "AI review in progress -- reload to see it", standard summary below |
+| Code safety nets around the AI review | Folded inside the AI card as **Checked by code (n)** |
+| Adjuster assistant answer | `AI` badge + **Checked against the documents** / **Failed checks** / **Nothing found in this claim's records** |
+| Request agent draft | `AI` badge + **Checked. Read and edit before sending**; otherwise the standard request, with a quiet line saying why |
+| Claimant assistant answer (`/help`) | `AI` badge + **Checked**, and "Your claim page is the record" |
+| Refusal (either assistant) | No badge: the text is fixed, written by HarborClaim |
+| Request on the claimant's page | "drafted with AI help, then read [and edited] and sent by your adjuster" when the AI drafted it |
+| Extracted facts, consistency checks | No badge; the section title and one hint say what they are |
 
 ---
 

@@ -1,11 +1,14 @@
 {# "Ask about this claim" (Phase 5, step 5.5), adjuster side only. Labels follow AGENTS.md
-   section 9: "AI" only on an answer a model really wrote; the refusal and "not found" lines are
-   fixed text. Model text is always autoescaped -- never the safe filter. #}
+   section 9: the AI badge only on an answer a model really wrote; the fixed reply to a decision
+   question carries no badge. Folded by default; it opens when the page is loaded at #ask (right
+   after a question, see static/app.js). Model text is always autoescaped -- never the safe filter. #}
 {% from "_cites.html" import cites as cite_links %}
+{% from "_ai_badge.html" import ai_badge %}
 {% set ask = ai_ask %}
 {% if ask.ai_on or ask.questions %}
-<div class="card ai-card" id="ask">
-  <h2>Ask about this claim <span class="hint">answers come only from this claim's records</span></h2>
+<details class="card fold" id="ask">
+  <summary><h2>Ask about this claim{% if ask.questions %} <span class="fold-count">{{ ask.questions | length }}</span>{% endif %}</h2>
+    <span class="hint">Answers come only from this claim's records, with citations</span></summary>
   {% if ask.ai_on and not ask.limit_reached %}
   <form method="post" action="/adjuster/claims/{{ record.claim.claim_id }}/ask" class="ai-ask-form">
     <input type="text" name="question" maxlength="500" required
@@ -24,7 +27,7 @@
     <summary class="ai-question"><strong>Q:</strong> {{ run.question }}
       <span class="hint">{{ run.actor }} &middot; <span title="{{ run.started_at }}">{{ run.started_at | ago }}</span></span></summary>
     {% if item.kind == "refused" %}
-    <p><span class="mock-tag">Fixed reply -- not AI-generated</span> {{ ask.refusal }}</p>
+    <p>{{ ask.refusal }}</p>
     {% elif item.kind == "running" %}
     <p class="ai-status">Answer in progress -- reload to see it</p>
     {% elif item.kind == "unavailable" %}
@@ -32,9 +35,9 @@
     {% else %}
     {% set passed = run.status == "passed" %}
     {% if item.kind == "not_found" %}
-    <p><span class="ai-tag">AI answer ({{ run.model or "unknown model" }} via OpenRouter) -- found nothing in this claim's records on this; that doesn't prove it isn't there</span></p>
+    <p>{{ ai_badge("Nothing found in this claim's records", run.model) }} <span class="hint">That doesn't prove it isn't there.</span></p>
     {% else %}
-    <p><span class="ai-tag">AI answer ({{ run.model or "unknown model" }} via OpenRouter) -- {% if passed %}checked against the documents; verify before relying on it{% else %}failed automated checks, see below{% endif %}</span></p>
+    <p>{{ ai_badge("Checked against the documents" if passed else "Failed checks", run.model, not passed) }}</p>
     {% endif %}
     {% if item.kind == "not_found" %}
     <p>{{ ask.not_found }}</p>
@@ -43,7 +46,7 @@
       {% for s in run.output.answer %}{% set where = "answer[" ~ loop.index0 ~ "]" %}
       <li{% if where in item.flagged %} class="ai-failed"{% endif %}>{{ s.text }}
         {{- cite_links(s.citations, record.claim.claim_id, record.claim.documents) -}}
-        {% if where in item.flagged %} <span class="ai-failed-tag">failed checks</span>{% endif %}</li>
+        {% if where in item.flagged %} <span class="ai-failed-tag">failed check</span>{% endif %}</li>
       {% endfor %}
     </ul>
     {% endif %}
@@ -64,10 +67,10 @@
         {% endif %}
         {% endfor %}
       </ol>
-      <p class="hint">Prompt {{ run.prompt_version }} &middot; {{ ((run.latency_ms or 0) / 1000) | round(1) }} s</p>
+      <p class="hint">Model {{ run.model or "unknown" }} via OpenRouter &middot; prompt {{ run.prompt_version }} &middot; {{ ((run.latency_ms or 0) / 1000) | round(1) }} s</p>
     </details>
     {% endif %}
   </details>
   {% endfor %}
-</div>
+</details>
 {% endif %}

@@ -1,9 +1,10 @@
 {# The AI intake review card (Phase 5, step 5.3), adjuster side only. Labels follow AGENTS.md
-   section 9: a card says "AI" only when a model really wrote it and the run finished. Model text
-   is always autoescaped -- never the safe filter. Otherwise the template draft shows, as before,
-   with one line saying why there is no AI review. #}
+   section 9: the AI badge appears only when a model really wrote it and the run finished. Model
+   text is always autoescaped -- never the safe filter. Otherwise the standard summary shows, with
+   one quiet line saying why there is no AI review. #}
 {% set ai = ai_review %}
 {% from "_cites.html" import cites as cite_links %}
+{% from "_ai_badge.html" import ai_badge %}
 {% macro cites(citations) -%}
   {{- cite_links(citations, record.claim.claim_id, record.claim.documents) -}}
 {%- endmacro %}
@@ -20,14 +21,13 @@
 {% set out = run.output %}
 {% set passed = run.status == "passed" %}
 <div class="card ai-card{% if not passed %} ai-flagged{% endif %}" id="ai_review">
-  <h2>AI review
-    <span class="ai-tag">AI draft ({{ run.model or "unknown model" }} via OpenRouter) -- {% if passed %}checked against the documents; verify before deciding{% else %}failed automated checks, see below{% endif %}</span>
-  </h2>
+  <h2>AI review {{ ai_badge("Checked against the documents" if passed else "Failed checks", run.model, not passed) }}</h2>
+  <p class="hint ai-legend">Written by a model, then checked by code: every quote must be in the documents and every number must come from a quote. Verify before deciding.</p>
   {% if ai.running %}<p class="ai-status">A newer AI review is in progress -- reload to see it.</p>{% endif %}
 
   {% if not passed %}
   <div class="ai-reasons">
-    <strong>Failed automated checks</strong>
+    <strong>Failed checks</strong>
     <ul>
       {% for r in run.gate.reasons %}<li><span class="mono">{{ r.rule }}</span> {{ r.where }}: {{ r.detail }}</li>{% endfor %}
     </ul>
@@ -37,7 +37,7 @@
   <h3>Summary</h3>
   <ul class="ai-list">
     {% for s in out.summary %}{% set where = "summary[" ~ loop.index0 ~ "]" %}
-    <li{% if where in ai.flagged %} class="ai-failed"{% endif %}>{{ s.text }}{{ cites(s.citations) }}{% if where in ai.flagged %} <span class="ai-failed-tag">failed checks</span>{% endif %}</li>
+    <li{% if where in ai.flagged %} class="ai-failed"{% endif %}>{{ s.text }}{{ cites(s.citations) }}{% if where in ai.flagged %} <span class="ai-failed-tag">failed check</span>{% endif %}</li>
     {% endfor %}
   </ul>
 
@@ -45,7 +45,7 @@
   {% if out.worth_checking %}
   <ul class="ai-list">
     {% for f in out.worth_checking %}{% set where = "worth_checking[" ~ loop.index0 ~ "]" %}
-    <li{% if where in ai.flagged %} class="ai-failed"{% endif %}><span class="ai-kind">{{ f.kind.replace("_", " ") }}</span> {{ f.finding }}{{ cites(f.citations) }}{% if where in ai.flagged %} <span class="ai-failed-tag">failed checks</span>{% endif %}</li>
+    <li{% if where in ai.flagged %} class="ai-failed"{% endif %}><span class="ai-kind">{{ f.kind.replace("_", " ") }}</span> {{ f.finding }}{{ cites(f.citations) }}{% if where in ai.flagged %} <span class="ai-failed-tag">failed check</span>{% endif %}</li>
     {% endfor %}
   </ul>
   {% else %}<p class="hint">Nothing flagged.</p>{% endif %}
@@ -59,18 +59,25 @@
   </ul>
   {% endif %}
 
+  {# Safety nets around the AI, computed by code from the documents: folded, with a count. #}
   {% set computed = out.computed or {} %}
-  {% if computed.not_summarised %}
-  <h3>Dates and amounts the summary doesn't mention <span class="hint">found by the keyword scan and listed by code, not the AI</span></h3>
-  <ul class="ai-list compact">{% for item in computed.not_summarised %}<li>{{ item }}</li>{% endfor %}</ul>
-  {% endif %}
-  {% if computed.not_read %}
-  <h3>Not read in full <span class="hint">listed by code</span></h3>
-  <ul class="ai-list compact">{% for item in computed.not_read %}<li>{{ item }}</li>{% endfor %}</ul>
-  {% endif %}
-  {% if computed.possible_instructions %}
-  <h3>Text that reads like an instruction to the AI <span class="hint">listed by code</span></h3>
-  <ul class="ai-list compact">{% for item in computed.possible_instructions %}<li>{{ item }}</li>{% endfor %}</ul>
+  {% set safety = (computed.not_summarised or []) | length + (computed.not_read or []) | length + (computed.possible_instructions or []) | length %}
+  {% if safety %}
+  <details class="ai-trace"{% if computed.possible_instructions %} open{% endif %}>
+    <summary>Checked by code ({{ safety }})</summary>
+    {% if computed.not_summarised %}
+    <h3>Dates and amounts the summary doesn't mention</h3>
+    <ul class="ai-list compact">{% for item in computed.not_summarised %}<li>{{ item }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if computed.not_read %}
+    <h3>Not read in full</h3>
+    <ul class="ai-list compact">{% for item in computed.not_read %}<li>{{ item }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if computed.possible_instructions %}
+    <h3>Text that reads like an instruction to the AI</h3>
+    <ul class="ai-list compact">{% for item in computed.possible_instructions %}<li>{{ item }}</li>{% endfor %}</ul>
+    {% endif %}
+  </details>
   {% endif %}
 
   <details class="ai-trace">
@@ -85,19 +92,19 @@
       {% endif %}
       {% endfor %}
     </ol>
-    <p class="hint">Prompt {{ run.prompt_version }} &middot; {{ run.input_tokens or 0 }} tokens in, {{ run.output_tokens or 0 }} out
+    <p class="hint">Model {{ run.model or "unknown" }} via OpenRouter &middot; prompt {{ run.prompt_version }} &middot; {{ run.input_tokens or 0 }} tokens in, {{ run.output_tokens or 0 }} out
       &middot; {{ ((run.latency_ms or 0) / 1000) | round(1) }} s &middot; <span title="{{ run.finished_at }}">{{ run.finished_at | ago }}</span></p>
   </details>
   {{ rerun() }}
 </div>
 
 {% elif record.summary %}
-<div class="card mock-card">
-  <h2>Draft summary <span class="mock-tag">Automated draft -- not AI-generated</span></h2>
+<div class="card" id="ai_review">
+  <h2>Summary</h2>
   {% if ai.running %}
   <p class="ai-status">AI review in progress -- reload to see it</p>
   {% else %}
-  <p class="hint">No AI review: {{ ai.reason }}.</p>
+  <p class="hint">No AI review: {{ ai.reason }}. Showing the standard summary.</p>
   {% endif %}
   <p class="summary-text">{{ record.summary.summary_text }}</p>
   <span class="hint" title="{{ record.summary.generated_at }}">Generated {{ record.summary.generated_at | ago }}</span>

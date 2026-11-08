@@ -117,7 +117,7 @@ def test_complete_claim_redirects_and_shows_ready_for_review():
 
     result = client.get(claim_url)
     assert result.status_code == 200
-    assert "Ready for review" in result.text
+    assert '<span class="badge lg neutral">In review</span>' in result.text   # the claimant's word for it
     assert "Needs information" not in result.text
     assert "police_report.pdf" in result.text
     assert CLAIMANT["email"] in result.text
@@ -134,7 +134,7 @@ def test_incomplete_claim_names_the_missing_field():
 
     result = client.get(claim_url)
     assert "Needs information" in result.text
-    assert "incident_date" in result.text
+    assert "incident date" in result.text      # shown as a person reads it
 
 
 def test_uploaded_file_is_persisted_to_disk_and_downloadable():
@@ -312,7 +312,7 @@ def test_only_a_logged_in_adjuster_can_record_a_decision():
     # Shows up on both the claimant's own view and the adjuster's separate one.
     claimant_view = client.get(f"/claims/{claim_id}")
     assert "Approved" in claimant_view.text
-    assert "decider" in claimant_view.text
+    assert "by your adjuster" in claimant_view.text and "decider" not in claimant_view.text
 
     adjuster_view = client.get(f"/adjuster/claims/{claim_id}")
     assert "Approved" in adjuster_view.text
@@ -412,7 +412,7 @@ def test_mock_extraction_finds_facts_in_an_uploaded_text_document():
     assert "2026-07-08" in result.text
     assert "Fire" in result.text
     assert "Water damage" in result.text
-    assert "not AI-generated" in result.text  # never presented as if it were real AI
+    assert 'class="ai-badge' not in result.text and "draft summary" not in result.text  # never shown as AI
 
 
 def test_mock_summary_is_generated_on_submission():
@@ -489,7 +489,7 @@ def test_incomplete_submission_notification_names_the_missing_field():
         files=[("a.pdf", b"x")],
     )
     events = storage.list_notifications_for(CLAIMANT["email"])
-    assert any("incident_date" in e["message"] for e in events)
+    assert any("incident date" in e["message"] for e in events)
 
 
 def test_notifications_page_lists_and_marks_them_read():
@@ -963,6 +963,14 @@ def test_queue_view_filters_and_unknown_view_falls_back_to_all():
     assert sorted(_queue_ids(client.get("/adjuster?view=nonsense").text)) == sorted([awaiting, waiting, decided])
 
 
+def test_clicking_the_selected_queue_tile_again_clears_the_filter_and_keeps_the_search():
+    password = storage.create_adjuster("toggle.adjuster")
+    login_as_adjuster("toggle.adjuster", password)
+    page = client.get("/adjuster?view=awaiting&q=alpha").text
+    assert '<a class="stat attention active"\n         href="/adjuster?q=alpha"' in page      # selected: back to all
+    assert 'href="/adjuster?view=decided&amp;q=alpha"' in page                              # others: switch
+
+
 def test_queue_search_matches_every_word_across_id_claimant_policy_and_type():
     first = _file_claim("POL-S-ALPHA")
     second = _file_claim("POL-S-BETA")
@@ -1066,7 +1074,9 @@ def test_claimant_sees_needs_more_review_as_in_progress_not_as_a_final_decision(
 
     login_as_claimant(CLAIMANT)
     page = client.get(f"/claims/{claim_id}").text
-    assert "closer look" in page
+    # An internal step: the claimant isn't notified of it, so the page doesn't announce it either.
+    assert "closer look" not in page and "We sent the same update" not in page
+    assert "Needs more review" not in page and "nmr.claimant.adjuster" not in page
     assert '<li class="current">' in page          # adjuster review still in progress
     assert "Not yet" in page                       # no final decision yet
 
@@ -1298,3 +1308,34 @@ def test_data_folder_defaults_to_data_when_the_variable_is_unset():
     finally:
         os.environ["HARBORCLAIM_DATA_DIR"] = saved
         importlib.reload(storage)
+
+
+def test_claimant_pages_use_readable_field_names_and_never_an_adjuster_username():
+    claim_id = _file_claim("POL-READABLE", complete=False)
+    login_as_claimant(CLAIMANT)
+    page = client.get(f"/claims/{claim_id}").text
+    assert "<li>incident date</li>" in page and "incident_date" not in page
+    assert any("We still need: incident date" in n["message"] for n in storage.list_notifications_for(CLAIMANT["email"]))
+    complete_id = _file_claim("POL-READABLE-2")       # only a complete claim can be decided
+    password = storage.create_adjuster("readable.adjuster")
+    login_as_adjuster("readable.adjuster", password)
+    client.post(f"/adjuster/claims/{complete_id}/decision", data={"decision": "DECLINED", "reason": "Not covered."})
+    assert storage.get_claim(complete_id)["decisions"][-1]["decision"] == "DECLINED"
+    login_as_claimant(CLAIMANT)
+    page = client.get(f"/claims/{complete_id}").text
+    assert "Declined</strong> by your adjuster" in page and "readable.adjuster" not in page
+
+
+def test_the_claimant_status_badge_follows_the_final_decision():
+    claim_id = _file_claim("POL-BADGE")
+    password = storage.create_adjuster("badge.adjuster")
+    login_as_adjuster("badge.adjuster", password)
+    client.post(f"/adjuster/claims/{claim_id}/decision", data={"decision": "APPROVED"})
+    assert storage.get_claim(claim_id)["decisions"][-1]["decision"] == "APPROVED"
+    login_as_claimant(CLAIMANT)
+    page = client.get(f"/claims/{claim_id}").text
+    assert '<span class="badge lg ready">&#10003; Approved</span>' in page and "In review</span>" not in page
+    listing = client.get("/claims").text
+    assert '<span class="badge ready">Approved</span>' in listing and "SQLite" not in listing
+    assert 'href="/claims">&larr; My claims</a>' in page
+

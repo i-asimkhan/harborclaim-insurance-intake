@@ -57,8 +57,11 @@ about **Nov 4–9**, plus spare evenings before.
       decision note is the better demo moment.
 - [x] **Confirm the final-project requirements** with the instructors: presentation length,
       what to submit (repo link, PR, slides, report), and where. **Answered by the instructors'
-      announcement for the Nov 10 final.** Length: ___ · Submit: ___ · Where: ___ (owner to
-      fill in from the announcement).
+      announcement for the Nov 10 final** (Vikas Soni). Length: **10 minutes per student, on
+      Microsoft Teams**: introduce the AI agent and its purpose; explain how it was created (tools,
+      technologies, steps); a **live demonstration** of how it works and its key features.
+      Submit, after presenting: the agent's **code, prompts, relevant files and links**. Where:
+      the **Final Project assignment on Canvas**. No rubric was given.
 
 **For the Nov 10 presentation:** problem and users; live demo (claimant files, completeness
 check, adjuster reviews and decides, claimant notified); architecture; what is AI and what is
@@ -693,6 +696,25 @@ live run is 5.4
 - [ ] Live run of `adjuster-v3` (`scripts/eval_agents.py` covers only the intake agent).
 - [ ] Claimant UI items: raw field names, "wants a closer look" after Needs more review, and
       adjuster usernames in the decision history.
+
+**5.11 UI pass before the demo** (owner's notes plus an independent UI review, 2026-11-08) -- built
+
+- [x] Header: links never wrap ("Sign out" was on two lines); an account chip (initial and name,
+      opening a menu with the full email and Sign out) replaces the faint email; on narrow screens
+      the links get their own row, so pages no longer scroll sideways.
+- [x] Claimant statuses tell the truth: Needs information / In review / Approved / Declined (an
+      approved claim said "Ready for review"); "Needs more review" stays internal; no adjuster
+      usernames; readable field names ("incident date"); no "SQLite" text; back link to My claims.
+- [x] Decision buttons are verbs (Approve / Decline / Mark for more review); the confirm dialog
+      still names the outcome.
+- [x] Adjuster claim page folded: Ask, Request (opens when the claim needs information or a draft
+      or request exists) and the document facts fold; the code safety nets fold inside the AI
+      review as "Checked by code (n)"; the approve acknowledgement links to `#findings`; a fold
+      opens when the page is loaded at its anchor. Clicking the selected queue tile clears it.
+- [x] One label rule: only AI is labelled, with a purple `AI` badge and its check result
+      (AGENTS.md section 9); every "not AI" tag removed; the AI border only on AI output.
+- [x] 380 tests pass. After the course: merge the queue's status columns, citations that open the
+      PDF at the page, a sticky decision bar on mobile, local times, a wording pass.
 
 **5.8 Hosted rollout** (owner: outward-facing)
 

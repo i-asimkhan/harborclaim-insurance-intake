@@ -1,14 +1,14 @@
-// The notification bell is a <details> element, so it opens and closes with no
+// The notification bell and the account menu are <details> elements, so it opens and closes with no
 // script at all. This only adds the two behaviors <details> lacks: closing on a
 // click anywhere outside it, and closing on Escape.
 document.addEventListener("click", function (event) {
-  document.querySelectorAll("details.bell[open]").forEach(function (bell) {
+  document.querySelectorAll("details.bell[open], details.account[open]").forEach(function (bell) {
     if (!bell.contains(event.target)) bell.removeAttribute("open");
   });
 });
 document.addEventListener("keydown", function (event) {
   if (event.key !== "Escape") return;
-  document.querySelectorAll("details.bell[open]").forEach(function (bell) {
+  document.querySelectorAll("details.bell[open], details.account[open]").forEach(function (bell) {
     bell.removeAttribute("open");
     bell.querySelector("summary").focus();
   });
@@ -35,3 +35,14 @@ document.addEventListener("keydown", function (event) {
   }
   if (document.querySelector("details.bell")) setInterval(refreshBell, INTERVAL_MS);
 })();
+
+// A folded section (<details id="...">) opens when the page is loaded at its anchor, e.g. right
+// after asking a question (#ask) or drafting a request (#request).
+function openTargetFold() {
+  var id = window.location.hash.slice(1);
+  var target = id && document.getElementById(id);
+  if (target && target.tagName === "DETAILS") target.open = true;
+}
+openTargetFold();
+window.addEventListener("hashchange", openTargetFold);
+

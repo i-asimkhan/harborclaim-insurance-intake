@@ -48,6 +48,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 import storage
+import agent_tools
 import agents
 import ai_client
 import consistency
@@ -235,7 +236,7 @@ def _request_view(record: dict) -> dict:
     if run["status"] == "passed" and run["output"]:
         view.update(source="ai", text=agents.request_text(run["output"]))
     elif run["status"] == "flagged":
-        view.update(note="The AI draft failed automated checks, so the template is shown instead.",
+        view.update(note="The AI draft failed checks, so the standard request is shown instead.",
                     reasons=(run["gate"] or {}).get("reasons", []))
     else:
         view["note"] = "No AI draft: " + AI_UNAVAILABLE_REASONS.get(run["error_type"], "the AI assistant was unavailable") + "."
@@ -397,6 +398,19 @@ def _display_status(record: dict) -> str:
     return record["decisions"][-1]["decision"] if record["decisions"] else record["status"]
 
 
+def _claimant_status(record: dict) -> tuple[str, str]:
+    """(badge style, label) for the claimant's pages: Approved / Declined once final, otherwise
+    Needs information or In review. "Needs more review" is internal, so it reads as In review."""
+    latest = record["decisions"][-1]["decision"] if record["decisions"] else None
+    if latest == "APPROVED":
+        return "ready", "Approved"
+    if latest == "DECLINED":
+        return "neutral", "Declined"
+    if record["status"] == NEEDS_INFORMATION:
+        return "needs", "Needs information"
+    return "neutral", "In review"
+
+
 def _queue_category(record: dict) -> str:
     """Where a claim sits in the queue, by its *latest* decision: Approved or Declined
     finishes it, but "Needs more review" means the adjuster still has to act, so it stays
@@ -528,6 +542,15 @@ STATUS_LABELS = {
     "DECLINED": "Declined",
 }
 templates.env.filters["status_label"] = lambda code: STATUS_LABELS.get(code, str(code).replace("_", " ").capitalize())
+
+
+def _missing_label(field: str) -> str:
+    """A completeness-check field name as a person reads it ("incident_date" -> "incident date")."""
+    return agent_tools.MISSING_WORDS.get(field, str(field).replace("_", " "))
+
+
+templates.env.filters["missing_label"] = _missing_label
+templates.env.filters["claimant_status"] = lambda record: _claimant_status(record)
 
 
 @app.exception_handler(Exception)
@@ -683,7 +706,7 @@ async def submit_claim(
     storage.add_summary(claim_id, summary_text)
 
     if result["status"] == NEEDS_INFORMATION:
-        message = f"We still need: {', '.join(result['missing'])}. Please add these to your claim."
+        message = f"We still need: {', '.join(map(_missing_label, result['missing']))}. Please add these to your claim."
     else:
         message = "Your claim is complete and has been routed to an adjuster for review."
     base_url = _base_url(request)
@@ -786,7 +809,7 @@ async def add_claim_documents(
 
     base_url = _base_url(request)
     if result["status"] == NEEDS_INFORMATION:
-        message = f"Thanks, we've added your update. We still need: {', '.join(result['missing'])}."
+        message = f"Thanks, we've added your update. We still need: {', '.join(map(_missing_label, result['missing']))}."
     else:
         message = "Thanks, we've added your update. Your claim is back with your adjuster for review."
         _notify_adjusters(claim_id, claim["claim_type"], base_url, background)
@@ -854,17 +877,23 @@ def notifications(request: Request, user: dict | None = Depends(get_current_user
 
 
 @app.get("/help")
-def claimant_help(request: Request, user: dict | None = Depends(get_current_user)):
-    """The claimant assistant: questions about the signed-in claimant's own claims only."""
+def claimant_help(request: Request, about: str = "", user: dict | None = Depends(get_current_user)):
+    """The claimant assistant: questions about the signed-in claimant's own claims only.
+    `about` (from the claim page's link) prefills the question with that claim's number, only
+    when it is one of this claimant's own claims."""
     if user is None:
         return RedirectResponse(url="/auth/login", status_code=303)
     if not _claimant_help_on():
         return RedirectResponse(url="/claims", status_code=303)
     left = agents.claimant_questions_left(user["email"])
+    about = about.strip().upper()
+    owned = agent_tools.CLAIM_ID_FORMAT.match(about) and (storage.get_claim(about) or {}).get(
+        "claim", {}).get("claimant_email") == user["email"]
     return templates.TemplateResponse(
         request, "help.html",
         {"user": user, "questions": _help_view(user["email"]), "limit_reached": left == 0,
-         "questions_left": left, "active": "help", **_claimant_nav(user["email"])},
+         "questions_left": left, "prefill": f"About {about}: " if owned else "",
+         "active": "help", **_claimant_nav(user["email"])},
     )
 
 

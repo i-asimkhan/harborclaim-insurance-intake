@@ -21,7 +21,7 @@
       var reason = form.querySelector("[name=reason]");
       var needsReason = button.value === "DECLINED" && (!reason || reason.value.trim().length < 10);
       text.textContent =
-        "Record “" + button.textContent.trim() + "” on " + form.dataset.claimId +
+        "Record “" + (button.dataset.outcome || button.textContent.trim()) + "” on " + form.dataset.claimId +
         "? It's saved under your name" +
         (button.value === "NEEDS_MORE_REVIEW" ? " and stays internal: the claimant isn't notified."
                                               : " and the claimant is notified straight away.") +

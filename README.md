@@ -96,9 +96,19 @@ The walk-through of this diagram is [`docs/design/AGENTIC-LAYER.md`](docs/design
   **AI usage** page (`/adjuster/ai`), which also shows today's usage against the limits.
 - **Honest labels:** "AI draft (model via OpenRouter)" only on text a model wrote and the checks
   passed; the template summary stays as the labelled fallback when AI is off or a model is down.
-- **Tested:** 344 automated tests (a scripted fake model, no network), a golden set of 11
-  fictional claims run live (`scripts/eval_agents.py`), and two red-team rounds. Prompts and
-  results: [`PROMPTS.md`](PROMPTS.md) and [`AI_USAGE.md`](AI_USAGE.md).
+- **Adjuster safeguards** (PR #3, details in [`AI_USAGE.md`](AI_USAGE.md)):
+  - **Decisions, enforced by the server:** a final decision can't be overwritten, a repeat records
+    nothing, a decline needs a reason the claimant is told, and approving while findings are open
+    needs a ticked acknowledgement that goes on the record.
+  - **Consistency checks by code** (`consistency.py`): claim type vs. what the documents describe,
+    and incident date vs. document dates. They work with AI off.
+  - **Personal data:** `privacy.py` removes emails, phone numbers, SSNs and card numbers before any
+    model sees a claim. `AI_DATA_POLICY=production` refuses free-tier models.
+  - **Known limits:** the keyword scan misses negation ("No injuries" still counts as an injury),
+    the description rule is a heuristic, and names and medical details are not redacted.
+- **Tested:** 377 automated tests (a scripted fake model, no network), a golden set of 11
+  fictional claims run live (`scripts/eval_agents.py`, intake agent only), and two red-team
+  rounds. Prompts and results: [`PROMPTS.md`](PROMPTS.md) and [`AI_USAGE.md`](AI_USAGE.md).
 
 AI is off unless switched on in `.env` (setting names in "Deploying to Azure App Service",
 step 6). `python scripts/show_ai_runs.py` prints today's runs.
@@ -409,10 +419,17 @@ this repo's `main` branch. To reproduce it:
    free model IDs in order of preference; the next is tried when one is busy or down; never the
    `openrouter/free` router), `AI_TIMEOUT_SECONDS`, `AI_CLAIMANT_CHAT` (`true` shows the
    claimant's Ask a question page), and the daily limits `AI_DAILY_LIMIT_INTAKE`,
-   `AI_DAILY_LIMIT_ADJUSTER`, `AI_DAILY_LIMIT_CLAIMANT` (defaults 10, 10, 5). The model is
-   a free OpenRouter model called with `httpx`; no OpenAI service, model, key or package is
-   used. Free providers may log prompts, which is acceptable only because every claim and
-   document here is fictional. See `ai_client.py` and `docs/design/AGENTS.md`.
+   `AI_DAILY_LIMIT_ADJUSTER`, `AI_DAILY_LIMIT_CLAIMANT` (defaults 10, 10, 5), and
+   `AI_DATA_POLICY`:
+   - `test` (the default) allows any configured model, for fictional claims only.
+   - `production` refuses `:free` models and the `openrouter/free` router, and asks OpenRouter
+     for providers that don't collect prompts.
+
+   The AI usage page shows which policy is active. The model is a free OpenRouter model called
+   with `httpx`; no OpenAI service, model, key or package is used. Free providers may log
+   prompts, which is acceptable only because every claim and document here is fictional, and
+   emails, phone numbers, SSNs and card numbers are redacted either way (`privacy.py`). See
+   `ai_client.py` and `docs/design/AGENTS.md`.
 7. Add the live callback URL to the same Google OAuth client's Authorized redirect URIs:
    `https://<your-app-name>.azurewebsites.net/auth/google/callback` — alongside the local one,
    not replacing it.
@@ -423,7 +440,9 @@ this repo's `main` branch. To reproduce it:
 .venv/Scripts/python.exe -m pytest tests/test_app.py -v
 ```
 
-54 tests. No real Google login is needed to run them — claimant login is faked
+84 tests in `tests/test_app.py`, and 377 in the whole suite (`python -m pytest -q`: also
+`tests/test_agents.py` 220, `tests/test_review_fixes.py` 33, `tests/test_golden.py` 19,
+`tests/test_ui.py` 16 and `test_main.py` 5). No real Google login is needed to run them — claimant login is faked
 with FastAPI's `dependency_overrides` on `get_current_user`, the standard way
 to test routes behind auth. Adjuster login is tested for real, not faked —
 `storage.create_adjuster` generates a real account and the tests actually
@@ -542,7 +561,10 @@ one, an incident date in the year 3026, or a `.exe` upload are
 was typed still in place). Limits: policy ID ≤ 40 characters, description ≤
 5,000 characters, incident date can't be in the future or before 2000, files
 must be one of `.pdf .txt .jpg .jpeg .png .zip .doc .docx`, ≤ 10MB each, ≤
-10 files per claim.
+10 files per claim. A description that isn't blank needs at least 3 real words, making up at
+least half of what was typed, so a keyboard mash like "ggregrrg3wt3g3" is refused. This is a
+heuristic that stops obvious junk; it doesn't judge whether a description is true. A blank
+description is still `main.py`'s problem.
 
 Separately, a global exception handler (`app.py`'s `unhandled_error`) catches
 anything that isn't already a handled response and returns a generic `500`

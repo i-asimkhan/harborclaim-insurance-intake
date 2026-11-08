@@ -52,7 +52,7 @@ adjuster edits and sends). The prompts are in `PROMPTS.md`; the diagram and walk
   as failover, via OpenRouter (free tier, $0), reasoning off, temperature 0. Chosen by testing:
   12 free models screened in 3 probe rounds (AGENTS.md section 11.4). An adjuster can put either
   first on the AI usage page.
-- **Prompts:** `intake-v6`, `adjuster-v3`, `claimant-v2`, `request-v2` (`agents.py`; v5 for the golden-set table below). Every output goes through the code gate
+- **Prompts:** `intake-v6`, `adjuster-v4`, `claimant-v3`, `request-v2` (`agents.py`; v5 for the golden-set table below). Every output goes through the code gate
   (`agent_gate.py`, rules G1-G9) before an adjuster sees it.
 - **Golden-set eval, 2026-11-02** (`python scripts/eval_agents.py`; 6 fictional claims in
   `sample_data/golden/`; replies recorded in `tests/fixtures/ai/intake/` and replayed by the tests):
@@ -128,15 +128,23 @@ its own tests, in `tests/test_review_fixes.py`.
 
 - **By tests (Claude Code ran them):** 377 tests pass (`python -m pytest -q`), browser tests
   included. Five commits (`c57aa3e`, `6e7e511`, `48136ba`, `64ab31c`, `aaf81ac`) were also run on
-  their own in a separate git worktree, without the owner's then-uncommitted Phase 5.7 work.
+  their own in a separate git worktree, without the Phase 5.7 work that was still uncommitted.
   `main.py` and `test_main.py` (the graded minimum) are unchanged. Both GitHub checks on PR #3 pass.
 - **A data-loss risk caught in review:** `init_db` dropped `adjuster_decisions` whenever its columns
   changed, so adding `reason` would have wiped every recorded decision. It now drops a table only
   when a required column is missing; a test builds the old table, runs `init_db` twice and checks
   the decision survives.
-- **Not verified yet:** `request-v2` and `adjuster-v3` have not run against a live model.
-  `scripts/eval_agents.py` covers only the intake agent, so they are being checked live in the
-  app. The request agent had not run against the real model at the time of the PR.
+- **First live run, 2026-11-08:** `scripts/eval_agents.py` covers only the intake agent, so the
+  request agent and both assistants were run against the real model in the app. That found four
+  bugs the recorded-reply tests had missed, all fixed with tests in `eb34db2`:
+  - the model passed a claim number to tools that take no arguments, and every such call was
+    refused (those tools now ignore stray arguments);
+  - the request agent skipped its tools and drafted a request that named nothing (it must now look
+    first, and an empty draft falls back to the standard request);
+  - an empty adjuster answer passed the checks (gate rule G1 now rejects it);
+  - the claimant assistant replied "I'll check" instead of answering (`claimant-v3`).
+- **Still open:** asked for the repair estimate total, the adjuster assistant (`adjuster-v4`) read
+  the estimate and still answered "not found".
 
 ### Checked by the owner
 
@@ -145,7 +153,7 @@ To be ticked by the owner. Claude Code can't confirm these on the owner's behalf
 - [ ] Read the PR #3 diff
 - [ ] Saw the 14 fixes on the local site (port 8123)
 - [ ] Ran the test suite locally
-- [ ] Ran `request-v2` and `adjuster-v3` live
+- [ ] Ran `request-v2` and `adjuster-v4` live
 
 ### Known limits
 

@@ -1,7 +1,6 @@
 # HarborClaim -- the agentic layer (Phase 5 design)
 
-Status: **design, awaiting the owner's approval** (ROADMAP.md, Phase 5, step 5.0). Nothing here
-is built yet. This file is the build reference for Phase 5: what each agent is for, what it may
+Status: **built** (ROADMAP.md, Phase 5). This file is the build reference for Phase 5: what each agent is for, what it may
 and may not do, how its output is checked, and how it is tested. Revised 2026-10-24 after an
 independent design review (section 14).
 
@@ -756,17 +755,14 @@ flagged, trace open, both assistants, the fallback).
 
 ---
 
-## 13. Open questions for the owner
+## 13. Decisions
 
-1. ~~Provider and cost.~~ Decided 2026-10-24: OpenRouter, a free model, $0; chosen by the
-   two-round test in section 11.4.
-2. The owner sets `OPENROUTER_API_KEY` and `AI_MODELS` in `.env`; Claude never reads it.
-3. ~~Scope of the claimant assistant.~~ Decided 2026-10-24: kept, built last (after the
-   adjuster assistant), and the first thing dropped if time runs out. The reviewer had
-   recommended cutting it.
-4. The limits in section 7 are starting values; adjust after the first eval.
-5. Whether to make a one-time OpenRouter credit purchase of $10 or more, which raises the free
-   daily cap from about 50 to about 1,000 requests permanently (owner's call; not required).
+1. Provider and cost: OpenRouter, free models, $0; chosen by the two-round test in section 11.4.
+2. `OPENROUTER_API_KEY` and `AI_MODELS` are set in `.env`, which is never committed.
+3. The claimant assistant was kept and built last, after the adjuster assistant.
+4. The limits in section 7 are starting values, to adjust from use.
+5. A one-time OpenRouter credit of $10 or more would raise the free daily cap from about 50 to
+   about 1,000 requests. Not needed for the demo.
 
 ---
 

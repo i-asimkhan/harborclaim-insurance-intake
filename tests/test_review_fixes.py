@@ -362,8 +362,9 @@ def test_request_agent_tool_offers_the_consistency_checks():
 def test_adjuster_prompt_answers_broad_questions_from_the_sources():
     prompt = agents.ADJUSTER_PROMPT
     assert "what is this about" in prompt and "get_intake_review has the review's summary" in prompt
-    assert "only when the sources hold nothing" in prompt
-    assert agents.PROMPT_VERSION["adjuster"] == "adjuster-v3"
+    assert "Only when the sources hold nothing" in prompt
+    assert "An empty answer with not_found false is never valid" in prompt    # v4, after the live run
+    assert agents.PROMPT_VERSION["adjuster"] == "adjuster-v4"
 
 
 def test_not_found_answer_is_not_labelled_as_checked_against_the_documents():

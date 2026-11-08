@@ -1739,3 +1739,48 @@ def test_the_claim_page_links_to_help_with_its_own_claim_number(fake_model, clai
     # Someone else's claim number, or anything that isn't one, prefills nothing.
     assert 'value=""' in web.get("/help?about=CLM-7C7C7C7C").text
     assert 'value=""' in web.get("/help?about=<script>").text
+
+
+def test_the_request_agent_must_call_a_tool_first(fake_model):
+    script, calls = fake_model
+    _sample_claim()
+    _request_script(script)
+    agents.draft_info_request("CLM-5A5A5A5A", "adj.review")
+    assert calls[0]["tool_choice"] == "required" and calls[1]["tool_choice"] == "auto"
+
+
+def test_an_ai_draft_that_names_nothing_falls_back_to_the_standard_request(fake_model, adjuster_web):
+    # Seen live 2026-11-08: "we need a few more items" with an empty items list.
+    script, _ = fake_model
+    _sample_claim()
+    _request_script(script, {"message": "Hello! We need a few more items to continue reviewing claim "
+                                        "CLM-5A5A5A5A. Please use Add documents.", "items": []})
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/draft", follow_redirects=False)
+    page = _page()
+    assert "The AI agent found nothing to ask the claimant for." in page
+    assert "Read and edit before sending" not in page
+
+
+def test_a_tool_with_no_parameters_ignores_arguments_the_model_adds(fake_model):
+    # Seen live 2026-11-08: get_intake_review({"claim_id": ...}) was refused and the draft went blind.
+    script, _ = fake_model
+    _sample_claim()
+    script += [_tools_reply(_tool_call("get_intake_review", '{"claim_id": "CLM-0000BBBB"}', "a"),
+                            _tool_call("get_completeness", '{"claim_id": "CLM-5A5A5A5A"}', "b")),
+               _json_reply(GOOD_REQUEST)]
+    result = agents.draft_info_request("CLM-5A5A5A5A", "adj.review")
+    tools = [t for t in result.trace if t["type"] == "tool"]
+    assert [t["refused"] for t in tools] == [None, None] and result.status == "passed"
+    assert "CLM-0000BBBB" not in str([t["result"] for t in tools])   # scope stays this claim
+
+
+def test_an_empty_adjuster_answer_is_not_shown_as_checked():
+    # Seen live 2026-11-08: {"answer": [], "not_found": false} passed and would show "Checked" over nothing.
+    empty = agent_gate.check("adjuster", {"answer": [], "not_found": False, "refused": False}, sources={})
+    assert empty["status"] == "invalid"
+    assert agent_gate.check("adjuster", {"answer": [], "not_found": True, "refused": False}, sources={})["status"] == "passed"
+
+
+def test_both_assistants_must_look_something_up_first():
+    assert agents.CHARTERS["adjuster"].tools_first and agents.CHARTERS["claimant"].tools_first
+    assert not agents.CHARTERS["intake"].tools_first      # the intake review reads prefetched documents

@@ -233,7 +233,12 @@ def _request_view(record: dict) -> dict:
             "final": bool(record["decisions"]) and record["decisions"][-1]["decision"] != "NEEDS_MORE_REVIEW"}
     if run is None:
         return view
-    if run["status"] == "passed" and run["output"]:
+    if run["status"] == "passed" and run["output"] and not run["output"].get("items"):
+        # A passed draft that names nothing to ask for isn't a request: usually the agent found nothing
+        # missing (seen live), sometimes it's a vague "a few items". Either way, offer the standard one.
+        view["note"] = ("The AI agent found nothing to ask the claimant for. If you still need something, "
+                        "edit the standard request below.")
+    elif run["status"] == "passed" and run["output"]:
         view.update(source="ai", text=agents.request_text(run["output"]))
     elif run["status"] == "flagged":
         view.update(note="The AI draft failed checks, so the standard request is shown instead.",

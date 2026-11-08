@@ -256,6 +256,9 @@ def shape_errors(agent: str, output) -> list[str]:
                 or not isinstance(output["refused"], bool):
             return ["answer must be a list; not_found and refused booleans"]
         errors += [f"answer[{i}] malformed" for i, s in enumerate(output["answer"]) if not _is_sentence(s)]
+        if not output["answer"] and not output["not_found"] and not output["refused"]:
+            # Seen live 2026-11-08: an empty answer would otherwise pass and show "Checked" above nothing.
+            errors.append("answer is empty but not marked not found")
     elif agent == "request":
         if not isinstance(output["message"], str) or not isinstance(output["items"], list) \
                 or not all(isinstance(i, str) for i in output["items"]):

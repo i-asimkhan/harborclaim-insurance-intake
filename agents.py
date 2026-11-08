@@ -123,13 +123,18 @@ ADJUSTER_PROMPT = (
     "A broad question about the claim as a whole (what is this about, summarise it, what happened) is "
     "answerable: say what the sources describe happened, when, and any amounts, citing them; "
     "get_intake_review has the review's summary.\n"
-    "Set not_found to true, with answer empty, only when the sources hold nothing on the question; never guess.\n"
+    "When the sources answer the question, answer must hold at least one cited sentence, e.g. for 'What "
+    "does the estimate total?': 'The repair estimate totals $X,XXX.XX.' citing the estimate's total line. "
+    "Only when the sources hold nothing on the question, set not_found to true and leave answer empty; "
+    "never guess. An empty answer with not_found false is never valid.\n"
     "If the question asks you to decide, recommend a decision, or judge coverage, set refused to true.\n\n"
     + _RULES)
 CLAIMANT_PROMPT = (
     "You help a signed-in insurance claimant understand where their own claims stand and what to send. "
     "Answer in plain, friendly language in at most 4 sentences.\n"
     "You may call up to 3 tools: list_my_claims, get_claim_status, get_missing_items, get_document_hints.\n"
+    "Look things up before you reply, and reply with the answer itself: never say you will check something, "
+    "check it. If the claimant has one claim, that's the one they mean.\n"
     "This is the HarborClaim site: to file a new claim the claimant uses New claim in the top menu, and "
     "My claims shows every claim they have filed.\n"
     "Never say whether a claim is or will be approved, covered or paid, never estimate an amount, and "
@@ -157,7 +162,7 @@ REQUEST_PROMPT = (
     "needed, return an empty items list and a message saying so. Reply with JSON matching the schema, "
     "and nothing else."
 )
-PROMPT_VERSION = {"intake": "intake-v6", "adjuster": "adjuster-v3", "claimant": "claimant-v2",
+PROMPT_VERSION = {"intake": "intake-v6", "adjuster": "adjuster-v4", "claimant": "claimant-v3",
                   "request": "request-v2"}
 
 # --- Code-written refusals: decision and coverage questions never reach the model -------------
@@ -198,6 +203,9 @@ class Charter:
     default_daily_limit: int
     tools: dict = field(default_factory=dict)  # name -> (function, spec)
     prefetch: bool = True  # False: start from agent_tools.brief_text and fetch the rest with tools
+    # True: the first model call must request a tool. Seen live 2026-11-08: given only a brief and
+    # tool_choice "auto", the request agent skipped its tools and drafted a request naming nothing.
+    tools_first: bool = False
 
     def daily_limit(self) -> int:
         try:
@@ -212,11 +220,11 @@ CHARTERS = {
     "intake": Charter("intake", INTAKE_PROMPT, INTAKE_SCHEMA, 2000, "AI_DAILY_LIMIT_INTAKE", 10,
                       agent_tools.TOOLS["intake"]),
     "adjuster": Charter("adjuster", ADJUSTER_PROMPT, ADJUSTER_SCHEMA, 800, "AI_DAILY_LIMIT_ADJUSTER", 10,
-                        agent_tools.TOOLS["adjuster"]),
+                        agent_tools.TOOLS["adjuster"], tools_first=True),
     "claimant": Charter("claimant", CLAIMANT_PROMPT, CLAIMANT_SCHEMA, 800, "AI_DAILY_LIMIT_CLAIMANT", 5,
-                        agent_tools.TOOLS["claimant"]),
+                        agent_tools.TOOLS["claimant"], tools_first=True),
     "request": Charter("request", REQUEST_PROMPT, REQUEST_SCHEMA, 600, "AI_DAILY_LIMIT_REQUEST", 10,
-                       agent_tools.TOOLS["request"], prefetch=False),
+                       agent_tools.TOOLS["request"], prefetch=False, tools_first=True),
 }
 
 
@@ -349,7 +357,8 @@ def run_agent(charter: Charter, scope: agent_tools.Scope, *, actor: str, questio
             if remaining <= 1:
                 return finish("unavailable", "timeout", model=sticky_model and sticky_model[0])
             final = model_call == MAX_MODEL_CALLS or tool_calls_used >= MAX_TOOL_CALLS
-            reply = ai_client.chat(messages, tools=specs or None, tool_choice="none" if final else "auto",
+            choice = "none" if final else ("required" if charter.tools_first and model_call == 1 else "auto")
+            reply = ai_client.chat(messages, tools=specs or None, tool_choice=choice,
                                    response_format=_response_format(charter.name, charter.schema),
                                    max_tokens=charter.max_output_tokens, timeout=remaining, models=sticky_model or first_models)
             tokens["in"] += _token_count(reply.input_tokens)
@@ -374,6 +383,11 @@ def run_agent(charter: Charter, scope: agent_tools.Scope, *, actor: str, questio
                     refusal = f"tool {name!r} is not allowed"
                 if refusal is None:
                     fn = charter.tools[name][0]
+                    if args and len(inspect.signature(fn).parameters) == 1:
+                        # A tool with no parameters ignores any it's sent. Seen live 2026-11-08: the model
+                        # passed the claim number to get_intake_review, every call was refused, and it
+                        # drafted blind. Safe because the scope (the one claim) is bound by code.
+                        args = {}
                     try:
                         inspect.signature(fn).bind(scope, **args)  # wrong argument names are refused, not run
                     except TypeError:

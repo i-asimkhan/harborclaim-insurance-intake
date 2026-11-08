@@ -124,7 +124,7 @@ def shot(target, name):
 
 
 def ask(page, url, question):
-    page.goto(url)
+    page.goto(url + ("#ask" if "/adjuster/" in url else ""))   # the adjuster's Ask card is folded
     page.fill(".ai-ask-form input[name=question]", question)
     with page.expect_navigation(timeout=120_000):     # the answer comes back with the redirect
         page.click(".ai-ask-form button")
@@ -155,7 +155,7 @@ def main():
             adjuster = browser.new_page(viewport=viewport)
             adjuster_login(adjuster, "d.reyes", password)
             adjuster.goto(f"{BASE}/adjuster/claims/{fallback_id}")
-            shot(adjuster.locator(".mock-card").first, "26-ai-off-template-fallback")
+            shot(adjuster.locator("#ai_review"), "26-ai-off-standard-summary")
             browser.close()
         finally:
             stop(proc)
@@ -174,12 +174,12 @@ def main():
             url = f"{BASE}/adjuster/claims/{claim_id}"
             for _ in range(60):                   # the review runs after the claimant's response
                 adjuster.goto(url)
-                if adjuster.locator("#ai_review .ai-tag").count():
+                if adjuster.locator("#ai_review .ai-badge").count():
                     break
                 time.sleep(2)
             shot(adjuster, "20-adjuster-claim-with-ai-review")
             shot(adjuster.locator("#ai_review"), "21-ai-intake-review")
-            adjuster.locator("#ai_review details.ai-trace summary").first.click()
+            adjuster.locator("#ai_review details.ai-trace summary", has_text="AI trace").click()
             shot(adjuster.locator("#ai_review"), "22-ai-review-trace-open")
 
             ask(adjuster, url, "Should I approve this claim?")
@@ -193,7 +193,7 @@ def main():
             shot(claimant, "24-claimant-ask-a-question")
 
             # The one action: the request agent drafts, the adjuster sends, the claimant answers.
-            adjuster.goto(url)
+            adjuster.goto(url + "#request")              # folded until a draft or request exists
             with adjuster.expect_navigation(timeout=120_000):
                 adjuster.click("#request form.inline-form button")
             if adjuster.locator("#request details.ai-trace summary").count():

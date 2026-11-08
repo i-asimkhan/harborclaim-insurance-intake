@@ -55,8 +55,10 @@ about **Nov 4–9**, plus spare evenings before.
       storage design" below), not as built work.
 - [ ] **Phase 1b open items** (decision note, "Worth checking") only if time allows; the
       decision note is the better demo moment.
-- [ ] **Confirm the final-project requirements** with the instructors: presentation length,
-      what to submit (repo link, PR, slides, report), and where.
+- [x] **Confirm the final-project requirements** with the instructors: presentation length,
+      what to submit (repo link, PR, slides, report), and where. **Answered by the instructors'
+      announcement for the Nov 10 final.** Length: ___ · Submit: ___ · Where: ___ (owner to
+      fill in from the announcement).
 
 **For the Nov 10 presentation:** problem and users; live demo (claimant files, completeness
 check, adjuster reviews and decides, claimant notified); architecture; what is AI and what is
@@ -69,11 +71,15 @@ authoritative, honest labels); production roadmap (Phases 4–5).
   adjuster provisioned credentials), persistent SQLite storage, document upload, a mocked
   extraction/summary pipeline, a notification log, claim type at intake, a redesigned
   claimant side and adjuster side, and email delivery behind an off-by-default flag are all
-  built. **318 tests pass** (2026-11-02): 84 in `tests/test_app.py`, 194 in `tests/test_agents.py`, 19 in `tests/test_golden.py`, 16 Playwright tests in `tests/test_ui.py`, 5 in `test_main.py`.
-- **Phases 1-3 and Phase 5 steps 5.1-5.5 are on branch `phase-5-agents`, open as
-  [PR #1](https://github.com/i-asimkhan/harborclaim-insurance-intake/pull/1) into `main`**
-  (2026-10-26); not merged, not deployed. The live Azure site still runs the older build. Merging
-  and the Azure Sync are the owner's call.
+  built. **377 tests pass** (2026-11-06): 220 in `tests/test_agents.py`, 84 in `tests/test_app.py`, 33 in `tests/test_review_fixes.py`, 19 in `tests/test_golden.py`, 16 Playwright tests in `tests/test_ui.py`, 5 in `test_main.py`.
+- **Phases 1-3 and Phase 5 steps 5.1-5.6 are on `main`:**
+  [PR #1](https://github.com/i-asimkhan/harborclaim-insurance-intake/pull/1) from `phase-5-agents`
+  was merged on 2026-11-07 (`9a41528`).
+- **The request agent (5.9) and the adjuster review fixes (5.10) are on branch
+  `adjuster-review-fixes`**, open as
+  [PR #3](https://github.com/i-asimkhan/harborclaim-insurance-intake/pull/3) into `main`.
+- **Not deployed:** the live Azure site still runs the older build (`/adjuster/ai` returns 404).
+  Merging and the Azure Sync are the owner's call.
 - **CI (GitHub Actions, 2026-10-26):** `.github/workflows/tests.yml` runs the graded minimum and
   the full suite on every PR and push to `main`, with no secrets (passing). CI found that the
   browser tests depended on the local `.env`'s `SESSION_SECRET_KEY`; `tests/conftest.py` now pins
@@ -660,6 +666,33 @@ live run is 5.4
       request marked answered, intake review re-runs with the new documents.
 - [x] Diagram and walk-through: `docs/design/agentic-layer.svg`/`.png`, `AGENTIC-LAYER.md`.
 - [x] 14 tests; 344 in all. Not tried live yet: the screenshot run tonight is its first live run.
+- [ ] Live run of `request-v2` (PR #3: asks the claimant to confirm the type and date when the
+      consistency checks disagree). Not run against the real model yet.
+
+**5.10 Adjuster review fixes** (owner's review of CLM-6AD24F55, 2026-11-06; PR #3) -- built
+
+- [x] Decisions:
+      - The badge follows the latest decision.
+      - A repeat records nothing.
+      - A final decision can't be overwritten.
+      - No decision on an incomplete claim.
+      - A decline needs a reason, which the claimant is told.
+      - Approving over open findings needs an acknowledgement, which is recorded.
+      - Only a final decision notifies the claimant.
+- [x] `privacy.py` redaction and the `AI_DATA_POLICY` setting (`test` / `production`).
+- [x] `consistency.py`: claim type and incident date checked against the documents by code, and
+      fed into the info-request drafts (`request-v2`).
+- [x] Review content:
+      - Broad questions answered (`adjuster-v3`), and "not found" labelled honestly.
+      - Citations once per source and page, with links.
+      - "Dates and amounts the summary doesn't mention", each with its line.
+      - Readable status labels.
+      - Descriptions with no real words refused at intake.
+- [x] 33 tests in `tests/test_review_fixes.py`; 377 in all. What was built and the known limits are
+      in `AI_USAGE.md`.
+- [ ] Live run of `adjuster-v3` (`scripts/eval_agents.py` covers only the intake agent).
+- [ ] Claimant UI items: raw field names, "wants a closer look" after Needs more review, and
+      adjuster usernames in the decision history.
 
 **5.8 Hosted rollout** (owner: outward-facing)
 
@@ -694,7 +727,7 @@ the claimant is notified. Fictional demo data only. The owner is Asim Khan.
 - Server: `python -m uvicorn app:app --port 8123`. **No `--reload`**: it didn't notice Python
   edits in this OneDrive folder and died mid-edit. Restart the server by hand after changing any
   `.py` file; templates and CSS/JS changes show on a refresh.
-- Tests: `python -m pytest -q` from inside this folder (318 tests, about 2 min, includes the
+- Tests: `python -m pytest -q` from inside this folder (377 tests, about 2 min, includes the
   Playwright browser tests; `python -m playwright install chromium` once).
 - Screenshots: `python scripts/capture_screenshots.py` regenerates all 14 in
   `docs/screenshots/` from a live instance.

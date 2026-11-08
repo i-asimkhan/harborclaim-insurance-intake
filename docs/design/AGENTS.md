@@ -116,14 +116,18 @@ GET  /help, POST /help/ask            claimant assistant (only when AI_CLAIMANT_
 | `tests/test_agents.py` | Harness, tools, gate, routes, labels; fake client only. | email tests in `tests/test_app.py` |
 | `tests/fixtures/ai/` | Recorded real responses, replayed offline. | -- |
 | `sample_data/golden/` | Golden-set claims (new `.txt` documents) and their expected properties. | `sample_data/claims.json` |
+| `privacy.py` (PR #3) | `redact()`: emails, phone numbers, SSNs and Luhn-valid card numbers removed from the sources in `agent_tools.claim_scope`, so the model and the gate read the same text. The `AI_DATA_POLICY` check. | -- |
+| `consistency.py` (PR #3) | Code-only checks of the claim form against the keyword scan's facts: claim type vs. described incidents, incident date vs. document dates. They feed open findings, the info-request template and `get_completeness`. Not AI. | `main.py`'s style |
+| `tests/test_review_fixes.py` (PR #3) | One section per adjuster review fix. | -- |
 
 Changed: `app.py` (one background task, three routes, page context), `storage.py` (one table,
 its queries, `reset()`, the duplicate-filename fix), `extraction.py` (public, page-aware reader),
 the adjuster review template, one new claimant template, `tests/conftest.py`,
 `requirements.txt`, `.env.example`, and the docs in section 12.
 
-Not touched: `main.py`, `test_main.py`, `auth.py`, `validation.py`, `email_delivery.py`, the
-decision route.
+Not touched: `main.py`, `test_main.py`, `auth.py`, `email_delivery.py`. Phase 5 left
+`validation.py` and the decision route alone. PR #3 then changed both: the description rule, and
+the decision rules (R25-R27, section 8).
 
 ### Model, provider and settings
 
@@ -174,9 +178,10 @@ decision route.
 | `AI_CLAIMANT_CHAT` | `true` to show the claimant assistant | blank (off) |
 | `AI_TIMEOUT_SECONDS` | Whole-run time limit | 30 |
 | `AI_DAILY_LIMIT_INTAKE`, `AI_DAILY_LIMIT_ADJUSTER`, `AI_DAILY_LIMIT_CLAIMANT` | Runs per UTC day, per agent | section 7 |
+| `AI_DATA_POLICY` (added 2026-11-06) | `test`: any configured model, for fictional claims only. `production`: `:free` models and `openrouter/free` refused; OpenRouter asked for providers that don't collect prompts (`provider.data_collection = "deny"`). Shown on the AI usage page | `test` |
 
-`tests/conftest.py` pins `AI_PROVIDER`, `AI_ENABLED` and `AI_CLAIMANT_CHAT` to off, beside the
-email pins, so a `.env` with AI on can never make the test suite call a model.
+`tests/conftest.py` pins `AI_PROVIDER`, `AI_ENABLED`, `AI_CLAIMANT_CHAT` and `AI_DATA_POLICY`,
+beside the email pins, so a `.env` with AI on can never make the test suite call a model.
 
 ---
 
@@ -508,7 +513,21 @@ first line; each one has a hard guardrail behind it.
 | R19 | Model text is never rendered as HTML | Hard | Jinja autoescape; never the `safe` filter, no Markdown rendering | `<script>` in model output test |
 | R20 | Cross-site form posts to the new routes are blocked | Hard | session cookie `SameSite=lax` (Starlette default, checked) plus the existing login checks | stated; same as the existing POST routes |
 | R21 | Logs never contain prompts, document text or keys | Hard | `ai_client` logs error type only | log-capture test (as for email) |
-| R22 | A human decides every claim | Hard | the decision route is the only writer of decisions, adjuster session required | existing decision tests, unchanged |
+| R22 | A human decides every claim | Hard | the decision route is the only writer of decisions, adjuster session required | existing decision tests |
+| R23 | Contact and card details never reach a model | Hard | `privacy.redact` in `agent_tools.claim_scope` | redaction and claim-scope tests (`test_review_fixes.py` §5) |
+| R24 | Free-tier models never see real claims | Hard (when `AI_DATA_POLICY=production`) | `ai_client.chat` filters the model list; adds `provider.data_collection = "deny"` | refused-without-a-call and no-data-collection tests (§5) |
+| R25 | A final decision is final; a repeat records nothing; no decision on an incomplete claim | Hard | decision route | §2, §3 |
+| R26 | A decline carries a reason the claimant is told; a Needs-more-review note stays internal | Hard | decision route, `adjuster_decisions.reason` | §4 |
+| R27 | Approving over open findings is a recorded, deliberate choice | Hard | decision route (`acknowledge`), `adjuster_decisions.open_findings`; confirm dialog | §7 |
+| R28 | A claim-type or date mismatch is flagged even with AI off | Hard | `consistency.py` | §14 |
+
+**Known limits (PR #3).**
+
+- The keyword scan misses negation: "No injuries were reported" still counts as bodily injury,
+  so R28 can flag a type mismatch on such a phrase. It flags; it never decides.
+- The intake description rule (at least 3 real words) is a heuristic: it stops keyboard mashes,
+  not thin or untrue descriptions.
+- R23 is pattern-based: names, addresses and medical details are not redacted.
 
 ---
 

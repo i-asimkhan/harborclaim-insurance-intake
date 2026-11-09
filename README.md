@@ -79,6 +79,14 @@ The walk-through of this diagram is [`docs/design/AGENTIC-LAYER.md`](docs/design
 | **Ask a question** (`/help`) | Claimant | Says where the claimant's own claims stand and what's still needed. Never mentions anyone else's claim, amounts or decisions not on record. |
 | **Request missing information** | Adjuster drafts, claimant receives | Starts from a brief and calls its tools to find what's missing, then drafts a request. The adjuster edits and sends it; the claimant answers by adding documents, the claim is checked again and the intake review re-runs. |
 
+**From a live run** (real model, fictional claim, `python scripts/capture_ai_screenshots.py`):
+
+| | |
+|---|---|
+| ![AI intake review with citations; one sentence failed a code check and is marked](docs/screenshots/21-ai-intake-review.png) Intake review: cited summary and an amount difference. One sentence held a number its quote didn't cover, so the code check marked it failed. | ![Ask about this claim: a cited answer, and a decision question answered by code](docs/screenshots/23-ask-about-this-claim.png) Ask about this claim: a cited answer; "Should I approve?" gets the fixed reply, no model call |
+| ![The request agent's draft with its tool calls in the AI trace](docs/screenshots/27-request-agent-draft.png) Request agent: it called two tools, then drafted; the adjuster edits and sends | ![The claimant's view of the request, with Add documents](docs/screenshots/28-claimant-sees-request.png) The claimant sees the request and answers with Add documents |
+| ![The claimant assistant answering where a claim stands](docs/screenshots/24-claimant-ask-a-question.png) Claimant assistant: where the claim stands; payment questions get the fixed reply | ![AI usage page: model choice, data policy and today's limits](docs/screenshots/25-adjuster-ai-usage.png) AI usage: which model answers first, the data policy, and today's limits |
+
 **How it's built** (details in [`docs/design/AGENTS.md`](docs/design/AGENTS.md)):
 
 - **One shared harness** (`agents.py`): a charter per agent (prompt, JSON schema, daily limit),
@@ -106,9 +114,9 @@ The walk-through of this diagram is [`docs/design/AGENTIC-LAYER.md`](docs/design
     model sees a claim. `AI_DATA_POLICY=production` refuses free-tier models.
   - **Known limits:** the keyword scan misses negation ("No injuries" still counts as an injury),
     the description rule is a heuristic, and names and medical details are not redacted.
-- **Tested:** 380 automated tests (a scripted fake model, no network), a golden set of 11
-  fictional claims run live (`scripts/eval_agents.py`, intake agent only), and two red-team
-  rounds. Prompts and results: [`PROMPTS.md`](PROMPTS.md) and [`AI_USAGE.md`](AI_USAGE.md).
+- **Tested:** 390 automated tests (a scripted fake model, no network), a golden set of 11
+  fictional claims run live (`scripts/eval_agents.py`, intake agent only), two red-team
+  rounds, and live runs of the other three agents in the app. Prompts and results: [`PROMPTS.md`](PROMPTS.md) and [`AI_USAGE.md`](AI_USAGE.md).
 
 AI is off unless switched on in `.env` (setting names in "Deploying to Azure App Service",
 step 6). `python scripts/show_ai_runs.py` prints today's runs.

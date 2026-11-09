@@ -364,7 +364,17 @@ def test_adjuster_prompt_answers_broad_questions_from_the_sources():
     assert "what is this about" in prompt and "get_intake_review has the review's summary" in prompt
     assert "Only when the sources hold nothing" in prompt
     assert "An empty answer with not_found false is never valid" in prompt    # v4, after the live run
-    assert agents.PROMPT_VERSION["adjuster"] == "adjuster-v4"
+    # v5, after the next live run: an empty answer even after reading the estimate. A worked example
+    # and short number lines as quotes fixed it (2026-11-08).
+    assert "Total estimate $1,234.56" in prompt and "never with '| PAGE'" in prompt
+    assert agents.PROMPT_VERSION["adjuster"] == "adjuster-v5"
+
+
+def test_claimant_prompt_says_how_to_answer_what_is_still_needed():
+    # v4, after a live "I'll check what's still missing" (2026-11-08).
+    assert "call get_missing_items for that claim" in agents.CLAIMANT_PROMPT
+    assert "Nothing more is needed from you right now" in agents.CLAIMANT_PROMPT
+    assert agents.PROMPT_VERSION["claimant"] == "claimant-v4"
 
 
 def test_not_found_answer_is_not_labelled_as_checked_against_the_documents():

@@ -125,6 +125,11 @@ ADJUSTER_PROMPT = (
     "get_intake_review has the review's summary.\n"
     "When the sources answer the question, answer must hold at least one cited sentence, e.g. for 'What "
     "does the estimate total?': 'The repair estimate totals $X,XXX.XX.' citing the estimate's total line. "
+    "A short line holding the number, such as 'Total estimate $1,234.56', may be quoted whole. A complete "
+    "answer looks like: {\"answer\": [{\"text\": \"The repair estimate totals $1,234.56.\", \"citations\": "
+    "[{\"source\": \"example_estimate.pdf\", \"page\": 1, \"quote\": \"Total estimate $1,234.56\"}]}], "
+    "\"not_found\": false, \"refused\": false}. The source is the name alone (e.g. description or "
+    "example_estimate.pdf), never with '| PAGE'.\n"
     "Only when the sources hold nothing on the question, set not_found to true and leave answer empty; "
     "never guess. An empty answer with not_found false is never valid.\n"
     "If the question asks you to decide, recommend a decision, or judge coverage, set refused to true.\n\n"
@@ -135,6 +140,9 @@ CLAIMANT_PROMPT = (
     "You may call up to 3 tools: list_my_claims, get_claim_status, get_missing_items, get_document_hints.\n"
     "Look things up before you reply, and reply with the answer itself: never say you will check something, "
     "check it. If the claimant has one claim, that's the one they mean.\n"
+    "For what they still need to send, call get_missing_items for that claim and say what it lists, or "
+    "that nothing more is needed right now. A complete answer: 'Your claim CLM-... is with your adjuster. "
+    "Nothing more is needed from you right now.'\n"
     "This is the HarborClaim site: to file a new claim the claimant uses New claim in the top menu, and "
     "My claims shows every claim they have filed.\n"
     "Never say whether a claim is or will be approved, covered or paid, never estimate an amount, and "
@@ -162,7 +170,7 @@ REQUEST_PROMPT = (
     "needed, return an empty items list and a message saying so. Reply with JSON matching the schema, "
     "and nothing else."
 )
-PROMPT_VERSION = {"intake": "intake-v6", "adjuster": "adjuster-v4", "claimant": "claimant-v3",
+PROMPT_VERSION = {"intake": "intake-v6", "adjuster": "adjuster-v5", "claimant": "claimant-v4",
                   "request": "request-v2"}
 
 # --- Code-written refusals: decision and coverage questions never reach the model -------------

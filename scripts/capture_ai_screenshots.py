@@ -90,7 +90,9 @@ DEMO_CLAIM = {
         "Avenue at Palm Street on 2026-10-27. The rear bumper, trunk lid and left tail lamp are "
         "damaged. The body shop quoted $3,250.00 to repair it."
     ),
-    "files": [DEMO / "bayport_police_report.pdf", DEMO / "bayshore_repair_estimate.pdf"],
+    # Filed with the estimate only, so the request agent has something real to ask for (the police
+    # report), and the claimant answers it with that report.
+    "files": [DEMO / "bayshore_repair_estimate.pdf"],
 }
 FALLBACK_CLAIM = {**DEMO_CLAIM, "policy_id": "HC-AUTO-5319"}
 
@@ -160,6 +162,11 @@ def main():
         finally:
             stop(proc)
 
+        # A fresh start, so the claimant has one claim and the assistant knows which one they mean.
+        storage.reset()
+        storage.get_or_create_user(CLAIMANT_EMAIL, "Demo Claimant")
+        password = storage.create_adjuster("d.reyes", "D. Reyes")
+
         # 2. AI on: the demo claim, reviewed and questioned by the real model.
         browser = p.chromium.launch()
         proc = start_server(ai_on=True)
@@ -204,14 +211,10 @@ def main():
             claimant.goto(f"{BASE}/claims/{claim_id}")
             shot(claimant, "28-claimant-sees-request")
 
-            with tempfile.TemporaryDirectory() as tmp:
-                photo_log = Path(tmp) / "damage_photo_log.txt"
-                photo_log.write_text("Photo log (fictional): four photos of the rear bumper, trunk lid and left "
-                                     "tail lamp, taken 2026-10-27 at Harbor Avenue and Palm Street.", encoding="utf-8")
-                claimant.set_input_files("#add-documents input[type=file]", str(photo_log))
-                claimant.fill("#add-documents textarea", "Photo log attached; the photos are on my phone if needed.")
-                with claimant.expect_navigation():
-                    claimant.click("#add-documents button")
+            claimant.set_input_files("#add-documents input[type=file]", str(DEMO / "bayport_police_report.pdf"))
+            claimant.fill("#add-documents textarea", "Here is the police report from the scene.")
+            with claimant.expect_navigation():
+                claimant.click("#add-documents button")
             adjuster.goto(url)
             shot(adjuster.locator("#request"), "29-request-answered")
             time.sleep(45)                        # let the second intake review (new document) finish

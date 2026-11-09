@@ -52,7 +52,7 @@ adjuster edits and sends). The prompts are in `PROMPTS.md`; the diagram and walk
   as failover, via OpenRouter (free tier, $0), reasoning off, temperature 0. Chosen by testing:
   12 free models screened in 3 probe rounds (AGENTS.md section 11.4). An adjuster can put either
   first on the AI usage page.
-- **Prompts:** `intake-v6`, `adjuster-v4`, `claimant-v3`, `request-v2` (`agents.py`; v5 for the golden-set table below). Every output goes through the code gate
+- **Prompts:** `intake-v6`, `adjuster-v5`, `claimant-v4`, `request-v2` (`agents.py`; v5 for the golden-set table below). Every output goes through the code gate
   (`agent_gate.py`, rules G1-G9) before an adjuster sees it.
 - **Golden-set eval, 2026-11-02** (`python scripts/eval_agents.py`; 6 fictional claims in
   `sample_data/golden/`; replies recorded in `tests/fixtures/ai/intake/` and replayed by the tests):
@@ -143,8 +143,16 @@ its own tests, in `tests/test_review_fixes.py`.
     first, and an empty draft falls back to the standard request);
   - an empty adjuster answer passed the checks (gate rule G1 now rejects it);
   - the claimant assistant replied "I'll check" instead of answering (`claimant-v3`).
-- **Still open:** asked for the repair estimate total, the adjuster assistant (`adjuster-v4`) read
-  the estimate and still answered "not found".
+- **Second live run, 2026-11-08:** asked for the repair estimate total, `adjuster-v4` read the
+  estimate and still returned an empty answer. The model's raw reply showed it giving up on the
+  cited format. `adjuster-v5` adds a worked example, allows a short line with a number
+  ("Total estimate $1,234.56") as a whole quote, and says the source is the name alone. Live
+  afterwards: the estimate total, the date and place, and the other driver all passed the checks
+  with correct citations. A broad "What is this claim about?" still came back flagged: one long
+  sentence held numbers its quotes didn't cover. The checks caught it, and it was shown as failed.
+  The claimant assistant still once ended with "I'll check what's still missing"; `claimant-v4`
+  says how to answer "what do I still need to send" with an example, and live it then answered
+  "Nothing more is needed from you right now" for a complete claim.
 
 ### Checked by the owner
 
@@ -153,7 +161,7 @@ To be ticked by the owner. Claude Code can't confirm these on the owner's behalf
 - [ ] Read the PR #3 diff
 - [ ] Saw the 14 fixes on the local site (port 8123)
 - [ ] Ran the test suite locally
-- [ ] Ran `request-v2` and `adjuster-v4` live
+- [ ] Ran `request-v2` and `adjuster-v5` live
 
 ### Known limits
 

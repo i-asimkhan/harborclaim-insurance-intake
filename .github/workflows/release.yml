@@ -1,0 +1,122 @@
+# After a merge to main passes the Tests workflow: publish the next GitHub release, then deploy
+# that build to the live Azure site.
+#
+# Release: tags the tested commit with the next minor version (v1.0.0 first, then v1.1.0, ...) and
+# publishes a release whose notes GitHub builds from the merged PRs. A commit that already has a
+# release tag is skipped, so a re-run never makes a second release.
+#
+# Deploy: the same Sync as the portal's Deployment Center (the site deploys from main), then a
+# smoke test that the site answers. It needs one repository secret, AZURE_CREDENTIALS: a service
+# principal scoped to the harborclaim-rg resource group (README, "Deploying to Azure App Service").
+# Without the secret the job says so and stops, and the release still happens. No app setting,
+# key or secret value is ever printed or changed here.
+name: Release and deploy
+
+on:
+  workflow_run:
+    workflows: [Tests]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+env:
+  APP_NAME: harborclaim-demo-2630
+  RESOURCE_GROUP: harborclaim-rg
+  SITE_URL: https://harborclaim-demo-2630.azurewebsites.net
+
+jobs:
+  release:
+    # Only a push to main whose tests passed; never a pull request's run.
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Work out the next version
+        id: version
+        run: |
+          sha="${{ github.event.workflow_run.head_sha }}"
+          existing=$(git tag --points-at "$sha" --list 'v*' | head -n 1)
+          if [ -n "$existing" ]; then
+            echo "Commit already released as $existing; nothing to do."
+            echo "version=$existing" >> "$GITHUB_OUTPUT"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          latest=$(git tag --list 'v*.*.*' --sort=-v:refname | head -n 1)
+          if [ -z "$latest" ]; then
+            next="v1.0.0"
+          else
+            IFS=. read -r major minor _patch <<< "${latest#v}"
+            next="v${major}.$((minor + 1)).0"
+          fi
+          echo "Next release: $next (previous: ${latest:-none})"
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Publish the release
+        if: steps.version.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.version.outputs.version }}" \
+            --target "${{ github.event.workflow_run.head_sha }}" \
+            --title "HarborClaim ${{ steps.version.outputs.version }}" \
+            --generate-notes
+
+  deploy:
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check the Azure secret is set
+        id: secret
+        env:
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+        run: |
+          if [ -z "$AZURE_CREDENTIALS" ]; then
+            echo "::warning::AZURE_CREDENTIALS is not set, so ${{ needs.release.outputs.version }} was released but not deployed. Sync in the portal, or add the secret."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sign in to Azure
+        if: steps.secret.outputs.present == 'true'
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Sync the site from main
+        if: steps.secret.outputs.present == 'true'
+        run: az webapp deployment source sync --name "$APP_NAME" --resource-group "$RESOURCE_GROUP"
+
+      - name: Smoke test
+        if: steps.secret.outputs.present == 'true'
+        # The Free plan's build and cold start take a few minutes; give it up to 15.
+        run: |
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$SITE_URL/adjuster/login" || true)
+            if [ "$code" = "200" ]; then
+              echo "Site is up (adjuster login answered 200)."
+              exit 0
+            fi
+            echo "Attempt $i: got $code, waiting 30 s"
+            sleep 30
+          done
+          echo "::error::The site did not answer 200 within 15 minutes after the sync."
+          exit 1

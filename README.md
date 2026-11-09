@@ -382,6 +382,19 @@ this repo's `main` branch. To reproduce it:
    pushing does **not** redeploy on its own — after each push, run
    `az webapp deployment source sync --name <app> --resource-group <rg>` or click **Sync**
    in the portal's Deployment Center.
+
+   **Or automatically, on every merge to `main`** (`.github/workflows/release.yml`): once the
+   Tests workflow passes on `main`, it publishes the next GitHub release (`v1.0.0`, then
+   `v1.1.0`, ...) with notes from the merged PRs, then runs that same Sync and checks the site
+   answers. The deploy step needs one repository secret, `AZURE_CREDENTIALS`, a service
+   principal that can manage only this resource group:
+   ```
+   az ad sp create-for-rbac --name harborclaim-deploy --role contributor \
+     --scopes /subscriptions/<subscription-id>/resourceGroups/<rg> --json-auth
+   ```
+   Paste the JSON it prints into GitHub → Settings → Secrets and variables → Actions → New
+   repository secret, named `AZURE_CREDENTIALS`. Without it the release still happens and the
+   deploy job says the secret is missing.
 2. **Startup command**, under Settings → Configuration (sometimes shown as "Environment
    variables"):
    ```

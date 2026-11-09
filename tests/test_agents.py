@@ -1692,6 +1692,36 @@ def test_the_claimant_answers_and_the_claim_goes_back_for_a_fresh_ai_review(adju
     assert "note:</strong> Photos attached." in _page()
 
 
+def test_files_sent_with_an_answer_are_marked_on_both_sides(adjuster_web, claimant_web, monkeypatch):
+    _sample_claim()
+    with storage._connect() as conn:                        # filed a while ago, like a real claim
+        conn.execute("UPDATE status_history SET at = '2026-11-01T10:00:00+00:00' WHERE claim_id = 'CLM-5A5A5A5A'")
+        conn.execute("UPDATE documents SET uploaded_at = '2026-11-01T10:00:01+00:00' WHERE claim_id = 'CLM-5A5A5A5A'")
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": "Please send photos.",
+                                                                           "source": "template"})
+    with storage._connect() as conn:                        # sent before the answer, not in the same second
+        conn.execute("UPDATE info_requests SET sent_at = '2026-11-01T11:00:00+00:00' WHERE claim_id = 'CLM-5A5A5A5A'")
+    monkeypatch.setattr(agents, "run_intake_review", lambda claim_id: None)
+    web.post("/claims/CLM-5A5A5A5A/documents", data={"note": "Photos attached."},
+             files=[("files", ("photos.txt", b"Photo of the rear bumper.", "text/plain"))])
+
+    page = _page()
+    assert page.count("Added later") == 1                       # only the new file, not the originals
+    assert "Files sent with the answer:" in page
+    assert '/adjuster/claims/CLM-5A5A5A5A/documents/photos.txt">photos.txt</a>' in page
+    claimant_page = web.get("/claims/CLM-5A5A5A5A").text
+    assert claimant_page.count("&middot; added ") == 1
+
+
+def test_an_answer_with_only_a_note_says_no_files_came(adjuster_web, claimant_web):
+    _sample_claim()
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": "Please confirm the date.",
+                                                                           "source": "template"})
+    web.post("/claims/CLM-5A5A5A5A/documents", data={"note": "The date is right."})
+    page = _page()
+    assert "No files came with this answer, only the note." in page and "Added later" not in page
+
+
 def test_the_claimant_sees_when_ai_helped_draft_the_request(fake_model, adjuster_web, claimant_web):
     script, _ = fake_model
     _sample_claim()

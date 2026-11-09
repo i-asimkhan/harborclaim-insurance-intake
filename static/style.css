@@ -375,6 +375,8 @@ button.primary:hover, a.primary:hover { background: var(--accent-hover); }
 .badge.ready { background: var(--good-soft); color: var(--good); }
 .badge.needs { background: var(--warn-soft); color: var(--warn); }
 .badge.neutral { background: var(--accent-soft); color: var(--accent); }
+.badge.doc-later { margin-left: var(--space-2); vertical-align: middle; }
+.request-files a { word-break: break-all; }
 
 .badge-count {
   display: inline-flex;

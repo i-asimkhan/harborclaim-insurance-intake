@@ -218,6 +218,24 @@ def _ask_view(claim_id: str) -> dict:
             "refusal": agents.ADJUSTER_REFUSAL, "not_found": agents.NOT_FOUND}
 
 
+LATER_DOCUMENT_SECONDS = 60  # files saved more than this after filing came later, with an answer
+
+
+def _mark_later_documents(record: dict) -> dict:
+    """Mark the files the claimant sent after filing, so both sides can tell them from the
+    originals: each document gets added_later, and each answered request lists the files that
+    came with its answer (saved after it was sent, up to the answer; timestamps are ISO UTC
+    strings, so they compare as text)."""
+    filed = datetime.fromisoformat(record["history"][0]["at"]) if record["history"] else None
+    for doc in record["documents"]:
+        uploaded = datetime.fromisoformat(doc["uploaded_at"])
+        doc["added_later"] = bool(filed) and (uploaded - filed).total_seconds() > LATER_DOCUMENT_SECONDS
+    for req in record["requests"]:
+        req["files"] = [d["filename"] for d in record["documents"]
+                        if req["answered_at"] and req["sent_at"] < d["uploaded_at"] <= req["answered_at"]]
+    return record
+
+
 def _request_view(record: dict) -> dict:
     """The adjuster's "Request missing information" card: the draft to edit, and what was sent.
 
@@ -739,6 +757,7 @@ def view_claim(request: Request, claim_id: str, user: dict | None = Depends(get_
         )
     if record["claim"]["claimant_email"] != user["email"]:
         return _forbidden("This claim belongs to a different account.")
+    _mark_later_documents(record)
 
     return templates.TemplateResponse(
         request,
@@ -975,6 +994,7 @@ def adjuster_view_claim(request: Request, claim_id: str, adjuster: dict | None =
         return templates.TemplateResponse(
             request, "not_found.html", {"claim_id": claim_id}, status_code=404
         )
+    _mark_later_documents(record)
 
     return templates.TemplateResponse(
         request,

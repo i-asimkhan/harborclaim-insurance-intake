@@ -70,6 +70,9 @@
     </summary>
     <p class="request-message">{{ s.message }}</p>
     {% if s.reply_note %}<p><strong>Claimant's note:</strong> {{ s.reply_note }}</p>{% endif %}
+    {% if s.files %}<p class="request-files"><strong>Files sent with the answer:</strong>
+      {% for f in s.files %}<a href="/adjuster/claims/{{ record.claim.claim_id }}/documents/{{ f }}">{{ f }}</a>{{ ", " if not loop.last }}{% endfor %}</p>
+    {% elif s.answered_at %}<p class="hint">No files came with this answer, only the note.</p>{% endif %}
   </details>
   {% endfor %}
   {% endif %}

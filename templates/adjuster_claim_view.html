@@ -53,6 +53,7 @@
                   <li>
                     <a href="/adjuster/claims/{{ record.claim.claim_id }}/documents/{{ doc.filename }}">{{ doc.filename }}</a>
                     <span class="hint">{{ (doc.size_bytes / 1024) | round(1) }} KB &middot; {{ doc.content_type or "unknown type" }}</span>
+                    {% if doc.added_later %}<span class="badge needs doc-later" title="{{ doc.uploaded_at }}">Added later &middot; {{ doc.uploaded_at | ago }}</span>{% endif %}
                   </li>
                   {% endfor %}
                 </ul>

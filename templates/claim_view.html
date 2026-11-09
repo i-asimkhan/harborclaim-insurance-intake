@@ -139,7 +139,7 @@
           <a href="/claims/{{ record.claim.claim_id }}/documents/{{ doc.filename }}" title="{{ doc.filename }}">
             {{ art.icon("file") }}
             <span class="doc-name">{{ doc.filename }}</span>
-            <span class="hint">{{ (doc.size_bytes / 1024) | round(1) }} KB &middot; {{ (doc.content_type or "unknown").split("/")[-1] | upper }}</span>
+            <span class="hint">{{ (doc.size_bytes / 1024) | round(1) }} KB &middot; {{ (doc.content_type or "unknown").split("/")[-1] | upper }}{% if doc.added_later %} &middot; added {{ doc.uploaded_at | ago }}{% endif %}</span>
           </a>
         </li>
         {% endfor %}

@@ -114,7 +114,7 @@ The walk-through of this diagram is [`docs/design/AGENTIC-LAYER.md`](docs/design
     model sees a claim. `AI_DATA_POLICY=production` refuses free-tier models.
   - **Known limits:** the keyword scan misses negation ("No injuries" still counts as an injury),
     the description rule is a heuristic, and names and medical details are not redacted.
-- **Tested:** 390 automated tests (a scripted fake model, no network), a golden set of 11
+- **Tested:** 400 automated tests (a scripted fake model, no network), a golden set of 11
   fictional claims run live (`scripts/eval_agents.py`, intake agent only), two red-team
   rounds, and live runs of the other three agents in the app. Prompts and results: [`PROMPTS.md`](PROMPTS.md) and [`AI_USAGE.md`](AI_USAGE.md).
 

@@ -8,13 +8,17 @@ Step 5.1 (groundwork): the page-aware document reader, the agent_runs table, the
 
 import json
 import logging
+import os
+import re
 import sqlite3
+import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
 import pytest
+from pypdf import PdfReader
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -1720,6 +1724,85 @@ def test_an_answer_with_only_a_note_says_no_files_came(adjuster_web, claimant_we
     web.post("/claims/CLM-5A5A5A5A/documents", data={"note": "The date is right."})
     page = _page()
     assert "No files came with this answer, only the note." in page and "Added later" not in page
+
+
+def _record_with_docs(filed_at, uploads):
+    return {"history": [{"status": "READY_FOR_REVIEW", "at": filed_at}] if filed_at else [],
+            "documents": [{"filename": f"doc{i}.pdf", "uploaded_at": at} for i, at in enumerate(uploads)],
+            "requests": []}
+
+
+def test_a_file_saved_within_a_minute_of_filing_counts_as_an_original():
+    record = app_module._mark_later_documents(_record_with_docs(
+        "2026-11-01T10:00:00+00:00", ["2026-11-01T10:00:02+00:00", "2026-11-01T10:01:00+00:00",
+                                      "2026-11-01T10:01:01+00:00"]))
+    assert [d["added_later"] for d in record["documents"]] == [False, False, True]   # the boundary is 60 s
+
+
+def test_marking_later_documents_copes_with_a_claim_with_no_history():
+    record = app_module._mark_later_documents(_record_with_docs(None, ["2026-11-01T10:00:02+00:00"]))
+    assert record["documents"][0]["added_later"] is False
+
+
+def test_no_decision_while_the_claim_waits_on_the_claimant(adjuster_web):
+    _sample_claim()
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": "Please send photos.",
+                                                                           "source": "template"})
+    r = adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/decision",
+                          data={"decision": "DECLINED", "reason": "Not covered under this policy."})
+    assert r.status_code == 403
+    assert storage.get_claim("CLM-5A5A5A5A")["decisions"] == []
+
+
+def test_the_add_documents_form_goes_away_once_the_request_is_answered(adjuster_web, claimant_web):
+    _sample_claim()
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": "Please confirm the date.",
+                                                                           "source": "template"})
+    assert 'id="add-documents"' in web.get("/claims/CLM-5A5A5A5A").text
+    web.post("/claims/CLM-5A5A5A5A/documents", data={"note": "The date is right."})
+    assert storage.get_claim("CLM-5A5A5A5A")["status"] == "READY_FOR_REVIEW"
+    assert 'id="add-documents"' not in web.get("/claims/CLM-5A5A5A5A").text
+
+
+def test_the_app_starts_from_another_folder():
+    # Seen 2026-11-09: pytest run from the course folder above the project failed to import app.py,
+    # because static/ and templates/ were looked up in the working directory.
+    project = Path(app_module.__file__).parent
+    result = subprocess.run([sys.executable, "-c", "import app; print(app.templates.env.loader.searchpath[0])"],
+                            cwd=str(project.parent),
+                            env={**os.environ, "PYTHONPATH": str(project), "PYTHONIOENCODING": "utf-8"},
+                            capture_output=True, text=True, encoding="utf-8", timeout=60)
+    assert result.returncode == 0, result.stderr[-500:]
+    assert Path(result.stdout.strip()) == project / "templates"
+
+
+RELEASE_WORKFLOW = Path(app_module.__file__).parent / ".github" / "workflows" / "release.yml"
+
+
+def test_release_runs_only_after_the_tests_pass_on_a_push_to_main():
+    text = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    assert "workflows: [Tests]" in text and "branches: [main]" in text
+    assert "github.event.workflow_run.conclusion == 'success'" in text
+    assert "github.event.workflow_run.event == 'push'" in text      # never a pull request's run
+    assert "ref: ${{ github.event.workflow_run.head_sha }}" in text  # releases the commit that was tested
+    assert "needs: release" in text                                  # deploy only after the release
+
+
+def test_release_workflow_uses_only_the_one_azure_secret_and_never_prints_it():
+    text = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    assert set(re.findall(r"secrets\.(\w+)", text)) == {"AZURE_CREDENTIALS"}
+    for line in text.splitlines():
+        if "echo" in line:
+            assert "secrets." not in line and "$AZURE_CREDENTIALS" not in line
+
+
+def test_the_demo_documents_hold_what_the_demo_relies_on():
+    # DEMO-SCRIPT.md asks for the estimate total and files the police report as the answer.
+    demo = Path(app_module.__file__).parent / "sample_data" / "demo"
+    estimate = PdfReader(str(demo / "bayshore_repair_estimate.pdf")).pages[0].extract_text()
+    police = PdfReader(str(demo / "bayport_police_report.pdf")).pages[0].extract_text()
+    assert "Total estimate $3,486.40" in estimate and "HC-AUTO-5318" in estimate
+    assert "2026-10-27" in police and "Harbor Avenue at Palm Street" in police
 
 
 def test_the_claimant_sees_when_ai_helped_draft_the_request(fake_model, adjuster_web, claimant_web):

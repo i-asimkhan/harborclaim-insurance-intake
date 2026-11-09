@@ -503,8 +503,11 @@ app.add_middleware(
     secret_key=os.environ.get("SESSION_SECRET_KEY", "dev-only-insecure-key-change-me"),
 )
 app.include_router(auth_router)
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
+# From this file's folder, not the working directory, so the app (and the tests) also start from
+# another folder, e.g. pytest run from the course folder above this project.
+APP_DIR = Path(__file__).parent
+app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
+templates = Jinja2Templates(directory=APP_DIR / "templates")
 templates.env.globals["CLAIM_TYPES"] = CLAIM_TYPES
 # Browser-side input limits on the claim form mirror validation.py's server-side
 # ones, so both always agree. The server checks still run on every submission.
@@ -518,7 +521,7 @@ templates.env.globals["LIMITS"] = {
 }
 templates.env.globals["today_iso"] = lambda: date.today().isoformat()
 
-STATIC_DIR = Path(__file__).parent / "static"
+STATIC_DIR = APP_DIR / "static"
 
 
 def static_url(path: str) -> str:

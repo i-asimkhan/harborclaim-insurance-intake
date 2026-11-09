@@ -399,8 +399,12 @@ def _display_status(record: dict) -> str:
     """The one status a person should see for a claim: its latest decision once there is one,
     otherwise its intake status. claims.status stays the intake (completeness) status, which the
     queue and the bell filter on, so decisions are layered on top here instead of written into it.
+    A claim waiting on the claimant (an info request sent after "Needs more review") says so.
     """
-    return record["decisions"][-1]["decision"] if record["decisions"] else record["status"]
+    latest = record["decisions"][-1]["decision"] if record["decisions"] else None
+    if latest is None or (latest == "NEEDS_MORE_REVIEW" and record["status"] == NEEDS_INFORMATION):
+        return record["status"]
+    return latest
 
 
 def _claimant_status(record: dict) -> tuple[str, str]:
@@ -771,8 +775,10 @@ async def add_claim_documents(
         return _forbidden("This claim belongs to a different account.")
     if record["decisions"] and record["decisions"][-1]["decision"] != "NEEDS_MORE_REVIEW":
         return _forbidden("This claim already has a final decision.")
+    if record["status"] != NEEDS_INFORMATION:   # nothing was asked for: no re-check, no new AI review
+        return _forbidden("Your adjuster hasn't asked for anything more on this claim.")
 
-    uploads = [f for f in files if f.filename]
+    uploads =[f for f in files if f.filename]
     note = note.strip()
     errors = []
     if not uploads and not note:
@@ -1055,6 +1061,9 @@ def send_info_request(request: Request, background: BackgroundTasks, claim_id: s
     view = _request_view(record)
     if view["final"]:
         return _forbidden("A final decision is already recorded on this claim.")
+    open_requests = [r for r in record["requests"] if not r["answered_at"]]
+    if open_requests and open_requests[-1]["message"] == message:   # a double-click: already sent
+        return RedirectResponse(url=f"/adjuster/claims/{claim_id}#request", status_code=303)
     # Recorded honestly: whether the text an adjuster sends came from the AI draft, and whether
     # they changed it. The source is checked against the server's own draft, not trusted from the form.
     ai_drafted = source == "ai" and view["source"] == "ai"

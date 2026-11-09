@@ -1707,12 +1707,50 @@ def test_the_claimant_sees_when_ai_helped_draft_the_request(fake_model, adjuster
 def test_only_the_owner_can_add_documents_and_an_empty_answer_is_refused(claimant_web):
     _sample_claim("CLM-7C7C7C7C", email="other@example.com")
     _sample_claim()
+    storage.set_claim_status("CLM-7C7C7C7C", "NEEDS_INFORMATION", ["adjuster_request"])
+    storage.set_claim_status("CLM-5A5A5A5A", "NEEDS_INFORMATION", ["adjuster_request"])
     files = [("files", ("a.txt", b"x", "text/plain"))]
     assert web.post("/claims/CLM-7C7C7C7C/documents", files=files).status_code == 403
     assert web.post("/claims/CLM-5A5A5A5A/documents", data={"note": ""}).status_code == 400
     bad = web.post("/claims/CLM-5A5A5A5A/documents", files=[("files", ("<b>x</b>.exe", b"x", "text/plain"))])
     assert bad.status_code == 400 and "<b>x</b>" not in bad.text   # the filename is escaped
     assert len(storage.get_claim("CLM-5A5A5A5A")["documents"]) == 2
+
+
+def test_documents_nobody_asked_for_are_refused_and_the_form_is_hidden(claimant_web, monkeypatch):
+    _sample_claim()                                        # READY_FOR_REVIEW: nothing was asked for
+    assert 'id="add-documents"' not in web.get("/claims/CLM-5A5A5A5A").text
+    reviews = []
+    monkeypatch.setattr(ai_client, "enabled", lambda: True)
+    monkeypatch.setattr(agents, "run_intake_review", lambda claim_id: reviews.append(claim_id))
+    r = web.post("/claims/CLM-5A5A5A5A/documents", data={"note": "Extra."},
+                 files=[("files", ("a.txt", b"x", "text/plain"))])
+    assert r.status_code == 403
+    record = storage.get_claim("CLM-5A5A5A5A")
+    assert len(record["documents"]) == 2 and record["status"] == "READY_FOR_REVIEW" and reviews == []
+
+
+def test_a_request_after_needs_more_review_shows_needs_information_to_the_adjuster(adjuster_web):
+    _sample_claim()
+    storage.add_decision("CLM-5A5A5A5A", "NEEDS_MORE_REVIEW", "adj.review")
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": "Please send photos.",
+                                                                           "source": "template"})
+    record = storage.get_claim("CLM-5A5A5A5A")
+    assert app_module._display_status(record) == "NEEDS_INFORMATION"
+    assert app_module._queue_category(record) == "waiting"
+    storage.set_claim_status("CLM-5A5A5A5A", "READY_FOR_REVIEW", [])   # answered: back to the decision
+    assert app_module._display_status(storage.get_claim("CLM-5A5A5A5A")) == "NEEDS_MORE_REVIEW"
+
+
+def test_a_double_click_on_send_records_one_request(adjuster_web):
+    _sample_claim()
+    for _ in range(2):
+        adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": "Please send photos.",
+                                                                               "source": "template"})
+    assert len(_requests()) == 1
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": "And the tow receipt.",
+                                                                           "source": "template"})
+    assert len(_requests()) == 2                          # a different message is a new request
 
 
 @pytest.mark.parametrize("output, expected", [

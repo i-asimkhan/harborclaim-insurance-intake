@@ -158,9 +158,9 @@ its own tests, in `tests/test_review_fixes.py`.
 
 To be ticked by the owner. Claude Code can't confirm these on the owner's behalf.
 
-- [ ] Read the PR #3 diff
-- [ ] Saw the 14 fixes on the local site (port 8123)
-- [ ] Ran the test suite locally
+- [x] Read the PR #3 diff
+- [x] Saw the 14 fixes on the local site (port 8123)
+- [x] Ran the test suite locally (400 passed, 2026-11-09)
 - [ ] Ran `request-v2` and `adjuster-v5` live
 
 ### Known limits

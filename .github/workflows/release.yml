@@ -5,8 +5,9 @@
 # publishes a release whose notes GitHub builds from the merged PRs. A commit that already has a
 # release tag is skipped, so a re-run never makes a second release.
 #
-# Deploy: the same Sync as the portal's Deployment Center (the site deploys from main), then a
-# smoke test that the site answers. It needs one repository secret, AZURE_CREDENTIALS: a service
+# Deploy: the same Sync as the portal's Deployment Center (the site deploys from main), a wait
+# until Azure reports this commit built and active, then a smoke test of a page only the new build
+# serves. It needs one repository secret, AZURE_CREDENTIALS: a service
 # principal scoped to the harborclaim-rg resource group (README, "Deploying to Azure App Service").
 # Without the secret the job says so and stops, and the release still happens. No app setting,
 # key or secret value is ever printed or changed here.
@@ -81,7 +82,7 @@ jobs:
   deploy:
     needs: release
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - name: Check the Azure secret is set
         id: secret
@@ -101,22 +102,73 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      - name: Check the app settings
+        if: steps.secret.outputs.present == 'true'
+        # Before deploying: the settings the app needs exist, and the AI isn't switched off. Reads
+        # setting names, plus the values of AI_ENABLED and AI_DATA_POLICY only (not secrets); a
+        # secret's value is never read or printed.
+        run: |
+          names=$(az webapp config appsettings list --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" --query "[].name" -o tsv)
+          missing=""
+          for n in SESSION_SECRET_KEY GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET HARBORCLAIM_DATA_DIR \
+                   AI_PROVIDER AI_MODELS OPENROUTER_API_KEY; do
+            echo "$names" | grep -qx "$n" || missing="$missing $n"
+          done
+          value() {
+            az webapp config appsettings list --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" \
+              --query "[?name=='$1'].value | [0]" -o tsv
+          }
+          enabled=$(value AI_ENABLED | tr '[:upper:]' '[:lower:]')
+          policy=$(value AI_DATA_POLICY | tr '[:upper:]' '[:lower:]')
+          echo "AI_ENABLED='${enabled:-unset}' AI_DATA_POLICY='${policy:-unset (test)}'"
+          if [ -n "$missing" ]; then echo "::error::Missing app settings:$missing"; exit 1; fi
+          case "$enabled" in false|0|no|off) echo "::error::AI_ENABLED switches the AI off."; exit 1;; esac
+          if [ "$policy" = "production" ]; then
+            echo "::error::AI_DATA_POLICY=production refuses the free models in AI_MODELS, so every AI feature would fall back."
+            exit 1
+          fi
+          echo "All required settings are present and the AI is on."
+
       - name: Sync the site from main
         if: steps.secret.outputs.present == 'true'
         run: az webapp deployment source sync --name "$APP_NAME" --resource-group "$RESOURCE_GROUP"
 
-      - name: Smoke test
+      - name: Wait for Azure to build this commit
         if: steps.secret.outputs.present == 'true'
-        # The Free plan's build and cold start take a few minutes; give it up to 15.
+        # The old build keeps answering while the new one builds (first deploy, 2026-11-10: the site
+        # answered 200 before the new code was live), so wait on Azure's own record for this commit.
+        # Status 4 is success, 3 is failed. The Free plan's build takes a few minutes; allow 20.
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          for i in $(seq 1 30); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "$SITE_URL/adjuster/login" || true)
-            if [ "$code" = "200" ]; then
-              echo "Site is up (adjuster login answered 200)."
-              exit 0
+          for i in $(seq 1 40); do
+            # An az failure (sign-in, resource group, CLI) fails the step at once instead of
+            # reading as "not started" for 20 minutes.
+            if ! status=$(az webapp log deployment list --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" \
+                  --query "[?id=='$SHA'] | [0].status" -o tsv); then
+              echo "::error::Could not read Azure's deployment list (see the az error above)."
+              exit 1
             fi
-            echo "Attempt $i: got $code, waiting 30 s"
+            echo "Check $i: deployment status '${status:-not started}'"
+            if [ "$status" = "4" ]; then echo "Azure built and activated $SHA."; exit 0; fi
+            if [ "$status" = "3" ]; then echo "::error::Azure's build of $SHA failed (see Deployment Center logs)."; exit 1; fi
             sleep 30
           done
-          echo "::error::The site did not answer 200 within 15 minutes after the sync."
+          echo "::error::Azure did not finish building $SHA within 20 minutes. If another commit reached main"
+          echo "::error::in the meantime, the Sync built that one instead; check Deployment Center."
+          exit 1
+
+      - name: Smoke test
+        if: steps.secret.outputs.present == 'true'
+        # Pages only the new build has, not just "the site answers": /adjuster/ai redirects to the
+        # adjuster login (303) once it exists, and was a 404 on the old build.
+        run: |
+          for i in $(seq 1 10); do
+            login=$(curl -s -o /dev/null -w '%{http_code}' "$SITE_URL/adjuster/login" || true)
+            ai=$(curl -s -o /dev/null -w '%{http_code}' "$SITE_URL/adjuster/ai" || true)
+            echo "Attempt $i: /adjuster/login $login, /adjuster/ai $ai"
+            if [ "$login" = "200" ] && [ "$ai" = "303" ]; then echo "The new build is live."; exit 0; fi
+            sleep 30
+          done
+          echo "::error::The site did not serve the new build within 5 minutes of Azure finishing."
           exit 1

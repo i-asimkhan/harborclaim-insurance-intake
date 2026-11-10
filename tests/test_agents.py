@@ -1788,6 +1788,28 @@ def test_release_runs_only_after_the_tests_pass_on_a_push_to_main():
     assert "needs: release" in text                                  # deploy only after the release
 
 
+def test_deploy_waits_for_azure_to_build_this_commit_before_the_smoke_test():
+    # First deploy, 2026-11-10: the smoke test passed against the old build while Azure was still
+    # building the new one.
+    text = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    wait, smoke = text.index("Wait for Azure to build this commit"), text.index("name: Smoke test")
+    assert wait < smoke
+    assert "SHA: ${{ github.event.workflow_run.head_sha }}" in text and "[?id=='$SHA']" in text
+    assert '"$status" = "3"' in text                                  # a failed Azure build fails the job
+    assert '"$SITE_URL/adjuster/ai"' in text and '"$ai" = "303"' in text  # a page only the new build has
+
+
+def test_deploy_checks_the_app_settings_before_the_sync_and_reads_no_secret_value():
+    text = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    assert text.index("name: Check the app settings") < text.index("name: Sync the site from main")
+    for name in ("OPENROUTER_API_KEY", "AI_PROVIDER", "AI_MODELS", "SESSION_SECRET_KEY", "HARBORCLAIM_DATA_DIR"):
+        assert name in text
+    assert "--query \"[].name\"" in text                             # names only for the required list
+    # The only values read are the two on/off switches, never a secret's.
+    assert re.findall(r"\$\(value (\w+)", text) == ["AI_ENABLED", "AI_DATA_POLICY"]
+    assert '"$policy" = "production"' in text
+
+
 def test_release_workflow_uses_only_the_one_azure_secret_and_never_prints_it():
     text = RELEASE_WORKFLOW.read_text(encoding="utf-8")
     assert set(re.findall(r"secrets\.(\w+)", text)) == {"AZURE_CREDENTIALS"}

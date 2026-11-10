@@ -32,6 +32,7 @@ os.environ["AI_ENABLED"] = ""
 os.environ["AI_MODELS"] = ""
 os.environ["AI_CLAIMANT_CHAT"] = ""
 os.environ["OPENROUTER_API_KEY"] = ""
+os.environ["AI_DATA_POLICY"] = ""
 
 # The browser tests sign a session cookie with SESSION_SECRET_KEY, and the live server they start
 # inherits it. Pin a test-only value so the suite never depends on the developer's .env (CI has

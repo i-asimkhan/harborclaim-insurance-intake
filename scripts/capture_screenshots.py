@@ -52,6 +52,9 @@ os.chdir(PROJ)
 
 from dotenv import load_dotenv  # noqa: E402
 
+# These 14 screenshots show no AI: keep the live model off so a run never spends free quota
+# (load_dotenv doesn't override a variable that is already set).
+os.environ["AI_ENABLED"] = "false"
 load_dotenv(PROJ / ".env")
 
 import itsdangerous  # noqa: E402
@@ -229,7 +232,7 @@ def run(selected: set[str]):
             shot(adjuster, "08-adjuster-queue")
             adjuster.goto(f"{BASE}/adjuster/claims/{ready_id}")
             shot(adjuster, "09-adjuster-claim-view")
-            adjuster.get_by_role("button", name="Approved").click()
+            adjuster.get_by_role("button", name="Approve", exact=True).click()
             adjuster.get_by_role("button", name="Confirm decision").click()
             adjuster.wait_for_selector("text=Decisions recorded")
             shot(adjuster, "10-adjuster-decision-recorded")

@@ -1,0 +1,79 @@
+{# "Request missing information" (Phase 5), adjuster side. The request agent only drafts; the
+   adjuster edits and sends, and only sending changes the claim. Labels follow AGENTS.md section 9:
+   the AI badge only on text a model wrote and the checks passed; the standard request is plain
+   app text. Folded unless the claim is waiting on information, a draft exists or a request is open
+   (or the page is loaded at #request). Model text is always autoescaped -- never the safe filter. #}
+{% from "_ai_badge.html" import ai_badge %}
+{% set r = info_request %}
+{% set unfold = record.status != READY_FOR_REVIEW or r.run or r.open %}
+<details class="card fold{% if r.source == 'ai' %} ai-card{% endif %}" id="request"{% if unfold %} open{% endif %}>
+  <summary><h2>Request missing information{% if r.open %} <span class="fold-count">open</span>{% endif %}</h2>
+    <span class="hint">{% if r.ai_on %}The AI agent drafts it; you edit and send it{% else %}Edit the standard request and send it{% endif %}</span></summary>
+  {% if r.final %}
+  <p class="hint">A final decision is recorded, so no further requests can be sent.</p>
+  {% else %}
+  {% if r.ai_on and not r.limit_reached %}
+  <form method="post" action="/adjuster/claims/{{ record.claim.claim_id }}/request/draft" class="inline-form">
+    <button type="submit" class="btn secondary">{% if r.run %}Draft again with AI{% else %}Draft with AI{% endif %}</button>
+    <span class="hint">Takes up to a minute. The agent looks up the intake review and the completeness check itself; its steps are under AI trace.</span>
+  </form>
+  {% elif r.ai_on %}
+  <p class="hint">Today's AI draft limit is reached; the standard request below works the same way.</p>
+  {% else %}
+  <p class="hint">AI isn't available; the standard request below works the same way.</p>
+  {% endif %}
+
+  {% if r.source == "ai" %}
+  <p>{{ ai_badge("Checked. Read and edit before sending", r.run.model) }}</p>
+  {% else %}
+  {% if r.note %}<p class="hint">{{ r.note }}</p>{% endif %}
+  {% if r.reasons %}
+  <div class="ai-reasons"><ul>
+    {% for reason in r.reasons %}<li><span class="mono">{{ reason.rule }}</span> {{ reason.where }}: {{ reason.detail }}</li>{% endfor %}
+  </ul></div>
+  {% endif %}
+  {% endif %}
+
+  <form method="post" action="/adjuster/claims/{{ record.claim.claim_id }}/request/send" class="request-form">
+    <input type="hidden" name="source" value="{{ r.source }}">
+    <textarea name="message" rows="10" maxlength="2000" required aria-label="Message to the claimant">{{ r.text }}</textarea>
+    <button type="submit" class="btn">Send to claimant</button>
+    <p class="hint">Nothing is sent until you click. Sending notifies the claimant and sets the claim to Needs information until they answer.</p>
+  </form>
+
+  {% if r.run and r.run.trace %}
+  <details class="ai-trace">
+    <summary>AI trace</summary>
+    <ol>
+      {% for t in r.run.trace %}
+      {% if t.type == "model" %}
+      <li>Model call {{ t.call }}: {{ t.model or "no answer" }}, {{ t.tool_calls }} tool call{{ "" if t.tool_calls == 1 else "s" }} requested</li>
+      {% else %}
+      <li>Tool <span class="mono">{{ t.tool }}</span> <span class="mono hint">{{ t.args }}</span>:
+        {% if t.error %}failed ({{ t.error }}){% elif t.refused %}refused ({{ t.refused }}){% else %}<span class="hint">{{ t.result }}</span>{% endif %}</li>
+      {% endif %}
+      {% endfor %}
+    </ol>
+    <p class="hint">Model {{ r.run.model or "unknown" }} via OpenRouter &middot; prompt {{ r.run.prompt_version }} &middot; {{ ((r.run.latency_ms or 0) / 1000) | round(1) }} s &middot; drafted by {{ r.run.actor }}</p>
+  </details>
+  {% endif %}
+  {% endif %}
+
+  {% if r.sent %}
+  <h3>Sent to the claimant</h3>
+  {% for s in r.sent %}
+  <details class="ai-qa"{% if loop.first %} open{% endif %}>
+    <summary class="ai-question">
+      <span title="{{ s.sent_at }}">{{ s.sent_at | ago }}</span> by {{ s.sent_by }} &middot;
+      {% if s.ai_drafted %}AI draft{% if s.edited %}, edited{% else %}, unchanged{% endif %}{% else %}standard request{% if s.edited %}, edited{% endif %}{% endif %} &middot;
+      {% if s.answered_at %}<strong>answered</strong> <span class="hint" title="{{ s.answered_at }}">{{ s.answered_at | ago }}</span>{% else %}waiting on the claimant{% endif %}
+    </summary>
+    <p class="request-message">{{ s.message }}</p>
+    {% if s.reply_note %}<p><strong>Claimant's note:</strong> {{ s.reply_note }}</p>{% endif %}
+    {% if s.files %}<p class="request-files"><strong>Files sent with the answer:</strong>
+      {% for f in s.files %}<a href="/adjuster/claims/{{ record.claim.claim_id }}/documents/{{ f }}">{{ f }}</a>{{ ", " if not loop.last }}{% endfor %}</p>
+    {% elif s.answered_at %}<p class="hint">No files came with this answer, only the note.</p>{% endif %}
+  </details>
+  {% endfor %}
+  {% endif %}
+</details>

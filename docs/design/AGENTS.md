@@ -1,7 +1,6 @@
 # HarborClaim -- the agentic layer (Phase 5 design)
 
-Status: **design, awaiting the owner's approval** (ROADMAP.md, Phase 5, step 5.0). Nothing here
-is built yet. This file is the build reference for Phase 5: what each agent is for, what it may
+Status: **built** (ROADMAP.md, Phase 5). This file is the build reference for Phase 5: what each agent is for, what it may
 and may not do, how its output is checked, and how it is tested. Revised 2026-10-24 after an
 independent design review (section 14).
 
@@ -58,7 +57,10 @@ The terms this file uses, in the sense the course uses them.
 
 ---
 
-## 2. The three agents at a glance
+## 2. The agents at a glance
+
+Three agents were designed first; a fourth, the request agent (section 5.4), was added on
+2026-11-06 to give the workflow its one action, taken by a human.
 
 | | 1. Intake review | 2. Adjuster assistant | 3. Claimant assistant |
 |---|---|---|---|
@@ -113,14 +115,18 @@ GET  /help, POST /help/ask            claimant assistant (only when AI_CLAIMANT_
 | `tests/test_agents.py` | Harness, tools, gate, routes, labels; fake client only. | email tests in `tests/test_app.py` |
 | `tests/fixtures/ai/` | Recorded real responses, replayed offline. | -- |
 | `sample_data/golden/` | Golden-set claims (new `.txt` documents) and their expected properties. | `sample_data/claims.json` |
+| `privacy.py` (PR #3) | `redact()`: emails, phone numbers, SSNs and Luhn-valid card numbers removed from the sources in `agent_tools.claim_scope`, so the model and the gate read the same text. The `AI_DATA_POLICY` check. | -- |
+| `consistency.py` (PR #3) | Code-only checks of the claim form against the keyword scan's facts: claim type vs. described incidents, incident date vs. document dates. They feed open findings, the info-request template and `get_completeness`. Not AI. | `main.py`'s style |
+| `tests/test_review_fixes.py` (PR #3) | One section per adjuster review fix. | -- |
 
 Changed: `app.py` (one background task, three routes, page context), `storage.py` (one table,
 its queries, `reset()`, the duplicate-filename fix), `extraction.py` (public, page-aware reader),
 the adjuster review template, one new claimant template, `tests/conftest.py`,
 `requirements.txt`, `.env.example`, and the docs in section 12.
 
-Not touched: `main.py`, `test_main.py`, `auth.py`, `validation.py`, `email_delivery.py`, the
-decision route.
+Not touched: `main.py`, `test_main.py`, `auth.py`, `email_delivery.py`. Phase 5 left
+`validation.py` and the decision route alone. PR #3 then changed both: the description rule, and
+the decision rules (R25-R27, section 8).
 
 ### Model, provider and settings
 
@@ -171,9 +177,10 @@ decision route.
 | `AI_CLAIMANT_CHAT` | `true` to show the claimant assistant | blank (off) |
 | `AI_TIMEOUT_SECONDS` | Whole-run time limit | 30 |
 | `AI_DAILY_LIMIT_INTAKE`, `AI_DAILY_LIMIT_ADJUSTER`, `AI_DAILY_LIMIT_CLAIMANT` | Runs per UTC day, per agent | section 7 |
+| `AI_DATA_POLICY` (added 2026-11-06) | `test`: any configured model, for fictional claims only. `production`: `:free` models and `openrouter/free` refused; OpenRouter asked for providers that don't collect prompts (`provider.data_collection = "deny"`). Shown on the AI usage page | `test` |
 
-`tests/conftest.py` pins `AI_PROVIDER`, `AI_ENABLED` and `AI_CLAIMANT_CHAT` to off, beside the
-email pins, so a `.env` with AI on can never make the test suite call a model.
+`tests/conftest.py` pins `AI_PROVIDER`, `AI_ENABLED`, `AI_CLAIMANT_CHAT` and `AI_DATA_POLICY`,
+beside the email pins, so a `.env` with AI on can never make the test suite call a model.
 
 ---
 
@@ -374,6 +381,49 @@ legal questions get a fixed answer pointing to the adjuster.
 
 **Output schema.** `{"answer": "...", "refused": bool}`.
 
+### 5.4 Request agent (added 2026-11-06)
+
+**Objective.** Draft the adjuster's request to the claimant for what's still needed: the one
+*action* in the agentic workflow. The agent drafts; a human sends. Overview and diagram:
+[`AGENTIC-LAYER.md`](AGENTIC-LAYER.md).
+
+**When.** The adjuster clicks *Draft with AI* in the "Request missing information" card on the
+claim page. Synchronous form post, up to a minute. Limit: `AI_DAILY_LIMIT_REQUEST` (default 10).
+
+**Context: a brief, not the documents.** Unlike the other agents it gets no prefetch
+(`Charter.prefetch=False`): only the claim form and the document names (`agent_tools.brief_text`).
+It has to fetch the rest, so its tool use is real and shown in the trace.
+
+| Tool | Returns |
+|---|---|
+| `get_intake_review()` | The latest intake review: summary, findings, what it found missing or unclear, and whether it passed the gate |
+| `get_completeness()` | What the completeness check found missing, the documents on file, and the claim type's document hint |
+| `search_documents(query)` | Matching passages, to check whether something is already provided |
+
+**Output schema.** `{"message": "...", "items": ["..."]}` (at most 5 items). The page joins them
+as the message followed by "What we need:" and the items.
+
+**Gate.** The claimant will read it, so it is held to the claimant rules on the message and every
+item: no amounts (C), no decision or payment wording unless on record (C), no accusations (G5),
+only this claim's ID (G6), only the claimant's email (G7), no injected instructions (G8).
+
+**What people see.** A passed draft is labelled "AI draft (*model* via OpenRouter) -- checked
+automatically; read and edit before sending". A flagged or missing draft is replaced by the
+template (`agents.template_request`, written by code from the completeness check only), labelled
+"Template draft -- not AI-generated", with the gate's reasons. Either way the adjuster edits the
+text in a textarea.
+
+**The action, taken by the adjuster** (`POST /adjuster/claims/{id}/request/send`): separation of
+duties and "no final decision" are checked; the request is stored in `info_requests` with who sent
+it, the draft's run id, whether it came from the AI draft (checked against the server's own draft,
+not trusted from the form) and whether it was edited; the claim goes to NEEDS_INFORMATION with
+`adjuster_request` in `missing`; the claimant is notified.
+
+**The claimant's answer** (`POST /claims/{id}/documents`): documents and/or a note. The claim is
+checked again (`main.check_claim`), facts are extracted from the new files, the template summary is
+rebuilt, open requests are marked answered with the note, and with new documents the intake
+review runs again. The claimant page says "drafted with AI help" on a request the AI drafted.
+
 ---
 
 ## 6. The gate (`agent_gate.py`)
@@ -462,22 +512,46 @@ first line; each one has a hard guardrail behind it.
 | R19 | Model text is never rendered as HTML | Hard | Jinja autoescape; never the `safe` filter, no Markdown rendering | `<script>` in model output test |
 | R20 | Cross-site form posts to the new routes are blocked | Hard | session cookie `SameSite=lax` (Starlette default, checked) plus the existing login checks | stated; same as the existing POST routes |
 | R21 | Logs never contain prompts, document text or keys | Hard | `ai_client` logs error type only | log-capture test (as for email) |
-| R22 | A human decides every claim | Hard | the decision route is the only writer of decisions, adjuster session required | existing decision tests, unchanged |
+| R22 | A human decides every claim | Hard | the decision route is the only writer of decisions, adjuster session required | existing decision tests |
+| R23 | Contact and card details never reach a model | Hard | `privacy.redact` in `agent_tools.claim_scope` | redaction and claim-scope tests (`test_review_fixes.py` §5) |
+| R24 | Free-tier models never see real claims | Hard (when `AI_DATA_POLICY=production`) | `ai_client.chat` filters the model list; adds `provider.data_collection = "deny"` | refused-without-a-call and no-data-collection tests (§5) |
+| R25 | A final decision is final; a repeat records nothing; no decision on an incomplete claim | Hard | decision route | §2, §3 |
+| R26 | A decline carries a reason the claimant is told; a Needs-more-review note stays internal | Hard | decision route, `adjuster_decisions.reason` | §4 |
+| R27 | Approving over open findings is a recorded, deliberate choice | Hard | decision route (`acknowledge`), `adjuster_decisions.open_findings`; confirm dialog | §7 |
+| R28 | A claim-type or date mismatch is flagged even with AI off | Hard | `consistency.py` | §14 |
+
+**Known limits (PR #3).**
+
+- The keyword scan misses negation: "No injuries were reported" still counts as bodily injury,
+  so R28 can flag a type mismatch on such a phrase. It flags; it never decides.
+- The intake description rule (at least 3 real words) is a heuristic: it stops keyboard mashes,
+  not thin or untrue descriptions.
+- R23 is pattern-based: names, addresses and medical details are not redacted.
 
 ---
 
 ## 9. Labels (honest, and changed only when true)
 
-| Situation | Label |
+**One rule (2026-11-08): only AI is labelled.** Every piece of model-written text carries the
+purple `AI` badge (`templates/_ai_badge.html`) followed by its check result; the model's name is in
+the badge's title and in the AI trace footer. Anything without the badge was not written by a model:
+the standard summary, the standard request, fixed replies, consistency checks and the document
+facts are plain app text, with no "not AI" tags. This replaced a set of per-card "not AI" tags,
+which made sense while most stages were mocks and confused reviewers once real AI was in.
+
+| Situation | What the page shows |
 |---|---|
-| AI review passed the gate | `AI draft (<model name> via OpenRouter) -- checked against the documents; verify before deciding` |
-| AI review flagged | `AI draft (<model name> via OpenRouter) -- failed automated checks, see below` |
-| AI off, unavailable, or limit reached | Today's template card, unchanged: `Automated draft -- not AI-generated`, plus one line saying why AI isn't shown |
-| AI review running | `AI review in progress -- reload to see it`, template draft below |
-| Adjuster assistant answer | `AI assistant (<model name> via OpenRouter) -- answers come from this claim's records; it can't make decisions` |
-| Claimant assistant | `AI assistant -- it can explain your claim's status; your adjuster makes every decision` |
-| Refusal (either assistant) | No AI label: the text is fixed, written by HarborClaim |
-| Extracted facts | Unchanged: `Automated extraction -- not AI` |
+| AI review passed the gate | `AI` badge + **Checked against the documents**, and one line: written by a model, then checked by code; verify before deciding |
+| AI review flagged | Amber `AI` badge + **Failed checks**, the reasons listed, each failing line marked *failed check* |
+| AI off, unavailable, or limit reached | The standard summary (title "Summary"), with one quiet line: "No AI review: *reason*. Showing the standard summary." |
+| AI review running | "AI review in progress -- reload to see it", standard summary below |
+| Code safety nets around the AI review | Folded inside the AI card as **Checked by code (n)** |
+| Adjuster assistant answer | `AI` badge + **Checked against the documents** / **Failed checks** / **Nothing found in this claim's records** |
+| Request agent draft | `AI` badge + **Checked. Read and edit before sending**; otherwise the standard request, with a quiet line saying why |
+| Claimant assistant answer (`/help`) | `AI` badge + **Checked**, and "Your claim page is the record" |
+| Refusal (either assistant) | No badge: the text is fixed, written by HarborClaim |
+| Request on the claimant's page | "drafted with AI help, then read [and edited] and sent by your adjuster" when the AI drafted it |
+| Extracted facts, consistency checks | No badge; the section title and one hint say what they are |
 
 ---
 
@@ -681,17 +755,14 @@ flagged, trace open, both assistants, the fallback).
 
 ---
 
-## 13. Open questions for the owner
+## 13. Decisions
 
-1. ~~Provider and cost.~~ Decided 2026-10-24: OpenRouter, a free model, $0; chosen by the
-   two-round test in section 11.4.
-2. The owner sets `OPENROUTER_API_KEY` and `AI_MODELS` in `.env`; Claude never reads it.
-3. ~~Scope of the claimant assistant.~~ Decided 2026-10-24: kept, built last (after the
-   adjuster assistant), and the first thing dropped if time runs out. The reviewer had
-   recommended cutting it.
-4. The limits in section 7 are starting values; adjust after the first eval.
-5. Whether to make a one-time OpenRouter credit purchase of $10 or more, which raises the free
-   daily cap from about 50 to about 1,000 requests permanently (owner's call; not required).
+1. Provider and cost: OpenRouter, free models, $0; chosen by the two-round test in section 11.4.
+2. `OPENROUTER_API_KEY` and `AI_MODELS` are set in `.env`, which is never committed.
+3. The claimant assistant was kept and built last, after the adjuster assistant.
+4. The limits in section 7 are starting values, to adjust from use.
+5. A one-time OpenRouter credit of $10 or more would raise the free daily cap from about 50 to
+   about 1,000 requests. Not needed for the demo.
 
 ---
 

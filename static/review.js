@@ -17,9 +17,24 @@
       event.preventDefault();
       if (sent) return;
       pending = button;
+      // A decline needs a written reason; the server refuses one without it too.
+      var reason = form.querySelector("[name=reason]");
+      var needsReason = button.value === "DECLINED" && (!reason || reason.value.trim().length < 10);
       text.textContent =
-        "Record “" + button.textContent.trim() + "” on " + form.dataset.claimId +
-        "? It's saved under your name and the claimant is notified straight away.";
+        "Record “" + (button.dataset.outcome || button.textContent.trim()) + "” on " + form.dataset.claimId +
+        "? It's saved under your name" +
+        (button.value === "NEEDS_MORE_REVIEW" ? " and stays internal: the claimant isn't notified."
+                                              : " and the claimant is notified straight away.") +
+        (needsReason ? " A decline needs a written reason (at least 10 characters): add it in the Reason box first." : "");
+      // Approving over open review findings needs the acknowledgement box; the server checks it too.
+      var openFindings = parseInt(form.dataset.openFindings || "0", 10);
+      var ack = form.querySelector("[name=acknowledge]");
+      var needsAck = button.value === "APPROVED" && openFindings > 0 && !(ack && ack.checked);
+      if (needsAck) {
+        text.textContent += " " + openFindings + " review finding" + (openFindings === 1 ? " is" : "s are") +
+          " still open: tick \u201cI've checked the open findings\u201d first.";
+      }
+      ok.disabled = needsReason || needsAck;
       ok.className = "btn " + (button.value === "APPROVED" ? "approve" : button.value === "DECLINED" ? "decline" : "secondary");
       dialog.showModal();
       cancel.focus();

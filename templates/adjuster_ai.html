@@ -18,7 +18,20 @@
     </div>
 
     <div class="stack">
-    <div class="card ai-card">
+    <div class="card" id="data_policy">
+      <h2>Claim data</h2>
+      {% if data_policy == "production" %}
+      <p class="hint">Data policy: <strong>production</strong>. Free-tier models are refused, and requests go only to
+        providers that don't collect prompt data. Emails, phone numbers, SSNs and card numbers are removed before any
+        model sees a claim; names and medical details are not.</p>
+      {% else %}
+      <p class="hint" style="color:var(--warn);">Data policy: <strong>test</strong>. Use fictional claims only.
+        {% if free_tier %}Free-tier models ({{ free_tier | join(", ") }}) may log prompts or use them for training.{% endif %}
+        Set AI_DATA_POLICY=production before real claims go through the AI.</p>
+      {% endif %}
+    </div>
+
+    <div class="card">
       <h2>Model</h2>
       {% if not ai_on %}
       <p class="hint">AI is off on this site (AI_PROVIDER is not set).</p>

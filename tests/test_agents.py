@@ -8,13 +8,17 @@ Step 5.1 (groundwork): the page-aware document reader, the agent_runs table, the
 
 import json
 import logging
+import os
+import re
 import sqlite3
+import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
 import pytest
+from pypdf import PdfReader
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -1053,9 +1057,10 @@ import app as app_module  # noqa: E402
 from auth import get_current_user  # noqa: E402
 
 web = TestClient(app_module.app)
-PASSED_LABEL = f"AI draft ({MODEL} via OpenRouter) -- checked against the documents; verify before deciding"
-FLAGGED_LABEL = f"AI draft ({MODEL} via OpenRouter) -- failed automated checks, see below"
-TEMPLATE_LABEL = "Automated draft -- not AI-generated"
+# The one AI label (templates/_ai_badge.html); anything without it isn't model-written.
+PASSED_LABEL = f'title="Written by {MODEL} via OpenRouter, then checked by code">AI</span><span class="ai-badge-text">Checked against the documents</span>'
+FLAGGED_LABEL = f'<span class="ai-badge flagged" title="Written by {MODEL} via OpenRouter, then checked by code">AI</span><span class="ai-badge-text flagged">Failed checks</span>'
+TEMPLATE_LABEL = "<h2>Summary</h2>"                     # the standard (template) summary card
 
 
 @pytest.fixture
@@ -1107,7 +1112,7 @@ def test_ai_off_queues_nothing_and_the_page_says_why(adjuster_web):
     storage.add_summary("CLM-5A5A5A5A", "Template draft text.")
     page = _page()
     assert TEMPLATE_LABEL in page and "No AI review: AI review is off on this site." in page
-    assert "AI draft" not in page and "Re-run AI review" not in page
+    assert 'class="ai-badge' not in page and "Re-run AI review" not in page
     adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/intake-review", follow_redirects=False)
     assert storage.recent_agent_runs("CLM-5A5A5A5A", "intake") == []
 
@@ -1121,10 +1126,10 @@ def test_check_1_normal_a_passed_review_shows_cited_and_labelled(fake_model, adj
     assert "The repair estimate totals $4,240.00." in page
     assert f"{ESTIMATE}, p. 1" in page and 'title="Total estimate $4,240.00"' in page
     assert "amount difference" in page and "No photos of the damage are attached." in page
-    assert "Not summarised" in page                          # computed by code, shown under the summary
+    assert "Dates and amounts the summary doesn't mention" in page   # computed by code, shown under the summary
     assert "AI trace" in page and "Model call 1: fake/model:free" in page
     assert "Re-run AI review" in page
-    assert "Automated extraction -- not AI" in page          # the regex facts card keeps its own label
+    assert 'id="document_facts"' in page                   # the regex facts card is still there, folded
 
 
 def test_check_2_missing_or_ambiguous_shows_what_is_unclear(fake_model, adjuster_web):
@@ -1147,7 +1152,7 @@ def test_check_3_injected_model_failure_falls_back_to_the_template(fake_model, a
     page = _page()
     assert TEMPLATE_LABEL in page and "Template draft text." in page
     assert "No AI review: the AI service didn&#39;t answer in time." in page
-    assert "AI draft" not in page and "Re-run AI review" in page
+    assert 'class="ai-badge' not in page and "Re-run AI review" in page
 
 
 def test_a_flagged_review_says_so_and_marks_the_failing_sentence(fake_model, adjuster_web):
@@ -1156,8 +1161,8 @@ def test_a_flagged_review_says_so_and_marks_the_failing_sentence(fake_model, adj
     assert _reviewed_claim(script, bad).status == "flagged"
     page = _page()
     assert FLAGGED_LABEL in page and PASSED_LABEL not in page
-    assert "Failed automated checks" in page and "$9,999.00 is not in the cited quotes" in page
-    assert page.count("failed checks</span>") == 1
+    assert "<strong>Failed checks</strong>" in page and "$9,999.00 is not in the cited quotes" in page
+    assert page.count("failed check</span>") == 1
 
 
 def test_model_text_is_escaped_never_rendered_as_html(fake_model, adjuster_web):
@@ -1263,7 +1268,7 @@ def test_an_ordinal_in_a_quoted_address_is_not_an_unverifiable_date():
 
 # --- Step 5.5: "Ask about this claim" on the adjuster page --------------------------------------
 
-ANSWER_LABEL = f"AI answer ({MODEL} via OpenRouter) -- checked against the documents; verify before relying on it"
+ANSWER_LABEL = f'title="Written by {MODEL} via OpenRouter, then checked by code">AI</span><span class="ai-badge-text">Checked against the documents</span>'
 GOOD_ANSWER = {"answer": [{"text": "The repair estimate totals $4,240.00.",
                            "citations": [_cite(ESTIMATE, "Total estimate $4,240.00")]}],
                "not_found": False, "refused": False}
@@ -1293,7 +1298,7 @@ def test_a_decision_question_shows_the_fixed_refusal_and_calls_no_model(fake_mod
     _ask("Should I approve this claim?")
     page = _page()
     assert calls == [] and "Should I approve this claim?" in page
-    assert "Fixed reply -- not AI-generated" in page and "That decision is yours" in page
+    assert "That decision is yours" in page and 'class="ai-badge' not in page   # a fixed reply has no AI badge
     assert "AI answer" not in page
     assert storage.agent_runs_today("adjuster") == 0          # a code refusal costs nothing against the limit
 
@@ -1314,7 +1319,7 @@ def test_a_flagged_answer_says_so_and_a_failed_call_says_why(fake_model, adjuste
     script.append(_json_reply(bad))
     _ask("What does the estimate total?")
     page = _page()
-    assert "failed automated checks, see below" in page and "$9,999.00 is not in the cited quotes" in page
+    assert 'ai-badge-text flagged">Failed checks' in page and "$9,999.00 is not in the cited quotes" in page
     script.append(_failed_reply("timeout"))
     _ask("When was the police report filed?")
     assert "No AI answer: the AI service didn&#39;t answer in time." in _page()
@@ -1440,7 +1445,7 @@ def test_a_claimant_question_gets_a_labelled_answer_and_changes_nothing(fake_mod
     assert r.status_code == 303 and r.headers["location"] == "/help"
     page = web.get("/help").text
     assert "Where is my claim?" in page and "Your claim CLM-5A5A5A5A is with an adjuster for review." in page
-    assert f"AI answer ({MODEL} via OpenRouter)" in page
+    assert f'title="Written by {MODEL} via OpenRouter, then checked by code">AI</span><span class="ai-badge-text">Checked</span>' in page
     assert _state("CLM-5A5A5A5A") == before
 
 
@@ -1452,7 +1457,8 @@ def test_another_claimants_claim_never_appears_and_shows_the_fixed_reply(fake_mo
     script.append(_json_reply({"answer": "CLM-7C7C7C7C is also in review.", "refused": False}))
     _help_ask("What about CLM-7C7C7C7C?")
     page = web.get("/help").text
-    assert "CLM-7C7C7C7C is also in review." not in page and "Fixed reply -- not AI-generated" in page
+    assert "CLM-7C7C7C7C is also in review." not in page and "your adjuster decides that" in page
+    assert 'class="ai-badge' not in page                    # the fixed reply carries no AI badge
     assert "G6" not in page and "AI trace" not in page                 # no gate detail for claimants
 
 
@@ -1553,3 +1559,379 @@ def test_the_ai_usage_page_needs_an_adjuster(claimant_web):
               web.post("/adjuster/ai/model", data={"model": "a:free"}, follow_redirects=False)):
         assert r.status_code == 303 and r.headers["location"] == "/adjuster/login"
     assert storage.get_ai_setting("model") is None
+
+
+def test_prompts_md_matches_the_prompts_the_app_sends():
+    """PROMPTS.md goes into the course submission: it must be the code's prompts, not a copy."""
+    import importlib.util
+    root = Path(__file__).parent.parent
+    spec = importlib.util.spec_from_file_location("export_prompts", root / "scripts" / "export_prompts.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    current = (root / "PROMPTS.md").read_text(encoding="utf-8")
+    assert current == module.render(), "PROMPTS.md is out of date: run python scripts/export_prompts.py"
+
+
+# =============================================================================================
+# The request agent: drafts the one action; a human adjuster edits and sends it (2026-11-06)
+# =============================================================================================
+
+GOOD_REQUEST = {"message": "Hello, thank you for filing claim CLM-5A5A5A5A. A few items are needed to "
+                           "continue the review. Please open the claim under My claims and use Add documents.",
+                "items": ["Photos of the damage to the rear bumper"]}
+
+
+def _request_script(script, output=GOOD_REQUEST):
+    script += [_tools_reply(_tool_call("get_intake_review", call_id="a"), _tool_call("get_completeness", call_id="b")),
+               _json_reply(output)]
+
+
+def _requests(claim_id="CLM-5A5A5A5A"):
+    return storage.get_claim(claim_id)["requests"]
+
+
+def test_the_request_agent_starts_from_a_brief_and_fetches_the_rest_with_tools(fake_model):
+    script, calls = fake_model
+    _sample_claim()
+    before = _state("CLM-5A5A5A5A")
+    _request_script(script)
+    result = agents.draft_info_request("CLM-5A5A5A5A", "adj.review")
+    assert result.status == "passed"
+    first_user_message = calls[0]["messages"][1]["content"]
+    assert "Documents on file: police_report_sample.pdf" in first_user_message
+    assert "=== SOURCE:" not in first_user_message              # no document text up front
+    assert [t["tool"] for t in result.trace if t["type"] == "tool"] == ["get_intake_review", "get_completeness"]
+    assert _state("CLM-5A5A5A5A") == before                      # drafting changes nothing
+
+
+def test_drafting_changes_nothing_and_sending_is_the_one_action(fake_model, adjuster_web):
+    script, _ = fake_model
+    _sample_claim()
+    before = _state("CLM-5A5A5A5A")
+    _request_script(script)
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/draft", follow_redirects=False)
+    page = _page()
+    assert f'title="Written by {MODEL} via OpenRouter, then checked by code">AI</span><span class="ai-badge-text">Checked. Read and edit before sending</span>' in page
+    assert "Photos of the damage to the rear bumper" in page
+    assert _state("CLM-5A5A5A5A") == before
+
+    text = agents.request_text(GOOD_REQUEST) + " Thank you."
+    r = adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": text, "source": "ai"},
+                          follow_redirects=False)
+    assert r.status_code == 303
+    record = storage.get_claim("CLM-5A5A5A5A")
+    assert record["status"] == "NEEDS_INFORMATION" and record["missing"] == ["adjuster_request"]
+    sent = record["requests"][0]
+    assert sent["ai_drafted"] and sent["edited"] and sent["sent_by"] == "adj.review" and sent["run_id"]
+    assert sent["message"] == text and sent["answered_at"] is None
+    assert any("asked for more information" in n["message"]
+               for n in storage.list_notifications_for("claimant@example.com"))
+
+
+def test_a_flagged_draft_is_replaced_by_the_template_and_cannot_be_sent_as_ai(fake_model, adjuster_web):
+    script, _ = fake_model
+    _sample_claim()
+    _request_script(script, {"message": "Your claim will be approved once you send receipts for $500.00.",
+                             "items": ["Receipts"]})
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/draft", follow_redirects=False)
+    page = _page()
+    assert "the standard request is shown instead" in page and "Read and edit before sending" not in page
+    assert "will be approved" not in page
+    template = agents.template_request(storage.get_claim("CLM-5A5A5A5A"))
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": template, "source": "ai"})
+    sent = _requests()[0]
+    assert not sent["ai_drafted"] and not sent["edited"] and sent["run_id"] is None
+
+
+def test_with_ai_off_the_template_draft_still_works(adjuster_web):
+    _sample_claim()
+    page = _page()
+    assert "Edit the standard request and send it" in page and "Draft with AI" not in page
+    template = agents.template_request(storage.get_claim("CLM-5A5A5A5A"))
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/draft", follow_redirects=False)
+    assert storage.recent_agent_runs("CLM-5A5A5A5A", "request") == []
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": template, "source": "template"})
+    assert storage.get_claim("CLM-5A5A5A5A")["status"] == "NEEDS_INFORMATION"
+
+
+def test_sending_needs_an_adjuster_a_message_and_no_conflict_or_final_decision():
+    _sample_claim()
+    web.cookies.clear()
+    r = web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": "Hi"}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/adjuster/login"
+    password = storage.create_adjuster("adj.linked", linked_claimant_email="claimant@example.com")
+    web.post("/adjuster/login", data={"username": "adj.linked", "password": password})
+    assert web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": "Hi"}).status_code == 403
+    web.cookies.clear()
+    password = storage.create_adjuster("adj.other")
+    web.post("/adjuster/login", data={"username": "adj.other", "password": password})
+    assert web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": "  "}).status_code == 400
+    storage.add_decision("CLM-5A5A5A5A", "APPROVED", "adj.other")
+    assert web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": "Hi"}).status_code == 403
+    assert _requests() == []
+    web.cookies.clear()
+
+
+def test_the_claimant_answers_and_the_claim_goes_back_for_a_fresh_ai_review(adjuster_web, claimant_web, monkeypatch):
+    _sample_claim()
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": "Please send photos.",
+                                                                           "source": "template"})
+    page = web.get("/claims/CLM-5A5A5A5A").text
+    assert "Your adjuster needs a little more information" in page and "Please send photos." in page
+    assert "drafted with AI help" not in page                    # a template request isn't labelled AI
+    assert "the information your adjuster asked for" in page
+
+    reviews = []
+    monkeypatch.setattr(ai_client, "enabled", lambda: True)
+    monkeypatch.setattr(agents, "run_intake_review", lambda claim_id: reviews.append(claim_id))
+    r = web.post("/claims/CLM-5A5A5A5A/documents", data={"note": "Photos attached."},
+                 files=[("files", ("photos.txt", b"Photo of the rear bumper taken 2026-09-10.", "text/plain"))],
+                 follow_redirects=False)
+    assert r.status_code == 303
+    record = storage.get_claim("CLM-5A5A5A5A")
+    assert record["status"] == "READY_FOR_REVIEW" and record["missing"] == []
+    assert "photos.txt" in record["claim"]["documents"]
+    assert record["requests"][0]["answered_at"] and record["requests"][0]["reply_note"] == "Photos attached."
+    assert reviews == ["CLM-5A5A5A5A"]                          # the review runs again with the new document
+    assert "note:</strong> Photos attached." in _page()
+
+
+def test_files_sent_with_an_answer_are_marked_on_both_sides(adjuster_web, claimant_web, monkeypatch):
+    _sample_claim()
+    with storage._connect() as conn:                        # filed a while ago, like a real claim
+        conn.execute("UPDATE status_history SET at = '2026-11-01T10:00:00+00:00' WHERE claim_id = 'CLM-5A5A5A5A'")
+        conn.execute("UPDATE documents SET uploaded_at = '2026-11-01T10:00:01+00:00' WHERE claim_id = 'CLM-5A5A5A5A'")
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": "Please send photos.",
+                                                                           "source": "template"})
+    with storage._connect() as conn:                        # sent before the answer, not in the same second
+        conn.execute("UPDATE info_requests SET sent_at = '2026-11-01T11:00:00+00:00' WHERE claim_id = 'CLM-5A5A5A5A'")
+    monkeypatch.setattr(agents, "run_intake_review", lambda claim_id: None)
+    web.post("/claims/CLM-5A5A5A5A/documents", data={"note": "Photos attached."},
+             files=[("files", ("photos.txt", b"Photo of the rear bumper.", "text/plain"))])
+
+    page = _page()
+    assert page.count("Added later") == 1                       # only the new file, not the originals
+    assert "Files sent with the answer:" in page
+    assert '/adjuster/claims/CLM-5A5A5A5A/documents/photos.txt">photos.txt</a>' in page
+    claimant_page = web.get("/claims/CLM-5A5A5A5A").text
+    assert claimant_page.count("&middot; added ") == 1
+
+
+def test_an_answer_with_only_a_note_says_no_files_came(adjuster_web, claimant_web):
+    _sample_claim()
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": "Please confirm the date.",
+                                                                           "source": "template"})
+    web.post("/claims/CLM-5A5A5A5A/documents", data={"note": "The date is right."})
+    page = _page()
+    assert "No files came with this answer, only the note." in page and "Added later" not in page
+
+
+def _record_with_docs(filed_at, uploads):
+    return {"history": [{"status": "READY_FOR_REVIEW", "at": filed_at}] if filed_at else [],
+            "documents": [{"filename": f"doc{i}.pdf", "uploaded_at": at} for i, at in enumerate(uploads)],
+            "requests": []}
+
+
+def test_a_file_saved_within_a_minute_of_filing_counts_as_an_original():
+    record = app_module._mark_later_documents(_record_with_docs(
+        "2026-11-01T10:00:00+00:00", ["2026-11-01T10:00:02+00:00", "2026-11-01T10:01:00+00:00",
+                                      "2026-11-01T10:01:01+00:00"]))
+    assert [d["added_later"] for d in record["documents"]] == [False, False, True]   # the boundary is 60 s
+
+
+def test_marking_later_documents_copes_with_a_claim_with_no_history():
+    record = app_module._mark_later_documents(_record_with_docs(None, ["2026-11-01T10:00:02+00:00"]))
+    assert record["documents"][0]["added_later"] is False
+
+
+def test_no_decision_while_the_claim_waits_on_the_claimant(adjuster_web):
+    _sample_claim()
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": "Please send photos.",
+                                                                           "source": "template"})
+    r = adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/decision",
+                          data={"decision": "DECLINED", "reason": "Not covered under this policy."})
+    assert r.status_code == 403
+    assert storage.get_claim("CLM-5A5A5A5A")["decisions"] == []
+
+
+def test_the_add_documents_form_goes_away_once_the_request_is_answered(adjuster_web, claimant_web):
+    _sample_claim()
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": "Please confirm the date.",
+                                                                           "source": "template"})
+    assert 'id="add-documents"' in web.get("/claims/CLM-5A5A5A5A").text
+    web.post("/claims/CLM-5A5A5A5A/documents", data={"note": "The date is right."})
+    assert storage.get_claim("CLM-5A5A5A5A")["status"] == "READY_FOR_REVIEW"
+    assert 'id="add-documents"' not in web.get("/claims/CLM-5A5A5A5A").text
+
+
+def test_the_app_starts_from_another_folder():
+    # Seen 2026-11-09: pytest run from the course folder above the project failed to import app.py,
+    # because static/ and templates/ were looked up in the working directory.
+    project = Path(app_module.__file__).parent
+    result = subprocess.run([sys.executable, "-c", "import app; print(app.templates.env.loader.searchpath[0])"],
+                            cwd=str(project.parent),
+                            env={**os.environ, "PYTHONPATH": str(project), "PYTHONIOENCODING": "utf-8"},
+                            capture_output=True, text=True, encoding="utf-8", timeout=60)
+    assert result.returncode == 0, result.stderr[-500:]
+    assert Path(result.stdout.strip()) == project / "templates"
+
+
+RELEASE_WORKFLOW = Path(app_module.__file__).parent / ".github" / "workflows" / "release.yml"
+
+
+def test_release_runs_only_after_the_tests_pass_on_a_push_to_main():
+    text = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    assert "workflows: [Tests]" in text and "branches: [main]" in text
+    assert "github.event.workflow_run.conclusion == 'success'" in text
+    assert "github.event.workflow_run.event == 'push'" in text      # never a pull request's run
+    assert "ref: ${{ github.event.workflow_run.head_sha }}" in text  # releases the commit that was tested
+    assert "needs: release" in text                                  # deploy only after the release
+
+
+def test_release_workflow_uses_only_the_one_azure_secret_and_never_prints_it():
+    text = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    assert set(re.findall(r"secrets\.(\w+)", text)) == {"AZURE_CREDENTIALS"}
+    for line in text.splitlines():
+        if "echo" in line:
+            assert "secrets." not in line and "$AZURE_CREDENTIALS" not in line
+
+
+def test_the_demo_documents_hold_what_the_demo_relies_on():
+    # DEMO-SCRIPT.md asks for the estimate total and files the police report as the answer.
+    demo = Path(app_module.__file__).parent / "sample_data" / "demo"
+    estimate = PdfReader(str(demo / "bayshore_repair_estimate.pdf")).pages[0].extract_text()
+    police = PdfReader(str(demo / "bayport_police_report.pdf")).pages[0].extract_text()
+    assert "Total estimate $3,486.40" in estimate and "HC-AUTO-5318" in estimate
+    assert "2026-10-27" in police and "Harbor Avenue at Palm Street" in police
+
+
+def test_the_claimant_sees_when_ai_helped_draft_the_request(fake_model, adjuster_web, claimant_web):
+    script, _ = fake_model
+    _sample_claim()
+    _request_script(script)
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/draft", follow_redirects=False)
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/send",
+                      data={"message": agents.request_text(GOOD_REQUEST), "source": "ai"})
+    page = web.get("/claims/CLM-5A5A5A5A").text
+    assert "drafted with AI help, then read and sent by your adjuster" in page
+    assert "AI trace" not in page and "get_intake_review" not in page
+
+
+def test_only_the_owner_can_add_documents_and_an_empty_answer_is_refused(claimant_web):
+    _sample_claim("CLM-7C7C7C7C", email="other@example.com")
+    _sample_claim()
+    storage.set_claim_status("CLM-7C7C7C7C", "NEEDS_INFORMATION", ["adjuster_request"])
+    storage.set_claim_status("CLM-5A5A5A5A", "NEEDS_INFORMATION", ["adjuster_request"])
+    files = [("files", ("a.txt", b"x", "text/plain"))]
+    assert web.post("/claims/CLM-7C7C7C7C/documents", files=files).status_code == 403
+    assert web.post("/claims/CLM-5A5A5A5A/documents", data={"note": ""}).status_code == 400
+    bad = web.post("/claims/CLM-5A5A5A5A/documents", files=[("files", ("<b>x</b>.exe", b"x", "text/plain"))])
+    assert bad.status_code == 400 and "<b>x</b>" not in bad.text   # the filename is escaped
+    assert len(storage.get_claim("CLM-5A5A5A5A")["documents"]) == 2
+
+
+def test_documents_nobody_asked_for_are_refused_and_the_form_is_hidden(claimant_web, monkeypatch):
+    _sample_claim()                                        # READY_FOR_REVIEW: nothing was asked for
+    assert 'id="add-documents"' not in web.get("/claims/CLM-5A5A5A5A").text
+    reviews = []
+    monkeypatch.setattr(ai_client, "enabled", lambda: True)
+    monkeypatch.setattr(agents, "run_intake_review", lambda claim_id: reviews.append(claim_id))
+    r = web.post("/claims/CLM-5A5A5A5A/documents", data={"note": "Extra."},
+                 files=[("files", ("a.txt", b"x", "text/plain"))])
+    assert r.status_code == 403
+    record = storage.get_claim("CLM-5A5A5A5A")
+    assert len(record["documents"]) == 2 and record["status"] == "READY_FOR_REVIEW" and reviews == []
+
+
+def test_a_request_after_needs_more_review_shows_needs_information_to_the_adjuster(adjuster_web):
+    _sample_claim()
+    storage.add_decision("CLM-5A5A5A5A", "NEEDS_MORE_REVIEW", "adj.review")
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": "Please send photos.",
+                                                                           "source": "template"})
+    record = storage.get_claim("CLM-5A5A5A5A")
+    assert app_module._display_status(record) == "NEEDS_INFORMATION"
+    assert app_module._queue_category(record) == "waiting"
+    storage.set_claim_status("CLM-5A5A5A5A", "READY_FOR_REVIEW", [])   # answered: back to the decision
+    assert app_module._display_status(storage.get_claim("CLM-5A5A5A5A")) == "NEEDS_MORE_REVIEW"
+
+
+def test_a_double_click_on_send_records_one_request(adjuster_web):
+    _sample_claim()
+    for _ in range(2):
+        adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": "Please send photos.",
+                                                                               "source": "template"})
+    assert len(_requests()) == 1
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/send", data={"message": "And the tow receipt.",
+                                                                           "source": "template"})
+    assert len(_requests()) == 2                          # a different message is a new request
+
+
+@pytest.mark.parametrize("output, expected", [
+    ({"message": "Hello."}, "invalid"),
+    ({"message": "", "items": []}, "invalid"),
+    ({"message": "Hello.", "items": ["a", "b", "c", "d", "e", "f"]}, "invalid"),
+    ({"message": "Please send the report for CLM-0000BBBB.", "items": []}, "flagged"),
+    ({"message": "Hello, please add photos.", "items": ["Photos showing the staged damage"]}, "flagged"),
+    ({"message": "Hello, please add photos for CLM-5A5A5A5A.", "items": ["Photos of the damage"]}, "passed"),
+])
+def test_the_gate_holds_a_drafted_request_to_the_claimant_rules(output, expected):
+    result = agent_gate.check("request", output, claimant_email="claimant@example.com", own_claim_ids={"CLM-5A5A5A5A"})
+    assert result["status"] == expected
+
+
+def test_the_claim_page_links_to_help_with_its_own_claim_number(fake_model, claimant_web, monkeypatch):
+    _sample_claim()
+    _sample_claim("CLM-7C7C7C7C", email="other@example.com")
+    assert "Ask a question &rarr;" not in web.get("/claims/CLM-5A5A5A5A").text   # assistant off
+    monkeypatch.setenv("AI_CLAIMANT_CHAT", "true")
+    page = web.get("/claims/CLM-5A5A5A5A").text
+    assert 'href="/help?about=CLM-5A5A5A5A">Ask a question &rarr;</a>' in page
+    assert 'value="About CLM-5A5A5A5A: "' in web.get("/help?about=CLM-5A5A5A5A").text
+    # Someone else's claim number, or anything that isn't one, prefills nothing.
+    assert 'value=""' in web.get("/help?about=CLM-7C7C7C7C").text
+    assert 'value=""' in web.get("/help?about=<script>").text
+
+
+def test_the_request_agent_must_call_a_tool_first(fake_model):
+    script, calls = fake_model
+    _sample_claim()
+    _request_script(script)
+    agents.draft_info_request("CLM-5A5A5A5A", "adj.review")
+    assert calls[0]["tool_choice"] == "required" and calls[1]["tool_choice"] == "auto"
+
+
+def test_an_ai_draft_that_names_nothing_falls_back_to_the_standard_request(fake_model, adjuster_web):
+    # Seen live 2026-11-08: "we need a few more items" with an empty items list.
+    script, _ = fake_model
+    _sample_claim()
+    _request_script(script, {"message": "Hello! We need a few more items to continue reviewing claim "
+                                        "CLM-5A5A5A5A. Please use Add documents.", "items": []})
+    adjuster_web.post("/adjuster/claims/CLM-5A5A5A5A/request/draft", follow_redirects=False)
+    page = _page()
+    assert "The AI agent found nothing to ask the claimant for." in page
+    assert "Read and edit before sending" not in page
+
+
+def test_a_tool_with_no_parameters_ignores_arguments_the_model_adds(fake_model):
+    # Seen live 2026-11-08: get_intake_review({"claim_id": ...}) was refused and the draft went blind.
+    script, _ = fake_model
+    _sample_claim()
+    script += [_tools_reply(_tool_call("get_intake_review", '{"claim_id": "CLM-0000BBBB"}', "a"),
+                            _tool_call("get_completeness", '{"claim_id": "CLM-5A5A5A5A"}', "b")),
+               _json_reply(GOOD_REQUEST)]
+    result = agents.draft_info_request("CLM-5A5A5A5A", "adj.review")
+    tools = [t for t in result.trace if t["type"] == "tool"]
+    assert [t["refused"] for t in tools] == [None, None] and result.status == "passed"
+    assert "CLM-0000BBBB" not in str([t["result"] for t in tools])   # scope stays this claim
+
+
+def test_an_empty_adjuster_answer_is_not_shown_as_checked():
+    # Seen live 2026-11-08: {"answer": [], "not_found": false} passed and would show "Checked" over nothing.
+    empty = agent_gate.check("adjuster", {"answer": [], "not_found": False, "refused": False}, sources={})
+    assert empty["status"] == "invalid"
+    assert agent_gate.check("adjuster", {"answer": [], "not_found": True, "refused": False}, sources={})["status"] == "passed"
+
+
+def test_both_assistants_must_look_something_up_first():
+    assert agents.CHARTERS["adjuster"].tools_first and agents.CHARTERS["claimant"].tools_first
+    assert not agents.CHARTERS["intake"].tools_first      # the intake review reads prefetched documents

@@ -1,0 +1,17 @@
+{# Who's signed in, and Sign out: a <details> menu like the bell, so it works with no script
+   (static/app.js only adds click-outside and Escape). Expects `account_name` (short label),
+   `account_detail` (full email or role) and `logout_url`. #}
+<details class="account">
+  <summary aria-label="Account: {{ account_detail }}" title="{{ account_detail }}">
+    <span class="account-avatar" aria-hidden="true">{{ (account_name or "?")[0] | upper }}</span>
+    <span class="account-name">{{ account_name }}</span>
+    <svg class="account-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+  </summary>
+  <div class="account-menu">
+    <div class="account-menu-head">
+      <span class="hint">Signed in as</span>
+      <strong>{{ account_detail }}</strong>
+    </div>
+    <a href="{{ logout_url }}">Sign out</a>
+  </div>
+</details>

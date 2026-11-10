@@ -21,3 +21,15 @@ server.pid
 # Claims database + uploaded evidence documents -- runtime state, not source.
 # Fictional demo data only, but still shouldn't live in git.
 data/
+*.db
+*.sqlite
+*.sqlite3
+uploads/
+
+# Logs, editor and OS files, local Claude Code settings
+*.log
+.vscode/
+.idea/
+.claude/
+.DS_Store
+Thumbs.db

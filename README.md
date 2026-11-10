@@ -62,6 +62,65 @@ The port matters — `8123` has to match the redirect URI registered in Google C
 Console (see "Accounts and privacy" below) or claimant sign-in will fail with
 `redirect_uri_mismatch`.
 
+## The AI agents (FIN 6934 final project)
+
+Phase 5 adds four AI agents to the intake workflow. They read, explain and draft; none of them
+can approve, decline, pay, judge coverage or change a claim. The one action in the loop, asking
+the claimant for more, is drafted by an agent and sent by the adjuster. A human adjuster decides.
+
+![The agentic layer in the claim workflow](docs/design/agentic-layer.png)
+
+The walk-through of this diagram is [`docs/design/AGENTIC-LAYER.md`](docs/design/AGENTIC-LAYER.md).
+
+| Agent | Who sees it | What it does |
+|---|---|---|
+| **Intake review** | Adjuster, on each claim page | Reads the claim and its documents, writes a short summary and "worth checking" findings (amount or date differences, type mismatches, missing documents). Every sentence cites a document, page and word-for-word quote. |
+| **Ask about this claim** | Adjuster | Answers a question from that claim's records only, with citations, or says it isn't in the records. |
+| **Ask a question** (`/help`) | Claimant | Says where the claimant's own claims stand and what's still needed. Never mentions anyone else's claim, amounts or decisions not on record. |
+| **Request missing information** | Adjuster drafts, claimant receives | Starts from a brief and calls its tools to find what's missing, then drafts a request. The adjuster edits and sends it; the claimant answers by adding documents, the claim is checked again and the intake review re-runs. |
+
+**From a live run** (real model, fictional claim, `python scripts/capture_ai_screenshots.py`):
+
+| | |
+|---|---|
+| ![AI intake review with citations; one sentence failed a code check and is marked](docs/screenshots/21-ai-intake-review.png) Intake review: cited summary and an amount difference. One sentence held a number its quote didn't cover, so the code check marked it failed. | ![Ask about this claim: a cited answer, and a decision question answered by code](docs/screenshots/23-ask-about-this-claim.png) Ask about this claim: a cited answer; "Should I approve?" gets the fixed reply, no model call |
+| ![The request agent's draft with its tool calls in the AI trace](docs/screenshots/27-request-agent-draft.png) Request agent: it called two tools, then drafted; the adjuster edits and sends | ![The claimant's view of the request, with Add documents](docs/screenshots/28-claimant-sees-request.png) The claimant sees the request and answers with Add documents |
+| ![The claimant assistant answering where a claim stands](docs/screenshots/24-claimant-ask-a-question.png) Claimant assistant: where the claim stands; payment questions get the fixed reply | ![AI usage page: model choice, data policy and today's limits](docs/screenshots/25-adjuster-ai-usage.png) AI usage: which model answers first, the data policy, and today's limits |
+
+**How it's built** (details in [`docs/design/AGENTS.md`](docs/design/AGENTS.md)):
+
+- **One shared harness** (`agents.py`): a charter per agent (prompt, JSON schema, daily limit),
+  up to 3 model calls and 3 tool calls per run, read-only tools (`agent_tools.py`), and an
+  append-only `agent_runs` log of every question, answer, check result and trace.
+- **Code checks every answer** (`agent_gate.py`, rules G1-G9 and C) before anyone sees it:
+  quotes must be in the documents word for word, numbers must come from the quotes, no
+  decision/coverage/payment wording, no other claimant's data, injected instructions caught. A
+  failed answer is shown as "failed automated checks" (adjuster) or replaced by a fixed reply
+  (claimant). Decision questions ("Should I approve this?") get a fixed reply from code with no
+  model call.
+- **Models:** free open-weight NVIDIA models on OpenRouter, $0. 12 free models screened in 3
+  rounds; two passed and run with automatic failover: `nvidia/nemotron-3.5-super-vl:free`, then
+  `nvidia/nemotron-3-ultra-550b-a55b:free`. An adjuster picks which answers first on the
+  **AI usage** page (`/adjuster/ai`), which also shows today's usage against the limits.
+- **Honest labels:** the purple `AI` badge, with its check result, only on text a model wrote and the checks
+  passed; when AI is off or a model is down, the standard summary shows with one line saying why.
+- **Adjuster safeguards** (PR #3, details in [`AI_USAGE.md`](AI_USAGE.md)):
+  - **Decisions, enforced by the server:** a final decision can't be overwritten, a repeat records
+    nothing, a decline needs a reason the claimant is told, and approving while findings are open
+    needs a ticked acknowledgement that goes on the record.
+  - **Consistency checks by code** (`consistency.py`): claim type vs. what the documents describe,
+    and incident date vs. document dates. They work with AI off.
+  - **Personal data:** `privacy.py` removes emails, phone numbers, SSNs and card numbers before any
+    model sees a claim. `AI_DATA_POLICY=production` refuses free-tier models.
+  - **Known limits:** the keyword scan misses negation ("No injuries" still counts as an injury),
+    the description rule is a heuristic, and names and medical details are not redacted.
+- **Tested:** 400 automated tests (a scripted fake model, no network), a golden set of 11
+  fictional claims run live (`scripts/eval_agents.py`, intake agent only), two red-team
+  rounds, and live runs of the other three agents in the app. Prompts and results: [`PROMPTS.md`](PROMPTS.md) and [`AI_USAGE.md`](AI_USAGE.md).
+
+AI is off unless switched on in `.env` (setting names in "Deploying to Azure App Service",
+step 6). `python scripts/show_ai_runs.py` prints today's runs.
+
 ## What this is
 
 The minimum working example from the take-home spec: a claim completeness checker.
@@ -323,6 +382,19 @@ this repo's `main` branch. To reproduce it:
    pushing does **not** redeploy on its own — after each push, run
    `az webapp deployment source sync --name <app> --resource-group <rg>` or click **Sync**
    in the portal's Deployment Center.
+
+   **Or automatically, on every merge to `main`** (`.github/workflows/release.yml`): once the
+   Tests workflow passes on `main`, it publishes the next GitHub release (`v1.0.0`, then
+   `v1.1.0`, ...) with notes from the merged PRs, then runs that same Sync and checks the site
+   answers. The deploy step needs one repository secret, `AZURE_CREDENTIALS`, a service
+   principal that can manage only this resource group:
+   ```
+   az ad sp create-for-rbac --name harborclaim-deploy --role contributor \
+     --scopes /subscriptions/<subscription-id>/resourceGroups/<rg> --json-auth
+   ```
+   Paste the JSON it prints into GitHub → Settings → Secrets and variables → Actions → New
+   repository secret, named `AZURE_CREDENTIALS`. Without it the release still happens and the
+   deploy job says the secret is missing.
 2. **Startup command**, under Settings → Configuration (sometimes shown as "Environment
    variables"):
    ```
@@ -362,14 +434,23 @@ this repo's `main` branch. To reproduce it:
    adjuster email is only sent when email is real; with email simulated it is skipped and not
    recorded anywhere, because notification rows belong to claimants.
    See `email_delivery.py` and `ROADMAP.md` (Phase 3).
-6. **AI agents (Phase 5, in progress; off by default).** No model is ever called unless you
+6. **AI agents (Phase 5; off by default).** No model is ever called unless you
    opt in. Names only: `AI_PROVIDER` (`openrouter` to enable; blank = off), `AI_ENABLED`
    (`false` switches AI off without clearing the rest), `OPENROUTER_API_KEY`, `AI_MODELS` (tested
    free model IDs in order of preference; the next is tried when one is busy or down; never the
-   `openrouter/free` router), `AI_TIMEOUT_SECONDS`. The model is
-   a free OpenRouter model called with `httpx`; no OpenAI service, model, key or package is
-   used. Free providers may log prompts, which is acceptable only because every claim and
-   document here is fictional. See `ai_client.py` and `docs/design/AGENTS.md`.
+   `openrouter/free` router), `AI_TIMEOUT_SECONDS`, `AI_CLAIMANT_CHAT` (`true` shows the
+   claimant's Ask a question page), and the daily limits `AI_DAILY_LIMIT_INTAKE`,
+   `AI_DAILY_LIMIT_ADJUSTER`, `AI_DAILY_LIMIT_CLAIMANT` (defaults 10, 10, 5), and
+   `AI_DATA_POLICY`:
+   - `test` (the default) allows any configured model, for fictional claims only.
+   - `production` refuses `:free` models and the `openrouter/free` router, and asks OpenRouter
+     for providers that don't collect prompts.
+
+   The AI usage page shows which policy is active. The model is a free OpenRouter model called
+   with `httpx`; no OpenAI service, model, key or package is used. Free providers may log
+   prompts, which is acceptable only because every claim and document here is fictional, and
+   emails, phone numbers, SSNs and card numbers are redacted either way (`privacy.py`). See
+   `ai_client.py` and `docs/design/AGENTS.md`.
 7. Add the live callback URL to the same Google OAuth client's Authorized redirect URIs:
    `https://<your-app-name>.azurewebsites.net/auth/google/callback` — alongside the local one,
    not replacing it.
@@ -380,7 +461,9 @@ this repo's `main` branch. To reproduce it:
 .venv/Scripts/python.exe -m pytest tests/test_app.py -v
 ```
 
-54 tests. No real Google login is needed to run them — claimant login is faked
+84 tests in `tests/test_app.py`, and 377 in the whole suite (`python -m pytest -q`: also
+`tests/test_agents.py` 220, `tests/test_review_fixes.py` 33, `tests/test_golden.py` 19,
+`tests/test_ui.py` 16 and `test_main.py` 5). No real Google login is needed to run them — claimant login is faked
 with FastAPI's `dependency_overrides` on `get_current_user`, the standard way
 to test routes behind auth. Adjuster login is tested for real, not faked —
 `storage.create_adjuster` generates a real account and the tests actually
@@ -471,8 +554,8 @@ All seven Design Deliverable stages are wired into one pipeline now — see
 | Document/evidence storage | ✅ Real — `storage.py` writes uploaded files to `data/uploads/<claim_id>/`, never touches their contents |
 | Persistent claims database | ✅ Real — SQLite, survives a server restart (verified by actually restarting `uvicorn` mid-session) |
 | Accounts | ✅ Real — Google sign-in for claimants, provisioned username/password for adjusters |
-| Fact extraction | 🟡 **Mock** — real text read (via `pypdf`), fake intelligence (plain regex) — see `MOCKS.md` |
-| Summary generation | 🟡 **Mock** — template-assembled from stored fields, no model call — see `MOCKS.md` |
+| Fact extraction | 🟡 **Mock** — real text read (via `pypdf`), fake intelligence (plain regex) — see `MOCKS.md`. The AI intake review reads the same document text when AI is on. |
+| Summary generation | ✅ **Real AI when switched on** — the intake review agent, checked by code; 🟡 the template summary remains the labelled fallback — see `MOCKS.md` |
 | Adjuster review | ✅ Real — a human decision, gated by separation of duties |
 | Notifications | 🟡 **Mock** — logged on two channels, nothing actually sent — see `MOCKS.md` |
 
@@ -499,7 +582,10 @@ one, an incident date in the year 3026, or a `.exe` upload are
 was typed still in place). Limits: policy ID ≤ 40 characters, description ≤
 5,000 characters, incident date can't be in the future or before 2000, files
 must be one of `.pdf .txt .jpg .jpeg .png .zip .doc .docx`, ≤ 10MB each, ≤
-10 files per claim.
+10 files per claim. A description that isn't blank needs at least 3 real words, making up at
+least half of what was typed, so a keyboard mash like "ggregrrg3wt3g3" is refused. This is a
+heuristic that stops obvious junk; it doesn't judge whether a description is true. A blank
+description is still `main.py`'s problem.
 
 Separately, a global exception handler (`app.py`'s `unhandled_error`) catches
 anything that isn't already a handled response and returns a generic `500`

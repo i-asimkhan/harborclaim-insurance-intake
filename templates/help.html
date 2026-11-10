@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="{{ static_url('style.css') }}">
 </head>
 <body>
+  {% from "_ai_badge.html" import ai_badge %}
   {# The claimant assistant (Phase 5, step 5.6). Only answers that passed the code checks are
      shown; anything else shows the fixed reply. Model text is always autoescaped. #}
   <div class="page">
@@ -25,7 +26,7 @@
       <p class="hint">You've reached today's question limit. Please try again tomorrow, or check <a href="/claims">My claims</a>.</p>
       {% else %}
       <form method="post" action="/help" class="ai-ask-form">
-        <input type="text" name="question" maxlength="500" required
+        <input type="text" name="question" maxlength="500" required value="{{ prefill }}"{% if prefill %} autofocus{% endif %}
                placeholder="e.g. What do I still need to send for my claim?" aria-label="Your question">
         <button type="submit" class="btn">Ask</button>
       </form>
@@ -38,10 +39,10 @@
         <summary class="ai-question"><strong>You asked:</strong> {{ q.question }}
           <span class="hint" title="{{ q.at }}">{{ q.at | ago }}</span></summary>
         {% if q.kind == "answer" %}
-        <p><span class="ai-tag">AI answer ({{ q.model or "unknown model" }} via OpenRouter) -- checked automatically; your claim page is the record</span></p>
+        <p>{{ ai_badge("Checked", q.model) }} <span class="hint">Your claim page is the record.</span></p>
         <p>{{ q.text }}</p>
         {% elif q.kind == "refused" %}
-        <p><span class="mock-tag">Fixed reply -- not AI-generated</span> {{ q.text }}</p>
+        <p>{{ q.text }}</p>
         {% else %}
         <p class="hint">{{ q.text }}</p>
         {% endif %}

@@ -136,9 +136,9 @@ def test_full_claimant_flow_with_a_real_file_upload(page):
     page.click("button.primary")
     page.wait_for_url(f"{BASE}/claims/*")
 
-    assert page.get_by_text("READY_FOR_REVIEW").is_visible()
-    assert page.get_by_text("Automated draft -- not AI-generated").is_visible()
-    assert page.get_by_text("Automated extraction -- not AI").is_visible()
+    assert page.locator(".title-row .badge").inner_text().strip() == "In review"   # the claimant's word for it
+    assert page.get_by_role("heading", name="What we found in your documents").is_visible()
+    assert page.locator(".ai-badge").count() == 0          # nothing here was written by a model
     # The extraction actually ran, not just the mock label -- a real value
     # pulled from the real sample PDF's text should be in the facts table.
     # "Collision" also appears in the (collapsed) summary prose, so scope to
@@ -202,7 +202,7 @@ def test_browser_limits_policy_length_and_blocks_future_dates(page):
 
     # A future date counts as not filled in, so the button stays off.
     page.click("label[for='claim_type_auto']")
-    page.fill("#description", "x")
+    page.fill("#description", "x in this test claim")
     page.set_input_files("#files", [str(PROJ / "sample_data" / "police_report_sample.pdf")])
     page.fill("#incident_date", "2999-01-01")
     assert page.eval_on_selector("#incident_date", "el => el.validity.rangeOverflow")
@@ -220,10 +220,11 @@ def test_real_adjuster_login_flow(page):
     page.wait_for_url(f"{BASE}/adjuster")
 
     assert page.locator(".stat-label", has_text="Awaiting a decision").is_visible()
-    # "ui.adjuster" also appears inside the subtitle prose ("...because
-    # ui.adjuster has a provisioned adjuster account...") -- scope to the
-    # nav's identity hint specifically rather than a bare text search.
-    assert page.locator("header.app-header span.hint", has_text="ui.adjuster").is_visible()
+    # Who's signed in is the account chip; its menu holds the full identity and Sign out.
+    chip = page.locator("header.app-header details.account")
+    assert chip.is_visible() and "ui.adjuster" in chip.locator("summary").get_attribute("title")
+    chip.locator("summary").click()
+    assert chip.get_by_role("link", name="Sign out").is_visible()
 
 
 def test_claimant_route_is_unreachable_with_only_an_adjuster_session(page):
@@ -233,7 +234,7 @@ def test_claimant_route_is_unreachable_with_only_an_adjuster_session(page):
     page.goto(BASE)
     page.fill("#policy_id", "POL-UI-SEP")
     page.fill("#incident_date", "2026-09-11")
-    page.fill("#description", "x")
+    page.fill("#description", "x in this test claim")
     page.set_input_files("#files", [str(PROJ / "sample_data" / "theft_report_sample.pdf")])
     page.click("label[for='claim_type_auto']")
     page.click("button.primary")
@@ -265,7 +266,7 @@ def test_claimant_route_is_unreachable_with_only_an_adjuster_session(page):
     adjuster_page.close()
 
 
-def test_mock_card_text_is_actually_readable_on_the_adjuster_dark_theme(page):
+def test_summary_card_text_is_actually_readable_on_the_adjuster_dark_theme(page):
     """Regression test for a real bug: .mock-card has a fixed cream
     background, and the adjuster theme redefines --ink to a near-white
     meant for a navy background -- combined, the mock card's text was
@@ -277,7 +278,7 @@ def test_mock_card_text_is_actually_readable_on_the_adjuster_dark_theme(page):
     page.goto(BASE)
     page.fill("#policy_id", "POL-UI-CONTRAST")
     page.fill("#incident_date", "2026-09-12")
-    page.fill("#description", "x")
+    page.fill("#description", "x in this test claim")
     page.set_input_files("#files", [str(PROJ / "sample_data" / "repair_estimate_sample.pdf")])
     page.click("label[for='claim_type_auto']")
     page.click("button.primary")
@@ -293,11 +294,12 @@ def test_mock_card_text_is_actually_readable_on_the_adjuster_dark_theme(page):
     adjuster_page.wait_for_url(f"{BASE}/adjuster")
 
     adjuster_page.goto(f"{BASE}/adjuster/claims/{claim_id}")
-    adjuster_page.wait_for_selector(".mock-card")
+    # Once a cream "mock" card; now the standard summary card. Either way, measure what renders.
+    adjuster_page.wait_for_selector("#ai_review .summary-text")
 
     colors = adjuster_page.eval_on_selector(
-        ".mock-card p",
-        "el => { const s = getComputedStyle(el); return [s.color, getComputedStyle(el.closest('.mock-card')).backgroundColor]; }",
+        "#ai_review .summary-text",
+        "el => { const s = getComputedStyle(el); return [s.color, getComputedStyle(el.closest('.card')).backgroundColor]; }",
     )
     text_rgb = _parse_rgb(colors[0])
     bg_rgb = _parse_rgb(colors[1])
@@ -305,7 +307,7 @@ def test_mock_card_text_is_actually_readable_on_the_adjuster_dark_theme(page):
 
     # WCAG AA for normal-size body text is 4.5:1. The pre-fix version of
     # this page measured well under 2:1 here.
-    assert ratio >= 4.5, f"mock-card text contrast is only {ratio:.2f}:1 (text={text_rgb}, bg={bg_rgb})"
+    assert ratio >= 4.5, f"summary card text contrast is only {ratio:.2f}:1 (text={text_rgb}, bg={bg_rgb})"
     adjuster_page.close()
 
 
@@ -315,7 +317,7 @@ def test_adjuster_decision_round_trip_is_visible_in_the_browser(page):
     page.goto(BASE)
     page.fill("#policy_id", "POL-UI-DECIDE")
     page.fill("#incident_date", "2026-09-13")
-    page.fill("#description", "x")
+    page.fill("#description", "x in this test claim")
     page.set_input_files("#files", [str(PROJ / "sample_data" / "water_damage_notes_sample.pdf")])
     page.click("label[for='claim_type_auto']")
     page.click("button.primary")
@@ -334,11 +336,13 @@ def test_adjuster_decision_round_trip_is_visible_in_the_browser(page):
     adjuster_page.click("button[value='NEEDS_MORE_REVIEW']")
     adjuster_page.get_by_role("button", name="Confirm decision").click()
     adjuster_page.wait_for_load_state("networkidle")
-    assert adjuster_page.get_by_text("Needs More Review", exact=False).is_visible()
+    assert adjuster_page.locator("#claim_status").inner_text().strip().endswith("Needs more review")
     adjuster_page.close()
 
+    # "Needs more review" is the adjuster's internal step: the claimant still sees it in review.
     page.goto(f"{BASE}/claims/{claim_id}")
-    assert page.get_by_text("NEEDS_MORE_REVIEW").is_visible()
+    assert page.locator(".decision-list").count() == 0
+    assert page.locator(".tracker li.current").get_by_text("In progress").is_visible()
 
 
 def test_notification_bell_opens_a_preview_and_links_to_the_full_page(page):
@@ -346,7 +350,7 @@ def test_notification_bell_opens_a_preview_and_links_to_the_full_page(page):
     page.goto(BASE)
     page.fill("#policy_id", "POL-UI-BELL")
     page.fill("#incident_date", "2026-09-14")
-    page.fill("#description", "x")
+    page.fill("#description", "x in this test claim")
     page.set_input_files("#files", [str(PROJ / "sample_data" / "police_report_sample.pdf")])
     page.click("label[for='claim_type_auto']")
     page.click("button.primary")
@@ -379,7 +383,7 @@ def test_submit_button_stays_off_until_every_part_of_the_claim_is_in(page):
     assert button.is_disabled()
     page.fill("#policy_id", "POL-UI-READY")
     assert button.is_disabled()
-    page.fill("#description", "Cracked windshield.")
+    page.fill("#description", "Cracked windshield. in this test claim")
     assert button.is_disabled()
     page.fill("#incident_date", "2026-09-15")
     assert button.is_disabled()
@@ -414,7 +418,7 @@ def test_double_clicking_submit_files_one_claim(page):
     page.click("label[for='claim_type_auto']")
     page.fill("#policy_id", "POL-UI-DOUBLE")
     page.fill("#incident_date", "2026-09-16")
-    page.fill("#description", "Clicked twice.")
+    page.fill("#description", "Clicked twice. in this test claim")
     page.set_input_files("#files", [str(PROJ / "sample_data" / "police_report_sample.pdf")])
     page.locator("#submit_button").dblclick()
     page.wait_for_url(f"{BASE}/claims/*")
@@ -427,7 +431,7 @@ def _file_ready_claim(page, policy_id):
     page.goto(BASE)
     page.click("label[for='claim_type_auto']")
     page.fill("#policy_id", policy_id)
-    page.fill("#incident_date", "2026-09-18")
+    page.fill("#incident_date", "2026-09-10")  # the police report's date, so no date finding is open
     page.fill("#description", "Decision dialog test.")
     page.set_input_files("#files", [str(PROJ / "sample_data" / "police_report_sample.pdf")])
     page.click("button.primary")

@@ -1,7 +1,8 @@
 {# The claimant's notification bell. Included by _claimant_header.html and also served on its
    own by GET /notifications/bell, which static/app.js polls. Needs `unread_count` and
-   `notification_preview` (app._claimant_nav). #}
-<details class="bell">
+   `notification_preview` (app._claimant_nav). data-refresh names the URL app.js polls; the
+   adjuster's bell has none, so it is never swapped for this one. #}
+<details class="bell" data-refresh="/notifications/bell">
   <summary aria-label="Notifications{% if unread_count %}, {{ unread_count }} unread{% endif %}" title="Notifications">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
     {% if unread_count %}<span class="badge-count">{{ unread_count }}</span>{% endif %}

@@ -15,31 +15,10 @@ What's built, what's next, and why. Status key: `[ ]` not started · `[~]` in pr
   first; the two mocked intelligence stages are swapped for the real thing only once the rest
   of the product is solid.
 
-## Final project deadline (FIN 6934)
+## Final project
 
-HarborClaim is the owner's **FIN 6934 Final Project**: **40% of the course grade**,
-**presented and submitted Tue Nov 10, 2026** (syllabus: "Final Project Presentation and
-Submission"). Assigned 9/1; the syllabus gives no rubric, length or submission format.
-
-**What else is due in the same window.** Assignment 2 (30%) is the PaymentCo 2030 team case:
-memo due **Sun Nov 1**, board presentation **Tue Nov 3**, team meetups **Sat Oct 24 and Sat
-Oct 31, 11 am**. That work comes first until Nov 3, so the real HarborClaim build window is
-about **Nov 4–9**, plus spare evenings before.
-
-### Plan to Nov 10
-
-| When | HarborClaim work | Also that day |
-|---|---|---|
-| Thu Oct 22 – Fri Oct 23 | Owner decides on commit + push of the ~40 uncommitted files; Sync and smoke-test the live site | — |
-| Sat Oct 24 | — | PaymentCo meetup, 11 am |
-| Sun Oct 25 – Mon Oct 26 | Finish Phase 3 hosted rollout (Azure settings, `EMAIL_ENABLED=false` first, then on) | — |
-| Tue Oct 27 | — | Class (PaymentCo Week 3) |
-| Oct 28 – Nov 3 | Light only: approve Phase 5, model probe round 1 (free, ~12 requests); steps 5.1–5.2 (groundwork, harness, gate; no model calls) in spare evenings | PaymentCo memo (Nov 1), meetup (Oct 31), presentation (Nov 3) |
-| Wed Nov 4 – Fri Nov 6 | Phase 5 core: 5.3 intake review agent, 5.4 golden set + first live runs, then 5.5 adjuster assistant if on track; 5.6 claimant assistant only if time remains | — |
-| Sat Nov 7 | Code freeze; deploy; regenerate screenshots | — |
-| Sun Nov 8 | Presentation slides + demo script; README final pass | — |
-| Mon Nov 9 | Timed rehearsal on the live site; buffer for fixes | — |
-| **Tue Nov 10** | **Present and submit** | — |
+HarborClaim is the final project for FIN 6934, presented live on Tue Nov 10, 2026: what the
+agents are for, how they were built, and a live demo.
 
 ### Decisions needed from the owner
 
@@ -55,8 +34,6 @@ about **Nov 4–9**, plus spare evenings before.
       storage design" below), not as built work.
 - [ ] **Phase 1b open items** (decision note, "Worth checking") only if time allows; the
       decision note is the better demo moment.
-- [ ] **Confirm the final-project requirements** with the instructors: presentation length,
-      what to submit (repo link, PR, slides, report), and where.
 
 **For the Nov 10 presentation:** problem and users; live demo (claimant files, completeness
 check, adjuster reviews and decides, claimant notified); architecture; what is AI and what is
@@ -69,11 +46,15 @@ authoritative, honest labels); production roadmap (Phases 4–5).
   adjuster provisioned credentials), persistent SQLite storage, document upload, a mocked
   extraction/summary pipeline, a notification log, claim type at intake, a redesigned
   claimant side and adjuster side, and email delivery behind an off-by-default flag are all
-  built. **318 tests pass** (2026-11-02): 84 in `tests/test_app.py`, 194 in `tests/test_agents.py`, 19 in `tests/test_golden.py`, 16 Playwright tests in `tests/test_ui.py`, 5 in `test_main.py`.
-- **Phases 1-3 and Phase 5 steps 5.1-5.5 are on branch `phase-5-agents`, open as
-  [PR #1](https://github.com/i-asimkhan/harborclaim-insurance-intake/pull/1) into `main`**
-  (2026-10-26); not merged, not deployed. The live Azure site still runs the older build. Merging
-  and the Azure Sync are the owner's call.
+  built. **377 tests pass** (2026-11-06): 220 in `tests/test_agents.py`, 84 in `tests/test_app.py`, 33 in `tests/test_review_fixes.py`, 19 in `tests/test_golden.py`, 16 Playwright tests in `tests/test_ui.py`, 5 in `test_main.py`.
+- **Phases 1-3 and Phase 5 steps 5.1-5.6 are on `main`:**
+  [PR #1](https://github.com/i-asimkhan/harborclaim-insurance-intake/pull/1) from `phase-5-agents`
+  was merged on 2026-11-07 (`9a41528`).
+- **The request agent (5.9) and the adjuster review fixes (5.10) are on branch
+  `adjuster-review-fixes`**, open as
+  [PR #3](https://github.com/i-asimkhan/harborclaim-insurance-intake/pull/3) into `main`.
+- **Not deployed:** the live Azure site still runs the older build (`/adjuster/ai` returns 404).
+  Merging and the Azure Sync are the owner's call.
 - **CI (GitHub Actions, 2026-10-26):** `.github/workflows/tests.yml` runs the graded minimum and
   the full suite on every PR and push to `main`, with no secrets (passing). CI found that the
   browser tests depended on the local `.env`'s `SESSION_SECRET_KEY`; `tests/conftest.py` now pins
@@ -102,7 +83,7 @@ Execution order: **Phase 0 (done) -> 1 (done) -> 2 (done) -> 1b (visual done; de
 and "Worth checking" open) -> 3 (built locally; hosted rollout left) -> 5 (planned; the
 agentic layer, see [`docs/design/AGENTS.md`](docs/design/AGENTS.md)) -> 4**. Phase 5 moved
 ahead of Phase 4: HarborClaim is the final project (due Nov 10), and Phase 5 doesn't need any
-Phase 4 piece. The new-session handoff summary is at the end of this file.
+Phase 4 piece.
 
 ---
 
@@ -201,7 +182,7 @@ product.
       throwaway folder before anything imports `storage`, and the browser tests' live server
       inherits it; `scripts/capture_screenshots.py` does the same. Checked by fingerprinting
       `data/harborclaim.db` before and after a full test run plus a full screenshot run: byte
-      for byte unchanged (it used to be wiped, which deleted the owner's claim once). Two
+      for byte unchanged (it used to be wiped). Two
       tests guard it: one fails if tests ever resolve to the dev `data/` folder, one checks
       the default is still `data/`. No more backing up the database before running tests.
 - [x] **Submit button stays off until the claim is complete** (`static/claim_form.js`).
@@ -426,7 +407,7 @@ backend, not redesigning the data model.
 
 ---
 
-## Phase 5 -- The agentic layer (real AI) [~] 5.1-5.6 built; 5.7-5.8 left
+## Phase 5 -- The agentic layer (real AI) [~] 5.1-5.7 and 5.9 built; screenshots and 5.8 left
 
 Goal: three AI agents on one shared harness, each a draft-and-explain helper for a human,
 none able to decide, pay or change a claim. **Full build reference:
@@ -475,12 +456,9 @@ runs out.
 
 **5.0 Before building** (owner)
 
-- [x] Commit the uncommitted work first: done 2026-10-24, two local commits (`852e07b`,
-      `7d1fe0c`), not pushed.
 - [x] Provider and cost: OpenRouter, a free model, $0 (2026-10-24).
 - [x] Plan approved by the owner (2026-10-25).
-- [x] Owner put `OPENROUTER_API_KEY` in `.env` (Claude never reads it); the key checks out as
-      valid, free tier (about 50 requests a day across all models, 20 a minute), $0 used. Other
+- [x] `OPENROUTER_API_KEY` set in `.env` (never committed); free tier (about 50 requests a day across all models, 20 a minute), $0 used. Other
       settings by name: `AI_PROVIDER`, `AI_ENABLED`, `AI_MODELS`, `AI_CLAIMANT_CHAT`,
       `AI_TIMEOUT_SECONDS`, and the per-agent daily limits.
 - [x] **Model probe, round 1** (`scripts/model_probe.py`; AGENTS.md section 11.4 has the
@@ -633,14 +611,79 @@ live run is 5.4
 
 **5.7 Documentation and screenshots**
 
-- [ ] `MOCKS.md`, `docs/design/DESIGN.md` (components 3 and 5, pressure test marked built),
-      README, `AI_USAGE.md`, new screenshots (AI review passed and flagged, trace open, both
-      assistants, the fallback).
+- [x] `MOCKS.md`, `docs/design/DESIGN.md` (components 3 and 5, pressure test marked built),
+      README (new "The AI agents" section), `AI_USAGE.md` (2026-11-06).
+- [x] `PROMPTS.md` for the course submission, generated from the code by
+      `scripts/export_prompts.py`; a test fails if it drifts from `agents.py`.
+- [ ] New screenshots: `scripts/capture_ai_screenshots.py` (live model, about 6 requests, asks
+      first) writes the AI review, trace open, both assistants, the AI usage page and the
+      fallback. Run after the 7 pm quota reset, then add them to the README. A flagged review
+      shows only if the model's answer fails a check on that run.
 
-- [ ] **Challenge 3 (independent subagent), before code freeze:** a full review of Phase 5 as
+- [ ] **Challenge 3 (independent subagent), before code freeze:** dropped for time on
+      2026-11-06 (Challenges 1 and 2 stand); kept here for after the course.
+      Original scope: a full review of Phase 5 as
       built against AGENTS.md: every guardrail in the register has its code and its test, labels
       are honest, claimant pages leak nothing, `main.py`/`test_main.py` untouched, no secrets in
       the repo. Blockers fixed before 5.8.
+
+**5.9 Agent 4: request for missing information** (owner's request, 2026-11-06) -- built
+
+- [x] Request agent (`agents.draft_info_request`, prompt `request-v1`): starts from a brief and
+      fetches the intake review and completeness with its tools; claimant rules in the gate;
+      code-written template as the fallback.
+- [x] Adjuster edits and sends (`info_requests` table: who, when, AI-drafted, edited); claim to
+      NEEDS_INFORMATION; claimant notified. Separation of duties and final decisions respected.
+- [x] Claimant answers with documents or a note (`POST /claims/{id}/documents`): checked again,
+      request marked answered, intake review re-runs with the new documents.
+- [x] Diagram and walk-through: `docs/design/agentic-layer.svg`/`.png`, `AGENTIC-LAYER.md`.
+- [x] 14 tests; 344 in all. Not tried live yet: the screenshot run tonight is its first live run.
+- [ ] Live run of `request-v2` (PR #3: asks the claimant to confirm the type and date when the
+      consistency checks disagree). Not run against the real model yet.
+
+**5.10 Adjuster review fixes** (owner's review of CLM-6AD24F55, 2026-11-06; PR #3) -- built
+
+- [x] Decisions:
+      - The badge follows the latest decision.
+      - A repeat records nothing.
+      - A final decision can't be overwritten.
+      - No decision on an incomplete claim.
+      - A decline needs a reason, which the claimant is told.
+      - Approving over open findings needs an acknowledgement, which is recorded.
+      - Only a final decision notifies the claimant.
+- [x] `privacy.py` redaction and the `AI_DATA_POLICY` setting (`test` / `production`).
+- [x] `consistency.py`: claim type and incident date checked against the documents by code, and
+      fed into the info-request drafts (`request-v2`).
+- [x] Review content:
+      - Broad questions answered (`adjuster-v3`), and "not found" labelled honestly.
+      - Citations once per source and page, with links.
+      - "Dates and amounts the summary doesn't mention", each with its line.
+      - Readable status labels.
+      - Descriptions with no real words refused at intake.
+- [x] 33 tests in `tests/test_review_fixes.py`; 377 in all. What was built and the known limits are
+      in `AI_USAGE.md`.
+- [ ] Live run of `adjuster-v3` (`scripts/eval_agents.py` covers only the intake agent).
+- [ ] Claimant UI items: raw field names, "wants a closer look" after Needs more review, and
+      adjuster usernames in the decision history.
+
+**5.11 UI pass before the demo** (owner's notes plus an independent UI review, 2026-11-08) -- built
+
+- [x] Header: links never wrap ("Sign out" was on two lines); an account chip (initial and name,
+      opening a menu with the full email and Sign out) replaces the faint email; on narrow screens
+      the links get their own row, so pages no longer scroll sideways.
+- [x] Claimant statuses tell the truth: Needs information / In review / Approved / Declined (an
+      approved claim said "Ready for review"); "Needs more review" stays internal; no adjuster
+      usernames; readable field names ("incident date"); no "SQLite" text; back link to My claims.
+- [x] Decision buttons are verbs (Approve / Decline / Mark for more review); the confirm dialog
+      still names the outcome.
+- [x] Adjuster claim page folded: Ask, Request (opens when the claim needs information or a draft
+      or request exists) and the document facts fold; the code safety nets fold inside the AI
+      review as "Checked by code (n)"; the approve acknowledgement links to `#findings`; a fold
+      opens when the page is loaded at its anchor. Clicking the selected queue tile clears it.
+- [x] One label rule: only AI is labelled, with a purple `AI` badge and its check result
+      (AGENTS.md section 9); every "not AI" tag removed; the AI border only on AI output.
+- [x] 380 tests pass. After the course: merge the queue's status columns, citations that open the
+      PDF at the page, a sticky decision bar on mobile, local times, a wording pass.
 
 **5.8 Hosted rollout** (owner: outward-facing)
 
@@ -658,87 +701,3 @@ alone is a complete, demoable agentic project.
       alarming-sounding word. `MOCKS.md`'s fuller documentation of what's mocked and why is
       unchanged. Phase 5 changes a label only where AI really produced the content
       (AGENTS.md section 9).
-
----
-
-## Handoff summary (read this first in a new session)
-
-**What HarborClaim is.** An insurance claim intake system built for FIN 6934 (USF, AI in
-Finance), Class 5 system-design studio, Assignment 7 -- and the owner's **Final Project**,
-presented and submitted **Tue Nov 10, 2026** (see "Final project deadline" at the top). A claimant files a claim; a completeness
-checker (`main.py`, the graded minimum) says `READY_FOR_REVIEW` or `NEEDS_INFORMATION`; mocked
-extraction and summary stages produce a draft; a human adjuster reviews and records a decision;
-the claimant is notified. Fictional demo data only. The owner is Asim Khan.
-
-**How to run it locally**
-- Run from this folder. Python is the shared venv at `claude-work/.venv`.
-- Server: `python -m uvicorn app:app --port 8123`. **No `--reload`**: it didn't notice Python
-  edits in this OneDrive folder and died mid-edit. Restart the server by hand after changing any
-  `.py` file; templates and CSS/JS changes show on a refresh.
-- Tests: `python -m pytest -q` from inside this folder (318 tests, about 2 min, includes the
-  Playwright browser tests; `python -m playwright install chromium` once).
-- Screenshots: `python scripts/capture_screenshots.py` regenerates all 14 in
-  `docs/screenshots/` from a live instance.
-- Tests and the screenshot script use a throwaway data folder (`HARBORCLAIM_DATA_DIR`, set in
-  `tests/conftest.py` and at the top of the capture script), so they never touch `data/`. Safe
-  to run while a dev server is up.
-- A local adjuster: `python -c "import storage; print(storage.create_adjuster('local.reviewer', 'Local Reviewer'))"`
-  prints a generated password. Demo claims: `python sample_data/seed_demo_data.py --reset --base-url http://127.0.0.1:8123`
-  with the server running. Claimants sign in with real Google; the seeded claimants are fictional.
-
-**Rules the owner set (keep following them)**
-- Don't commit or push without asking. Deployment is a manual **Sync** in Azure's Deployment
-  Center after pushing; pushing alone does not deploy.
-- `main.py` and `test_main.py` stay untouched in every phase.
-- Never read `.env` or Azure secrets. Setting names only, in docs.
-- On product calls that cost something (a stricter form, a new Azure resource): recommend, then
-  ask. The owner wants things to behave exactly as asked and has twice chosen the stricter form
-  over a recommendation.
-
-**Map of the code**
-- `main.py` completeness checker; `validation.py` input rules, claim types, `validate_not_empty`;
-  `storage.py` SQLite schema, in-place migrations, all queries; `auth.py` Google sign-in;
-  `extraction.py` and `summary.py` the two mocked stages; `email_delivery.py` email behind a flag;
-  `app.py` all routes plus the view helpers (`_group_facts`, `_group_notifications`,
-  `_order_queue`, `static_url`, `time_ago`).
-- `templates/`: claimant pages, adjuster pages, and partials (`_claimant_header`,
-  `_adjuster_header`, `_facts_groups`, `_art` for the inline-SVG line art). No template branches
-  on role; each role has its own pages.
-- `static/`: `style.css` (design tokens; the adjuster dark theme is `body.adjuster-theme`),
-  `claim_form.js` (readiness checklist, upload checks), `review.js` (decision confirm dialog),
-  `app.js` (notification bell).
-- `docs/design/`: `DESIGN.md` (architecture), `RESEARCH.md` (portal research, Lemonade pass).
-  `MOCKS.md` says exactly what is mocked and why.
-
-**Decisions already made, and why**
-- FastAPI + Jinja2 is the primary build; the literal Streamlit minimum is a separate PR (Phase 0).
-- Two roles with fully separate routes and separate login mechanisms (Google vs provisioned
-  username/password); a claimant session never opens an adjuster page.
-- Claimant side: Lemonade-inspired but its own (harbor coral, Fraunces titles, line art,
-  conversational form). Adjuster side: deliberately plain and dark, a work tool.
-- The claim form's submit button stays off until all five parts are in. The cost: the form can't
-  produce `NEEDS_INFORMATION`; the server still accepts partial claims from scripts.
-- "Needs more review" is not a final decision: it stays on the adjuster's list.
-- Email: Azure Communication Services, behind a flag, simulated by default.
-- Automated stages are always labelled ("Automated draft -- not AI-generated", "Automated
-  extraction -- not AI", "Email (simulated)"). Keep that honesty when anything changes.
-
-**Known gaps**
-- `data/uploads/` holds about 1,000 orphan folders from test runs before the isolation change;
-  harmless, safe to delete once the owner agrees.
-- The local dev DB holds three empty claims from early testing; the owner hasn't said to delete
-  them.
-- Real email has never been run against Azure (Phase 3 open items).
-- Policy IDs are free text: nothing checks they exist or belong to the claimant (idea: a policies
-  table, Phase 4).
-- Adjuster decisions carry no reason or note; there's no per-adjuster "seen" state.
-- SQLite and local-disk uploads won't survive scaling or some redeploys (Phase 4).
-
-**Next steps, in order**
-1. Phase 1 is complete. Ask the owner whether to commit and push the uncommitted work, then Sync in Azure and smoke-test
-   the live site (sign-in redirect, adjuster login, a claim end to end).
-2. Finish Phase 3 with the owner: the Azure resource, the pinned package, a first real send.
-3. Phase 5, the agentic layer: approve the plan (step 5.0), then build 5.1 onward. Full
-   design in `docs/design/AGENTS.md`. Final project due Nov 10.
-4. Phase 1b's decision note (schema change), if time allows.
-5. Phase 4 (Azure storage and queue).

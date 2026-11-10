@@ -10,8 +10,11 @@
   {% import "_art.html" as art %}
   {% set ready = record.status == READY_FOR_REVIEW %}
   {% set latest = record.decisions[-1] if record.decisions else none %}
-  {# Approved/Declined are final; "needs more review" means the adjuster is still working on it. #}
+  {# Approved/Declined are final; "needs more review" is the adjuster's internal step, so the
+     claimant sees the claim as still in review (they aren't notified of it either), and the
+     history lists only final decisions, attributed to "your adjuster", not a username. #}
   {% set final = latest is not none and latest.decision != "NEEDS_MORE_REVIEW" %}
+  {% set final_decisions = record.decisions | selectattr("decision", "in", ["APPROVED", "DECLINED"]) | list %}
   {% set decision_labels = {"APPROVED": "Approved", "DECLINED": "Declined", "NEEDS_MORE_REVIEW": "Needs more review"} %}
   <div class="page">
     {% include "_claimant_header.html" %}
@@ -20,11 +23,8 @@
       <span class="eyebrow">Claim number</span>
       <div class="title-row">
         <h1 class="claim-id">{{ record.claim.claim_id }}</h1>
-        {% if ready %}
-          <span class="badge lg ready">&#10003; READY_FOR_REVIEW</span>
-        {% else %}
-          <span class="badge lg needs">&#9888; NEEDS_INFORMATION</span>
-        {% endif %}
+        {% set status = record | claimant_status %}
+        <span class="badge lg {{ status[0] }}">{% if status[0] == "needs" %}&#9888; {% elif status[1] == "Approved" %}&#10003; {% endif %}{{ status[1] }}</span>
       </div>
     </div>
 
@@ -32,17 +32,15 @@
     {# 1. Outcome, then where the claim is now. #}
     <div class="card">
       <div class="result-message">
-        {% if latest %}
+        {% if final %}
           {{ art.icon("person") }}
           <div>
             {% if latest.decision == "APPROVED" %}
             <h2>Good news: an adjuster approved your claim.</h2>
-            {% elif latest.decision == "DECLINED" %}
-            <h2>An adjuster has declined this claim.</h2>
             {% else %}
-            <h2>Your adjuster wants a closer look.</h2>
+            <h2>An adjuster has declined this claim.</h2>
             {% endif %}
-            <p class="muted">The decision and who made it are in the history below. We sent the same update to your notifications.</p>
+            <p class="muted">The decision is in the history below. We sent the same update to your notifications.</p>
           </div>
         {% elif ready %}
           {{ art.icon("check") }}
@@ -57,7 +55,7 @@
             <p class="muted">Your claim is saved. To move it forward, please provide:</p>
             <ul class="missing-list">
               {% for field in record.missing %}
-              <li>{{ field }}</li>
+              <li>{{ field | missing_label }}{% if field == "adjuster_request" %} (see below){% endif %}</li>
               {% endfor %}
             </ul>
           </div>
@@ -83,17 +81,45 @@
         {% endif %}
       </ol>
 
-      {% if record.decisions %}
+      {% if final_decisions %}
       <div class="decision-history">
         <h3>Decision history</h3>
         <ul class="decision-list">
-          {% for d in record.decisions %}
-          <li><strong>{{ d.decision }}</strong> by {{ d.adjuster_username }} <span class="hint">&middot; {{ d.decided_at[:16].replace("T", " ") }} UTC</span></li>
+          {% for d in final_decisions %}
+          <li><strong>{{ d.decision | status_label }}</strong> by your adjuster <span class="hint">&middot; {{ d.decided_at[:16].replace("T", " ") }} UTC</span>{% if d.reason and d.decision in ("APPROVED", "DECLINED") %}<span class="decision-reason" style="display:block; white-space:pre-wrap;">Reason: {{ d.reason }}</span>{% endif %}</li>
           {% endfor %}
         </ul>
       </div>
       {% endif %}
     </div>
+
+    {% if help_on %}
+    <p class="ask-link">Have a question about this claim? <a href="/help?about={{ record.claim.claim_id }}">Ask a question &rarr;</a></p>
+    {% endif %}
+
+    {# 1b. An adjuster's open request for information, and the way to answer it. The request was
+       written (or approved) and sent by a person; if the AI drafted it, that's said plainly. #}
+    {% set open_requests = record.requests | selectattr("answered_at", "none") | list %}
+    {% if open_requests %}
+    <div class="card" id="request">
+      <h2>Your adjuster needs a little more information</h2>
+      {% for req in open_requests %}
+      <p class="request-message">{{ req.message }}</p>
+      <p class="hint">Sent by your adjuster <span title="{{ req.sent_at }}">{{ req.sent_at | ago }}</span>{% if req.ai_drafted %} &middot; drafted with AI help, then read{% if req.edited %} and edited{% endif %} and sent by your adjuster{% endif %}</p>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if not final and record.status == NEEDS_INFORMATION %}
+    <div class="card" id="add-documents">
+      <h2>Add documents</h2>
+      <p class="hint">Send more documents or a note to your adjuster. Your claim is checked again as soon as they arrive.</p>
+      <form method="post" action="/claims/{{ record.claim.claim_id }}/documents" enctype="multipart/form-data" class="add-documents-form">
+        <input type="file" name="files" multiple aria-label="Documents to add">
+        <textarea name="note" maxlength="1000" rows="3" placeholder="A note for your adjuster (optional)" aria-label="Note for your adjuster"></textarea>
+        <button type="submit" class="btn">Send to your adjuster</button>
+      </form>
+    </div>
+    {% endif %}
 
     {# 2. What the claimant submitted. #}
     <div class="card">
@@ -113,7 +139,7 @@
           <a href="/claims/{{ record.claim.claim_id }}/documents/{{ doc.filename }}" title="{{ doc.filename }}">
             {{ art.icon("file") }}
             <span class="doc-name">{{ doc.filename }}</span>
-            <span class="hint">{{ (doc.size_bytes / 1024) | round(1) }} KB &middot; {{ (doc.content_type or "unknown").split("/")[-1] | upper }}</span>
+            <span class="hint">{{ (doc.size_bytes / 1024) | round(1) }} KB &middot; {{ (doc.content_type or "unknown").split("/")[-1] | upper }}{% if doc.added_later %} &middot; added {{ doc.uploaded_at | ago }}{% endif %}</span>
           </a>
         </li>
         {% endfor %}
@@ -126,29 +152,16 @@
     {# 3. Extracted facts, grouped by kind -- one row per kind, not per hit. #}
     {% if facts_view.groups or facts_view.unread_documents %}
     <div class="card">
-      <h2>What we found in your documents <span class="mock-tag">Automated extraction -- not AI</span></h2>
-      <p class="hint">A simple keyword scan, so your adjuster can check it against the originals. Your documents always take precedence.</p>
+      <h2>What we found in your documents</h2>
+      <p class="hint">Found automatically, so your adjuster can check it against the originals. Your documents always take precedence.</p>
       {% set description_label = "your description" %}
       {% include "_facts_groups.html" %}
     </div>
     {% endif %}
 
-    {# 4. The adjuster-facing draft: available, but not in the claimant's way. #}
-    {% if record.summary %}
-    <details class="card draft-summary">
-      <summary>
-        <span>The draft summary your adjuster sees</span>
-        <span class="mock-tag">Automated draft -- not AI-generated</span>
-      </summary>
-      <div class="draft-body">
-        <p class="summary-text">{{ record.summary.summary_text }}</p>
-        <span class="hint">Generated {{ record.summary.generated_at[:16].replace("T", " ") }} UTC</span>
-      </div>
-    </details>
-    {% endif %}
     </div>
 
-    <a class="back-link" href="/">&larr; submit another claim</a>
+    <a class="back-link" href="/claims">&larr; My claims</a>
   </div>
 </body>
 </html>

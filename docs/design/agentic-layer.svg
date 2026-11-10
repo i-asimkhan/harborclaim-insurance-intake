@@ -1,0 +1,258 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1080" width="1600" height="1080" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3d4a5c"/>
+    </marker>
+    <marker id="arrow-ai" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#6d3fc0"/>
+    </marker>
+    <style>
+      .lane-label { font-size: 15px; font-weight: 700; fill: #1f2933; }
+      .lane-sub { font-size: 12px; fill: #52606d; }
+      .box-title { font-size: 14px; font-weight: 700; fill: #1f2933; }
+      .box-text { font-size: 12px; fill: #3e4c59; }
+      .ai-title { font-size: 14px; font-weight: 700; fill: #4b2a8c; }
+      .step { font-size: 12px; font-weight: 700; fill: #ffffff; }
+      .flow { stroke: #3d4a5c; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+      .flow-ai { stroke: #6d3fc0; stroke-width: 2; fill: none; marker-end: url(#arrow-ai); stroke-dasharray: 6 4; }
+      .note { font-size: 12px; fill: #52606d; font-style: italic; }
+      .band-title { font-size: 18px; font-weight: 700; fill: #1f2933; }
+      .pill { font-size: 12px; fill: #1f2933; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1600" height="1080" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="40" y="44" font-size="26" font-weight="700" fill="#1f2933">HarborClaim: the agentic layer in the claim workflow</text>
+  <text x="40" y="70" font-size="14" fill="#52606d">Four AI agents help people read, ask and ask for more. Code checks every answer. A human takes every action and every decision.</text>
+
+  <!-- Swimlanes -->
+  <rect x="20" y="92" width="1560" height="150" fill="#eef7f1" stroke="#cfe6d7"/>
+  <rect x="20" y="242" width="1560" height="150" fill="#f3f5f8" stroke="#dde2ea"/>
+  <rect x="20" y="392" width="1560" height="170" fill="#f5f0fd" stroke="#e1d5f7"/>
+  <rect x="20" y="562" width="1560" height="150" fill="#fff6e8" stroke="#f1dfbd"/>
+  <rect x="20" y="92" width="170" height="620" fill="#ffffff" opacity="0.65"/>
+  <text x="36" y="160" class="lane-label">Claimant</text>
+  <text x="36" y="180" class="lane-sub">signs in with Google</text>
+  <text x="36" y="310" class="lane-label">HarborClaim app</text>
+  <text x="36" y="330" class="lane-sub">deterministic code</text>
+  <text x="36" y="468" class="lane-label" fill="#4b2a8c">Agentic layer</text>
+  <text x="36" y="488" class="lane-sub">AI, read-only tools,</text>
+  <text x="36" y="504" class="lane-sub">checked by code</text>
+  <text x="36" y="630" class="lane-label">Adjuster</text>
+  <text x="36" y="650" class="lane-sub">the human who decides</text>
+
+  <!-- Column 1: file, completeness -->
+  <g>
+    <rect x="215" y="117" width="200" height="100" rx="10" fill="#ffffff" stroke="#3f9a62" stroke-width="2"/>
+    <circle cx="237" cy="139" r="12" fill="#3f9a62"/><text x="237" y="143" text-anchor="middle" class="step">1</text>
+    <text x="256" y="144" class="box-title">File a claim</text>
+    <text x="229" y="172" class="box-text">Claim type, policy, date,</text>
+    <text x="229" y="189" class="box-text">description, documents</text>
+  </g>
+  <g>
+    <rect x="215" y="267" width="200" height="100" rx="10" fill="#ffffff" stroke="#5b6b80" stroke-width="2"/>
+    <circle cx="237" cy="289" r="12" fill="#5b6b80"/><text x="237" y="293" text-anchor="middle" class="step">2</text>
+    <text x="256" y="294" class="box-title">Completeness check</text>
+    <text x="229" y="322" class="box-text">READY_FOR_REVIEW or</text>
+    <text x="229" y="339" class="box-text">NEEDS_INFORMATION; regex</text>
+    <text x="229" y="356" class="box-text">facts + template summary</text>
+  </g>
+  <path class="flow" d="M315,217 L315,265"/>
+
+  <!-- Column 2: intake review agent -->
+  <g>
+    <rect x="445" y="412" width="220" height="130" rx="10" fill="#ffffff" stroke="#6d3fc0" stroke-width="2.5"/>
+    <circle cx="467" cy="434" r="12" fill="#6d3fc0"/><text x="467" y="438" text-anchor="middle" class="step">A</text>
+    <text x="486" y="439" class="ai-title">Intake review agent</text>
+    <text x="459" y="465" class="box-text">Runs on every new claim.</text>
+    <text x="459" y="482" class="box-text">Cited summary + "worth</text>
+    <text x="459" y="499" class="box-text">checking": amount or date</text>
+    <text x="459" y="516" class="box-text">differences, type mismatch</text>
+  </g>
+  <path class="flow-ai" d="M415,330 C440,330 470,360 520,410"/>
+
+  <!-- Column 3: adjuster reviews; ask agent -->
+  <g>
+    <rect x="695" y="587" width="210" height="100" rx="10" fill="#ffffff" stroke="#c98a1b" stroke-width="2"/>
+    <circle cx="717" cy="609" r="12" fill="#c98a1b"/><text x="717" y="613" text-anchor="middle" class="step">3</text>
+    <text x="736" y="614" class="box-title">Reviews the claim</text>
+    <text x="709" y="642" class="box-text">AI review next to the original</text>
+    <text x="709" y="659" class="box-text">documents; labels say what</text>
+    <text x="709" y="676" class="box-text">AI wrote and what code wrote</text>
+  </g>
+  <path class="flow-ai" d="M640,542 C660,570 680,600 693,620"/>
+  <g>
+    <rect x="695" y="412" width="210" height="130" rx="10" fill="#ffffff" stroke="#6d3fc0" stroke-width="2.5"/>
+    <circle cx="717" cy="434" r="12" fill="#6d3fc0"/><text x="717" y="438" text-anchor="middle" class="step">B</text>
+    <text x="736" y="439" class="ai-title">Ask about this claim</text>
+    <text x="709" y="465" class="box-text">Adjuster's questions,</text>
+    <text x="709" y="482" class="box-text">answered from this claim's</text>
+    <text x="709" y="499" class="box-text">records only, with citations,</text>
+    <text x="709" y="516" class="box-text">or "not found"</text>
+  </g>
+  <path class="flow" d="M780,587 L780,544"/>
+  <path class="flow-ai" d="M820,542 L820,585"/>
+
+  <!-- Column 4: request agent; adjuster edits and sends -->
+  <g>
+    <rect x="935" y="412" width="220" height="130" rx="10" fill="#ffffff" stroke="#6d3fc0" stroke-width="2.5"/>
+    <circle cx="957" cy="434" r="12" fill="#6d3fc0"/><text x="957" y="438" text-anchor="middle" class="step">C</text>
+    <text x="976" y="439" class="ai-title">Request agent</text>
+    <text x="949" y="465" class="box-text">Starts with a brief; calls</text>
+    <text x="949" y="482" class="box-text">get_intake_review and</text>
+    <text x="949" y="499" class="box-text">get_completeness itself;</text>
+    <text x="949" y="516" class="box-text">drafts a request to the claimant</text>
+  </g>
+  <g>
+    <rect x="935" y="587" width="220" height="100" rx="10" fill="#fffdf6" stroke="#c98a1b" stroke-width="3"/>
+    <circle cx="957" cy="609" r="12" fill="#c98a1b"/><text x="957" y="613" text-anchor="middle" class="step">4</text>
+    <text x="976" y="614" class="box-title">Edits and sends</text>
+    <text x="949" y="642" class="box-text">Human approval: nothing is</text>
+    <text x="949" y="659" class="box-text">sent until the adjuster clicks</text>
+    <text x="949" y="676" class="box-text" font-weight="700">"Send to claimant"</text>
+  </g>
+  <path class="flow" d="M905,615 C925,600 935,560 985,544"/>
+  <text x="868" y="575" class="note">Draft with AI</text>
+  <path class="flow-ai" d="M1080,542 L1080,585"/>
+
+  <!-- Column 5: notify; claimant sees request; claimant assistant -->
+  <g>
+    <rect x="1185" y="267" width="200" height="100" rx="10" fill="#ffffff" stroke="#5b6b80" stroke-width="2"/>
+    <circle cx="1207" cy="289" r="12" fill="#5b6b80"/><text x="1207" y="293" text-anchor="middle" class="step">5</text>
+    <text x="1226" y="294" class="box-title">Notify + status</text>
+    <text x="1199" y="322" class="box-text">In-app and email notice;</text>
+    <text x="1199" y="339" class="box-text">claim set to</text>
+    <text x="1199" y="356" class="box-text">NEEDS_INFORMATION</text>
+  </g>
+  <path class="flow" d="M1155,625 L1170,625 L1170,320 L1183,320"/>
+  <g>
+    <rect x="1185" y="117" width="200" height="100" rx="10" fill="#ffffff" stroke="#3f9a62" stroke-width="2"/>
+    <circle cx="1207" cy="139" r="12" fill="#3f9a62"/><text x="1207" y="143" text-anchor="middle" class="step">6</text>
+    <text x="1226" y="144" class="box-title">Sees the request</text>
+    <text x="1199" y="172" class="box-text">On the claim page, marked</text>
+    <text x="1199" y="189" class="box-text">"drafted with AI help" when</text>
+    <text x="1199" y="206" class="box-text">it was</text>
+  </g>
+  <path class="flow" d="M1285,267 L1285,219"/>
+  <g>
+    <rect x="1185" y="412" width="200" height="130" rx="10" fill="#ffffff" stroke="#6d3fc0" stroke-width="2.5"/>
+    <circle cx="1207" cy="434" r="12" fill="#6d3fc0"/><text x="1207" y="438" text-anchor="middle" class="step">D</text>
+    <text x="1226" y="439" class="ai-title">Ask a question</text>
+    <text x="1199" y="465" class="box-text">Claimant assistant: where</text>
+    <text x="1199" y="482" class="box-text">their own claims stand and</text>
+    <text x="1199" y="499" class="box-text">what's needed. Never other</text>
+    <text x="1199" y="516" class="box-text">people's claims or amounts</text>
+  </g>
+  <path class="flow-ai" d="M1395,412 C1430,330 1430,220 1387,190"/>
+
+  <!-- Column 6: claimant adds documents; re-check; decide -->
+  <g>
+    <rect x="1410" y="117" width="160" height="100" rx="10" fill="#ffffff" stroke="#3f9a62" stroke-width="2"/>
+    <circle cx="1432" cy="139" r="12" fill="#3f9a62"/><text x="1432" y="143" text-anchor="middle" class="step">7</text>
+    <text x="1451" y="144" class="box-title">Adds documents</text>
+    <text x="1424" y="172" class="box-text">Photos, reports or</text>
+    <text x="1424" y="189" class="box-text">a note</text>
+  </g>
+  <path class="flow" d="M1387,150 L1408,150"/>
+  <g>
+    <rect x="1410" y="267" width="160" height="100" rx="10" fill="#ffffff" stroke="#5b6b80" stroke-width="2"/>
+    <circle cx="1432" cy="289" r="12" fill="#5b6b80"/><text x="1432" y="293" text-anchor="middle" class="step">8</text>
+    <text x="1451" y="294" class="box-title">Checked again</text>
+    <text x="1424" y="322" class="box-text">Completeness, facts;</text>
+    <text x="1424" y="339" class="box-text">back to READY;</text>
+    <text x="1424" y="356" class="box-text">request answered</text>
+  </g>
+  <path class="flow" d="M1490,217 L1490,265"/>
+  <path class="flow-ai" d="M1410,355 C1200,385 760,385 640,410"/>
+  <text x="860" y="372" class="note" fill="#6d3fc0">the intake review runs again with the new documents</text>
+  <g>
+    <rect x="1410" y="587" width="160" height="100" rx="10" fill="#fffdf6" stroke="#c98a1b" stroke-width="3"/>
+    <circle cx="1432" cy="609" r="12" fill="#c98a1b"/><text x="1432" y="613" text-anchor="middle" class="step">9</text>
+    <text x="1451" y="614" class="box-title">Decides</text>
+    <text x="1424" y="642" class="box-text">Approve, decline or</text>
+    <text x="1424" y="659" class="box-text">look closer. Human</text>
+    <text x="1424" y="676" class="box-text" font-weight="700">only, never AI</text>
+  </g>
+  <path class="flow" d="M1490,367 C1530,450 1530,520 1490,585"/>
+
+  <!-- Bottom band: inside every agent run -->
+  <rect x="20" y="740" width="1560" height="250" rx="12" fill="#faf8ff" stroke="#d8c9f3" stroke-width="1.5"/>
+  <text x="44" y="774" class="band-title">Inside every agent run</text>
+  <text x="270" y="774" font-size="13" fill="#52606d">one harness for all four agents (agents.py), at most 3 model calls and 3 tool calls per run</text>
+
+  <g>
+    <rect x="44" y="800" width="190" height="120" rx="10" fill="#ffffff" stroke="#5b6b80" stroke-width="1.5"/>
+    <text x="58" y="826" class="box-title">Charter</text>
+    <text x="58" y="850" class="box-text">Prompt, strict JSON</text>
+    <text x="58" y="867" class="box-text">schema, allowed tools,</text>
+    <text x="58" y="884" class="box-text">daily limit</text>
+  </g>
+  <path class="flow" d="M234,860 L262,860"/>
+  <g>
+    <rect x="264" y="800" width="190" height="120" rx="10" fill="#ffffff" stroke="#5b6b80" stroke-width="1.5"/>
+    <text x="278" y="826" class="box-title">Context</text>
+    <text x="278" y="850" class="box-text">The claim's documents,</text>
+    <text x="278" y="867" class="box-text">page by page, or only a</text>
+    <text x="278" y="884" class="box-text">brief (request agent)</text>
+  </g>
+  <path class="flow" d="M454,860 L482,860"/>
+  <g>
+    <rect x="484" y="800" width="250" height="120" rx="10" fill="#ffffff" stroke="#6d3fc0" stroke-width="2.5"/>
+    <text x="498" y="826" class="ai-title">Model (OpenRouter, free)</text>
+    <text x="498" y="850" class="box-text">1. nvidia/nemotron-3.5-super-vl</text>
+    <text x="498" y="867" class="box-text">2. nvidia/nemotron-3-ultra-550b</text>
+    <text x="498" y="884" class="box-text">automatic failover; temperature 0;</text>
+    <text x="498" y="901" class="box-text">adjuster picks the first on AI usage</text>
+  </g>
+  <path class="flow-ai" d="M734,840 L762,840"/>
+  <path class="flow-ai" d="M764,882 L736,882"/>
+  <g>
+    <rect x="764" y="800" width="190" height="120" rx="10" fill="#ffffff" stroke="#6d3fc0" stroke-width="1.5"/>
+    <text x="778" y="826" class="ai-title">Read-only tools</text>
+    <text x="778" y="850" class="box-text">list_amounts, list_dates,</text>
+    <text x="778" y="867" class="box-text">search_documents,</text>
+    <text x="778" y="884" class="box-text">get_intake_review, ...</text>
+    <text x="778" y="901" class="box-text">scoped by code, never write</text>
+  </g>
+  <path class="flow" d="M954,860 L982,860"/>
+  <g>
+    <rect x="984" y="800" width="230" height="120" rx="10" fill="#ffffff" stroke="#b42318" stroke-width="2.5"/>
+    <text x="998" y="826" class="box-title" fill="#912018">Code gate (agent_gate.py)</text>
+    <text x="998" y="850" class="box-text">Quotes word for word; numbers</text>
+    <text x="998" y="867" class="box-text">from the quotes; no decision or</text>
+    <text x="998" y="884" class="box-text">payment words; no other claimant's</text>
+    <text x="998" y="901" class="box-text">data; injected instructions caught</text>
+  </g>
+  <path class="flow" d="M1214,860 L1242,860"/>
+  <g>
+    <rect x="1244" y="800" width="180" height="120" rx="10" fill="#ffffff" stroke="#5b6b80" stroke-width="1.5"/>
+    <text x="1258" y="826" class="box-title">What people see</text>
+    <text x="1258" y="850" class="box-text">Passed: "AI · Checked" badge</text>
+    <text x="1258" y="867" class="box-text">Flagged: marked, or a</text>
+    <text x="1258" y="884" class="box-text">fixed reply / template</text>
+    <text x="1258" y="901" class="box-text">Down: template fallback</text>
+  </g>
+  <path class="flow" d="M1424,860 L1452,860"/>
+  <g>
+    <rect x="1454" y="800" width="110" height="120" rx="10" fill="#ffffff" stroke="#5b6b80" stroke-width="1.5"/>
+    <text x="1466" y="826" class="box-title">Audit log</text>
+    <text x="1466" y="850" class="box-text">agent_runs:</text>
+    <text x="1466" y="867" class="box-text">question,</text>
+    <text x="1466" y="884" class="box-text">answer, check,</text>
+    <text x="1466" y="901" class="box-text">trace, model</text>
+  </g>
+  <text x="44" y="958" class="pill">Decision questions ("Should I approve this?") never reach a model: code answers them with a fixed reply.   Tested with 380 automated tests, an 11-claim golden set run live, and two red-team rounds.</text>
+
+  <!-- Legend -->
+  <g transform="translate(40,1020)">
+    <rect x="0" y="-12" width="16" height="16" rx="3" fill="#ffffff" stroke="#3f9a62" stroke-width="2"/><text x="24" y="1" class="pill">Claimant</text>
+    <rect x="110" y="-12" width="16" height="16" rx="3" fill="#ffffff" stroke="#5b6b80" stroke-width="2"/><text x="134" y="1" class="pill">Code (deterministic)</text>
+    <rect x="290" y="-12" width="16" height="16" rx="3" fill="#ffffff" stroke="#6d3fc0" stroke-width="2.5"/><text x="314" y="1" class="pill">AI agent</text>
+    <rect x="400" y="-12" width="16" height="16" rx="3" fill="#fffdf6" stroke="#c98a1b" stroke-width="3"/><text x="424" y="1" class="pill">Human action or decision</text>
+    <line x1="610" y1="-4" x2="650" y2="-4" stroke="#6d3fc0" stroke-width="2" stroke-dasharray="6 4"/><text x="658" y="1" class="pill">AI step</text>
+    <line x1="740" y1="-4" x2="780" y2="-4" stroke="#3d4a5c" stroke-width="2"/><text x="788" y="1" class="pill">workflow step</text>
+    <text x="930" y="1" class="pill" font-weight="700">AI reads, explains and drafts. It never approves, pays or changes a claim.</text>
+  </g>
+</svg>

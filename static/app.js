@@ -18,22 +18,25 @@ document.addEventListener("keydown", function (event) {
 // the bell is closed, ask the server for the bell's current HTML and swap it in only if it
 // changed. A plain poll -- a claim changes status a few times over days, so nothing fancier
 // (websockets, push) is worth it. Any failure is ignored; the next page load still works.
+// Only a bell that names its own URL (data-refresh, the claimant's) is polled. Seen 2026-11-09: the
+// adjuster's bell was swapped for the claimant's when one browser held both sessions, so its
+// links opened claimant pages.
 (function () {
   var INTERVAL_MS = 30000;
   function refreshBell() {
-    var bell = document.querySelector("details.bell");
+    var bell = document.querySelector("details.bell[data-refresh]");
     if (!bell || bell.open || document.hidden) return;
-    fetch("/notifications/bell", { credentials: "same-origin", cache: "no-store" })
+    fetch(bell.dataset.refresh, { credentials: "same-origin", cache: "no-store" })
       .then(function (response) { return response.status === 200 ? response.text() : null; })
       .then(function (html) {
-        var current = document.querySelector("details.bell");
+        var current = document.querySelector("details.bell[data-refresh]");
         if (!html || !current || current.open) return;
         if (current.outerHTML.replace(/\s+/g, " ").trim() === html.replace(/\s+/g, " ").trim()) return;
         current.outerHTML = html;
       })
       .catch(function () {});
   }
-  if (document.querySelector("details.bell")) setInterval(refreshBell, INTERVAL_MS);
+  if (document.querySelector("details.bell[data-refresh]")) setInterval(refreshBell, INTERVAL_MS);
 })();
 
 // A folded section (<details id="...">) opens when the page is loaded at its anchor, e.g. right

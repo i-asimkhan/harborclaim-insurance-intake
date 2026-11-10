@@ -776,7 +776,7 @@ def test_claimant_bell_counts_each_event_once_and_links_to_the_full_page():
     submit(policy_id="POL-BELL", incident_date="2026-08-05", description="x in this test claim", files=[("a.pdf", b"x")])
 
     page = client.get("/claims")
-    assert '<details class="bell">' in page.text
+    assert '<details class="bell" data-refresh="/notifications/bell">' in page.text
     assert '<span class="badge-count">1</span>' in page.text
     assert "routed to an adjuster" in page.text  # the dropdown preview
     assert 'href="/notifications"' in page.text
@@ -1215,6 +1215,19 @@ def test_bell_endpoint_returns_only_the_bell_and_follows_new_notifications():
     _file_claim("POL-BELL")                      # one new in-app notification
     after = client.get("/notifications/bell").text
     assert after != before and 'class="badge-count"' in after
+
+
+def test_only_the_claimants_bell_refreshes_itself_so_the_adjusters_is_never_swapped():
+    # Seen 2026-11-09: with both sessions in one browser, app.js swapped the adjuster's bell for the
+    # claimant's (it polled /notifications/bell on every page), and its links opened claimant pages.
+    login_as_claimant(CLAIMANT)
+    assert 'data-refresh="/notifications/bell"' in client.get("/notifications/bell").text
+    login_as_adjuster("bell.adjuster", storage.create_adjuster("bell.adjuster"))
+    adjuster_page = client.get("/adjuster").text
+    assert 'class="bell"' in adjuster_page and "data-refresh" not in adjuster_page
+    script = (Path(app_module.__file__).parent / "static" / "app.js").read_text(encoding="utf-8")
+    assert 'fetch("/notifications/bell"' not in script            # the URL comes from the bell itself
+    assert script.count('details.bell[data-refresh]') == 3
 
 
 def test_bell_endpoint_is_quietly_empty_when_signed_out():

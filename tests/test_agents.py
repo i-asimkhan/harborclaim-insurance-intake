@@ -1799,6 +1799,17 @@ def test_deploy_waits_for_azure_to_build_this_commit_before_the_smoke_test():
     assert '"$SITE_URL/adjuster/ai"' in text and '"$ai" = "303"' in text  # a page only the new build has
 
 
+def test_deploy_checks_the_app_settings_before_the_sync_and_reads_no_secret_value():
+    text = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    assert text.index("name: Check the app settings") < text.index("name: Sync the site from main")
+    for name in ("OPENROUTER_API_KEY", "AI_PROVIDER", "AI_MODELS", "SESSION_SECRET_KEY", "HARBORCLAIM_DATA_DIR"):
+        assert name in text
+    assert "--query \"[].name\"" in text                             # names only for the required list
+    # The only values read are the two on/off switches, never a secret's.
+    assert re.findall(r"\$\(value (\w+)", text) == ["AI_ENABLED", "AI_DATA_POLICY"]
+    assert '"$policy" = "production"' in text
+
+
 def test_release_workflow_uses_only_the_one_azure_secret_and_never_prints_it():
     text = RELEASE_WORKFLOW.read_text(encoding="utf-8")
     assert set(re.findall(r"secrets\.(\w+)", text)) == {"AZURE_CREDENTIALS"}

@@ -142,15 +142,20 @@ jobs:
           SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           for i in $(seq 1 40); do
-            row=$(az webapp log deployment list --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" \
-                  --query "[?id=='$SHA'] | [0].[status, complete]" -o tsv 2>/dev/null || true)
-            status=$(echo "$row" | cut -f1)
+            # An az failure (sign-in, resource group, CLI) fails the step at once instead of
+            # reading as "not started" for 20 minutes.
+            if ! status=$(az webapp log deployment list --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" \
+                  --query "[?id=='$SHA'] | [0].status" -o tsv); then
+              echo "::error::Could not read Azure's deployment list (see the az error above)."
+              exit 1
+            fi
             echo "Check $i: deployment status '${status:-not started}'"
             if [ "$status" = "4" ]; then echo "Azure built and activated $SHA."; exit 0; fi
             if [ "$status" = "3" ]; then echo "::error::Azure's build of $SHA failed (see Deployment Center logs)."; exit 1; fi
             sleep 30
           done
-          echo "::error::Azure did not finish building $SHA within 20 minutes."
+          echo "::error::Azure did not finish building $SHA within 20 minutes. If another commit reached main"
+          echo "::error::in the meantime, the Sync built that one instead; check Deployment Center."
           exit 1
 
       - name: Smoke test

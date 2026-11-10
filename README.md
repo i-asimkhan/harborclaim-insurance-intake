@@ -385,8 +385,11 @@ this repo's `main` branch. To reproduce it:
 
    **Or automatically, on every merge to `main`** (`.github/workflows/release.yml`): once the
    Tests workflow passes on `main`, it publishes the next GitHub release (`v1.0.0`, then
-   `v1.1.0`, ...) with notes from the merged PRs, then runs that same Sync and checks the site
-   answers. The deploy step needs one repository secret, `AZURE_CREDENTIALS`, a service
+   `v1.1.0`, ...) with notes from the merged PRs, then deploys: it checks the app settings the
+   site needs are there (and that the AI isn't switched off or blocked by production mode),
+   runs that same Sync, waits up to 20 minutes for Azure to report this commit built and
+   active, and checks a page only the new build serves (`/adjuster/ai` redirects to the
+   adjuster login). The deploy step needs one repository secret, `AZURE_CREDENTIALS`, a service
    principal that can manage only this resource group:
    ```
    az ad sp create-for-rbac --name harborclaim-deploy --role contributor \

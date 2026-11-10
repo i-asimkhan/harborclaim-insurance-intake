@@ -25,9 +25,12 @@
         providers that don't collect prompt data. Emails, phone numbers, SSNs and card numbers are removed before any
         model sees a claim; names and medical details are not.</p>
       {% else %}
-      <p class="hint" style="color:var(--warn);">Data policy: <strong>test</strong>. Use fictional claims only.
-        {% if free_tier %}Free-tier models ({{ free_tier | join(", ") }}) may log prompts or use them for training.{% endif %}
-        Set AI_DATA_POLICY=production before real claims go through the AI.</p>
+      {# Informational, not an error: test mode is the one where every AI feature runs on the free models. #}
+      <p>Data policy: <strong>test</strong>. All AI features are on, using free models, for fictional claims only.</p>
+      <p class="hint">{% if free_tier %}Free-tier models ({{ free_tier | join(", ") }}) may log prompts or use them
+        for training, so no real claim goes through them. {% endif %}Emails, phone numbers, SSNs and card numbers are
+        removed before any model sees a claim. For real claims, set AI_DATA_POLICY=production: free models are then
+        refused and only providers that don't collect prompt data are used.</p>
       {% endif %}
     </div>
 

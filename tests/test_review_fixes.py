@@ -219,6 +219,8 @@ def test_test_policy_keeps_free_models_and_says_so_on_the_ai_page(monkeypatch):
     _adjuster()
     page = client.get("/adjuster/ai").text
     assert "Data policy: <strong>test</strong>" in page and "fictional claims only" in page
+    assert "All AI features are on" in page and "may log prompts" in page   # calm, but still says why
+    assert 'style="color:var(--warn);"' not in page
 
 
 # --- 6. Only a final decision notifies the claimant ---

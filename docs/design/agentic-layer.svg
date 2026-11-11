@@ -55,21 +55,23 @@
     <rect x="215" y="267" width="200" height="100" rx="10" fill="#ffffff" stroke="#5b6b80" stroke-width="2"/>
     <circle cx="237" cy="289" r="12" fill="#5b6b80"/><text x="237" y="293" text-anchor="middle" class="step">2</text>
     <text x="256" y="294" class="box-title">Completeness check</text>
-    <text x="229" y="322" class="box-text">READY_FOR_REVIEW or</text>
-    <text x="229" y="339" class="box-text">NEEDS_INFORMATION; regex</text>
-    <text x="229" y="356" class="box-text">facts + template summary</text>
+    <text x="229" y="322" class="box-text">Ready for review or Needs</text>
+    <text x="229" y="339" class="box-text">information; keyword facts,</text>
+    <text x="229" y="356" class="box-text">consistency checks (no AI)</text>
   </g>
   <path class="flow" d="M315,217 L315,265"/>
+  <path class="flow" d="M315,367 L315,655 L693,655"/>
+  <text x="330" y="645" class="note">to the adjuster's queue, with or without AI</text>
 
   <!-- Column 2: intake review agent -->
   <g>
     <rect x="445" y="412" width="220" height="130" rx="10" fill="#ffffff" stroke="#6d3fc0" stroke-width="2.5"/>
     <circle cx="467" cy="434" r="12" fill="#6d3fc0"/><text x="467" y="438" text-anchor="middle" class="step">A</text>
     <text x="486" y="439" class="ai-title">Intake review agent</text>
-    <text x="459" y="465" class="box-text">Runs on every new claim.</text>
-    <text x="459" y="482" class="box-text">Cited summary + "worth</text>
-    <text x="459" y="499" class="box-text">checking": amount or date</text>
-    <text x="459" y="516" class="box-text">differences, type mismatch</text>
+    <text x="459" y="465" class="box-text">Runs on new claims and on</text>
+    <text x="459" y="482" class="box-text">new documents. Cited summary</text>
+    <text x="459" y="499" class="box-text">+ "worth checking": amount,</text>
+    <text x="459" y="516" class="box-text">date or type differences</text>
   </g>
   <path class="flow-ai" d="M415,330 C440,330 470,360 520,410"/>
 
@@ -78,9 +80,9 @@
     <rect x="695" y="587" width="210" height="100" rx="10" fill="#ffffff" stroke="#c98a1b" stroke-width="2"/>
     <circle cx="717" cy="609" r="12" fill="#c98a1b"/><text x="717" y="613" text-anchor="middle" class="step">3</text>
     <text x="736" y="614" class="box-title">Reviews the claim</text>
-    <text x="709" y="642" class="box-text">AI review next to the original</text>
-    <text x="709" y="659" class="box-text">documents; labels say what</text>
-    <text x="709" y="676" class="box-text">AI wrote and what code wrote</text>
+    <text x="709" y="642" class="box-text">The AI review with its check</text>
+    <text x="709" y="659" class="box-text">result, next to the documents</text>
+    <text x="709" y="676" class="box-text">and code's consistency checks</text>
   </g>
   <path class="flow-ai" d="M640,542 C660,570 680,600 693,620"/>
   <g>
@@ -119,14 +121,14 @@
 
   <!-- Column 5: notify; claimant sees request; claimant assistant -->
   <g>
-    <rect x="1185" y="267" width="200" height="100" rx="10" fill="#ffffff" stroke="#5b6b80" stroke-width="2"/>
+    <rect x="1185" y="267" width="170" height="100" rx="10" fill="#ffffff" stroke="#5b6b80" stroke-width="2"/>
     <circle cx="1207" cy="289" r="12" fill="#5b6b80"/><text x="1207" y="293" text-anchor="middle" class="step">5</text>
     <text x="1226" y="294" class="box-title">Notify + status</text>
     <text x="1199" y="322" class="box-text">In-app and email notice;</text>
     <text x="1199" y="339" class="box-text">claim set to</text>
-    <text x="1199" y="356" class="box-text">NEEDS_INFORMATION</text>
+    <text x="1199" y="356" class="box-text">Needs information</text>
   </g>
-  <path class="flow" d="M1155,625 L1170,625 L1170,320 L1183,320"/>
+  
   <g>
     <rect x="1185" y="117" width="200" height="100" rx="10" fill="#ffffff" stroke="#3f9a62" stroke-width="2"/>
     <circle cx="1207" cy="139" r="12" fill="#3f9a62"/><text x="1207" y="143" text-anchor="middle" class="step">6</text>
@@ -135,7 +137,7 @@
     <text x="1199" y="189" class="box-text">"drafted with AI help" when</text>
     <text x="1199" y="206" class="box-text">it was</text>
   </g>
-  <path class="flow" d="M1285,267 L1285,219"/>
+  <path class="flow" d="M1270,267 L1270,219"/>
   <g>
     <rect x="1185" y="412" width="200" height="130" rx="10" fill="#ffffff" stroke="#6d3fc0" stroke-width="2.5"/>
     <circle cx="1207" cy="434" r="12" fill="#6d3fc0"/><text x="1207" y="438" text-anchor="middle" class="step">D</text>
@@ -145,15 +147,14 @@
     <text x="1199" y="499" class="box-text">what's needed. Never other</text>
     <text x="1199" y="516" class="box-text">people's claims or amounts</text>
   </g>
-  <path class="flow-ai" d="M1395,412 C1430,330 1430,220 1387,190"/>
 
   <!-- Column 6: claimant adds documents; re-check; decide -->
   <g>
     <rect x="1410" y="117" width="160" height="100" rx="10" fill="#ffffff" stroke="#3f9a62" stroke-width="2"/>
     <circle cx="1432" cy="139" r="12" fill="#3f9a62"/><text x="1432" y="143" text-anchor="middle" class="step">7</text>
     <text x="1451" y="144" class="box-title">Adds documents</text>
-    <text x="1424" y="172" class="box-text">Photos, reports or</text>
-    <text x="1424" y="189" class="box-text">a note</text>
+    <text x="1424" y="172" class="box-text">Documents or a note,</text>
+    <text x="1424" y="189" class="box-text">when asked for more</text>
   </g>
   <path class="flow" d="M1387,150 L1408,150"/>
   <g>
@@ -161,21 +162,28 @@
     <circle cx="1432" cy="289" r="12" fill="#5b6b80"/><text x="1432" y="293" text-anchor="middle" class="step">8</text>
     <text x="1451" y="294" class="box-title">Checked again</text>
     <text x="1424" y="322" class="box-text">Completeness, facts;</text>
-    <text x="1424" y="339" class="box-text">back to READY;</text>
+    <text x="1424" y="339" class="box-text">back to Ready;</text>
     <text x="1424" y="356" class="box-text">request answered</text>
   </g>
   <path class="flow" d="M1490,217 L1490,265"/>
-  <path class="flow-ai" d="M1410,355 C1200,385 760,385 640,410"/>
-  <text x="860" y="372" class="note" fill="#6d3fc0">the intake review runs again with the new documents</text>
+  <path class="flow-ai" d="M1410,345 C1388,345 1388,385 1362,385 L705,385 C670,385 645,392 640,410"/>
+  <text x="830" y="377" class="note" fill="#6d3fc0">the intake review runs again with the new documents</text>
   <g>
     <rect x="1410" y="587" width="160" height="100" rx="10" fill="#fffdf6" stroke="#c98a1b" stroke-width="3"/>
     <circle cx="1432" cy="609" r="12" fill="#c98a1b"/><text x="1432" y="613" text-anchor="middle" class="step">9</text>
     <text x="1451" y="614" class="box-title">Decides</text>
-    <text x="1424" y="642" class="box-text">Approve, decline or</text>
-    <text x="1424" y="659" class="box-text">look closer. Human</text>
-    <text x="1424" y="676" class="box-text" font-weight="700">only, never AI</text>
+    <text x="1424" y="642" class="box-text">Approve or decline;</text>
+    <text x="1424" y="659" class="box-text">the claimant is told.</text>
+    <text x="1424" y="676" class="box-text" font-weight="700">Human only, never AI</text>
   </g>
   <path class="flow" d="M1490,367 C1530,450 1530,520 1490,585"/>
+
+  <!-- Drawn last: both cross the re-review line at y=385, so each gets a short white gap there,
+       which reads as passing over the line rather than joining it -->
+  <path d="M1164,385 L1176,385" stroke="#f3f5f8" stroke-width="9" fill="none"/>
+  <path class="flow" d="M1155,625 L1170,625 L1170,320 L1183,320"/>
+  <path d="M1364,385 L1376,385" stroke="#f3f5f8" stroke-width="9" fill="none"/>
+  <path class="flow-ai" d="M1370,410 L1370,219" marker-start="url(#arrow-ai)"/>
 
   <!-- Bottom band: inside every agent run -->
   <rect x="20" y="740" width="1560" height="250" rx="12" fill="#faf8ff" stroke="#d8c9f3" stroke-width="1.5"/>
@@ -216,7 +224,8 @@
     <text x="778" y="884" class="box-text">get_intake_review, ...</text>
     <text x="778" y="901" class="box-text">scoped by code, never write</text>
   </g>
-  <path class="flow" d="M954,860 L982,860"/>
+  <path class="flow" d="M640,800 L640,789 L1099,789 L1099,798"/>
+  <text x="1108" y="793" class="note">the model's answer</text>
   <g>
     <rect x="984" y="800" width="230" height="120" rx="10" fill="#ffffff" stroke="#b42318" stroke-width="2.5"/>
     <text x="998" y="826" class="box-title" fill="#912018">Code gate (agent_gate.py)</text>
@@ -229,10 +238,10 @@
   <g>
     <rect x="1244" y="800" width="180" height="120" rx="10" fill="#ffffff" stroke="#5b6b80" stroke-width="1.5"/>
     <text x="1258" y="826" class="box-title">What people see</text>
-    <text x="1258" y="850" class="box-text">Passed: "AI · Checked" badge</text>
-    <text x="1258" y="867" class="box-text">Flagged: marked, or a</text>
-    <text x="1258" y="884" class="box-text">fixed reply / template</text>
-    <text x="1258" y="901" class="box-text">Down: template fallback</text>
+    <text x="1258" y="850" class="box-text">Passed: AI · Checked</text>
+    <text x="1258" y="867" class="box-text">Failed: marked, or a</text>
+    <text x="1258" y="884" class="box-text">fixed reply</text>
+    <text x="1258" y="901" class="box-text">Off: standard summary</text>
   </g>
   <path class="flow" d="M1424,860 L1452,860"/>
   <g>
@@ -243,7 +252,7 @@
     <text x="1466" y="884" class="box-text">answer, check,</text>
     <text x="1466" y="901" class="box-text">trace, model</text>
   </g>
-  <text x="44" y="958" class="pill">Decision questions ("Should I approve this?") never reach a model: code answers them with a fixed reply.   Tested with 380 automated tests, an 11-claim golden set run live, and two red-team rounds.</text>
+  <text x="44" y="958" class="pill">Decision questions ("Should I approve this?") never reach a model: code answers them with a fixed reply.   Tested with 403 automated tests, an 11-claim golden set run live, and two red-team rounds.</text>
 
   <!-- Legend -->
   <g transform="translate(40,1020)">
